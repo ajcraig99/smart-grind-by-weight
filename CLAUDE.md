@@ -4,15 +4,6 @@ ESP32-S3 intelligent coffee scale with grind-by-weight functionality. Features p
 
 ## Essential Commands
 
-The canonical checkout is `/home/cmossom/src/smart-grind-by-weight` on the
-native WSL2 ext4 filesystem in `Ubuntu-24.04`. Do not build this project from a
-Windows checkout, OneDrive, `/mnt/c`, or another Windows-mounted path. From
-PowerShell, enter the canonical checkout with:
-
-```powershell
-wsl.exe -d Ubuntu-24.04 --cd /home/cmossom/src/smart-grind-by-weight
-```
-
 All development tasks use the unified cross-platform Python tool:
 
 ```bash
@@ -33,6 +24,11 @@ python3 tools/grinder.py analyze
 - `python3 tools/grinder.py info` - Get device system information
 - `python3 tools/grinder.py clean` - Clean build artifacts
 
+**Host tests (run after every change; no hardware needed):**
+- `python3 -m unittest discover -s tools/tests -p '*_test.py'` - Firmware regression tests (compile real sources against stubs with the host g++)
+- `node tools/tests/settings_web_test.mjs` - Embedded settings page workflow
+- `node tools/tests/ota_web_test.mjs` - Embedded firmware-update page feedback
+
 ## Architecture
 
 **4-Layer Architecture:**
@@ -46,10 +42,10 @@ python3 tools/grinder.py analyze
 - **GrindController**: Multi-phase state machine with predictive flow control, 10 pulse corrections, mechanical instability detection, time mode additional pulses, and target-free manual grinding
 - **LoadCell (HX711)**: Multi-mode precision weight measurement (instant, smoothed, filtered), calibration flag, noise diagnostics
 - **DiagnosticsController**: System health monitoring (calibration status, sustained noise, mechanical instability), state persistence, hysteresis, priority-based warnings
-- **UIManager**: 7 screens with LVGL integration; menu page surfaces quick Tools (Scale view, Calibrate, Tune Pulses, Motor Test) followed by Settings (Bluetooth, Display, Grind Settings) and Info sections (Diagnostics, System Info, Logs & Data, Lifetime Stats), warning icon indicator, split-button layout for time mode pulses
+- **UIManager**: LVGL screen management; menu page surfaces quick Tools (Scale view, Calibrate, Tune Pulses, Motor Test) followed by Settings (Bluetooth, Display, Grind Settings) and Info sections (Diagnostics, System Info, Logs & Data, Lifetime Stats), warning icon indicator, split-button layout for time mode pulses
 - **StateMachine**: Central state coordination (READY → GRINDING → GRIND_COMPLETE)
 
-**Update Intervals:** 20ms grind control, 25ms load cell (active), 50ms UI/hardware
+**Update Intervals:** 20ms grind control, 20ms load cell polling (HX711 at 10 SPS), 16ms UI, 20ms Bluetooth, 100ms file I/O
 
 **Grind Phases:**
 - Standard phases: IDLE, INITIALIZING, SETUP, TARING, TARE_CONFIRM, PRIME, PRIME_SETTLING, PREDICTIVE, PULSE_DECISION, PULSE_EXECUTE, PULSE_SETTLING, FINAL_SETTLING, TIME_GRINDING, MANUAL_GRINDING, COMPLETED, TIMEOUT
@@ -61,10 +57,10 @@ python3 tools/grinder.py analyze
 - **Always runs** before weight-mode grinding to saturate the grinder for accurate latency detection
 - **Prime mode**: Keeps coffee, continues immediately to PREDICTIVE phase
 - **Purge mode** (default): Shows confirmation popup, waits for user to discard stale grinds, then continues
-- **Configurable amount**: 0.1g-5.0g (default 1.0g), replaces old hardcoded `GRIND_PRIME_TARGET_WEIGHT_G`
-- **Purge popup**: "Keep purge grinds from now on" checkbox switches mode from Purge → Prime in preferences
+- **Configurable amount**: 0.1g-2.5g (default 1.0g)
+- **Purge popup**: its checkbox switches the mode from Purge to Prime in preferences
 - **Logging disabled** during PURGE_CONFIRM phase to avoid capturing data while paused
-- **Preferences**: `chute_mode` (int: 0=Prime, 1=Purge, default=1), `chute_amount_g` (float: 0.1-5.0, default=1.0)
+- **Preferences**: `grinder_mode` (int: 0=Prime, 1=Purge, default=1), `purge_amount_g` (float: 0.1-2.5, default=1.0). NVS keys must be 15 characters or fewer.
 
 **Time Mode Pulses:** Split-button completion screen (OK + PULSE), `TIME_ADDITIONAL_PULSE` phase, 100ms duration
 
@@ -72,12 +68,12 @@ python3 tools/grinder.py analyze
 - **Mode Selection**: Radio buttons for Weight/Time mode selection
 - **Swipe Gestures Toggle**: Enable/disable vertical swipe gestures for mode switching (default: disabled)
 - **Automation**: Start on Cup and Return on Removal toggles
-- **Purging**: Radio buttons (Prime/Purge) and Amount slider (0.1g-5.0g)
-- **Preferences**: `swipe.enabled` (boolean), `grind_mode` (0=Weight, 1=Time), `chute_mode` (0=Prime, 1=Purge), `chute_amount_g` (float)
+- **Purging**: Radio buttons (Prime/Purge) and Amount slider (0.1g-2.5g)
+- **Preferences**: `swipe.enabled` (boolean), `grind_mode` (0=Weight, 1=Time), `grinder_mode` (0=Prime, 1=Purge), `purge_amount_g` (float)
 - **Behavior**: Swipe gestures only work when enabled; direct mode selection always works
 
-**Color Scheme (RGB565):**
-- `COLOR_PRIMARY`: 0xFF0000 (Red) - Primary theme color
+**Color Scheme (24-bit hex, passed to `lv_color_hex`; see `src/config/theme.h`):**
+- `COLOR_PRIMARY`: 0xFF3D00 (Red) - Primary theme color
 - `COLOR_ACCENT`: 0x00AAFF (Blue) - Highlights and accents
 - `COLOR_SUCCESS`: 0x00AA00 (Green) - Success states
 - `COLOR_WARNING`: 0xCC8800 (Orange) - Warning states
@@ -93,7 +89,6 @@ python3 tools/grinder.py analyze
 ## Development Notes
 
 * When modifying this codebase, follow the existing architectural patterns, maintain the clean separation between layers, and ensure any timing-critical code respects the established update intervals.
-* use macos compatible commands. macos uses python3
 * after making a test build let me know the build number
 * Always read entire files. Otherwise, you don’t know what you don’t know, and will end up making mistakes, duplicating code that already exists, or misunderstanding the architecture.  
 * Commit early and often. When working on large tasks, your task could be broken down into multiple logical milestones. After a certain milestone is completed and confirmed to be ok by the user, you should commit it. If you do not, if something goes wrong in further steps, we would need to end up throwing away all the code, which is expensive and time consuming.  
