@@ -44,7 +44,10 @@ line. Earlier release history remains available in the original project's
   ends the grind with "Motor safety stop" and refuses further starts until the
   grinder is restarted.
 - Hold the motor output LOW from the first line of startup instead of leaving
-  it undriven until the display and filesystem have started.
+  it undriven until the display and filesystem have started, and again if the
+  motor driver fails to start.
+- **Motor Test** and **Tune Pulses** explain a latched motor safety stop
+  instead of doing nothing or failing with a priming error.
 - Detect the end of finishing pulses from the RMT driver's completion
   interrupt. This removes an error log every 20 ms during pulses, and a pulse
   whose completion is never reported is stopped 500 ms after its length.
@@ -89,22 +92,27 @@ line. Earlier release history remains available in the original project's
 - Stop a weight grind with "No beans?" when the motor runs for 5 seconds
   without gaining 0.2 g, during priming or the main grind. An empty hopper or
   blocked chute previously ran for up to 55 seconds.
-- Re-tare after **CONTINUE** on the purge prompt, so grounds left in the cup
-  or a different cup no longer change the dose, and lifting whichever cup is
-  in place still stops the grind. The grinder asks to confirm when the scale
-  reads as if the cup were still off.
+- On the purge prompt, grounds kept in an untouched cup count toward the dose.
+  **CONTINUE** re-tares first when the cup was lifted or its reading changed,
+  so an emptied or different cup does not change the dose either, and lifting
+  whichever cup is in place still stops the grind. The grinder asks to confirm
+  when the scale reads as if the cup were still off. Lifting the cup to tip out
+  the purge as soon as the motor stops brings up the prompt instead of
+  "Err: neg wt", and an unanswered prompt ends the grind after 5 minutes.
 - Detect a lifted cup on grinds whose zero already included it (most grinds
   after the first), using a fixed -10 g threshold. Count each scale sample
   once: the 20 ms control loop saw each sample about five times, so one bad
   reading could stop a grind as "Err: neg wt".
 - Lifting the cup during final settling finishes the grind with the settled
   weight measured before the lift, instead of showing "Err: neg wt".
-- Stop waiting for a settled reading after 3 seconds around finishing pulses
-  and 5 seconds at the end, and decide on the smoothed weight. A noisy scale
-  previously ended the grind as a timeout with no weight.
+- Stop waiting for a settled reading 3 seconds after each motor stop before
+  a finishing-pulse decision, and 5 seconds at the end, and decide on the
+  smoothed weight. A noisy scale previously ended the grind as a timeout with
+  no weight.
 - End a paused time grind after 5 minutes, and let the display dim while
   paused.
-- Reject corrupt stored latency, coast-ratio, profile and grind-mode values.
+- Reject corrupt stored latency, coast-ratio, profile, grind-mode, purge-amount
+  and freshness values.
 - Keep flash writes and blocking logs out of motor phases: the filesystem check
   no longer writes a test file and skips grinds, the uptime counter is saved
   after the grind, and the flow-start log is queued.
@@ -125,7 +133,9 @@ line. Earlier release history remains available in the original project's
 - Calibration no longer reads the HX711 from the touchscreen task. It is
   refused, keeping the previous factor, when there is no fresh reading, no
   valid zero or a weight change under 1000 counts. The touchscreen reports a
-  failed tare or calibration instead of continuing silently.
+  failed tare or calibration instead of continuing silently: a tare that has
+  to use a moving reading counts as failed, and the notice says whether the
+  scale kept moving or gave no reading.
 
 ### Firmware update robustness
 

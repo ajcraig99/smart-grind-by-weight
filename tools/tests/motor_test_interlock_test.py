@@ -32,6 +32,8 @@ void lv_timer_del(lv_timer_t*) { ++timers_deleted; }
 void* lv_timer_get_user_data(lv_timer_t* timer) { return timer->user_data; }
 struct Grinder {
     unsigned pulses = 0, stops = 0;
+    bool latched = false;
+    bool has_safety_stop() const { return latched; }
     void start_pulse_rmt(unsigned ms) {
         assert(ms == 1000 && !operation_interlock().try_acquire()); ++pulses;
     }
@@ -58,6 +60,13 @@ public:
 ''' + methods + r'''
 int main() {
     MenuUIController menu;
+    // After a dead-man stop the test neither pulses nor reserves the motor.
+    grinder.latched = true;
+    menu.run_motor_test();
+    assert(grinder.pulses == 0 && statistics_manager.tests == 0 && !ui.active && !menu.motor_timer_);
+    auto free_after_latch = operation_interlock().try_acquire();
+    assert(free_after_latch); operation_interlock().release(free_after_latch);
+    grinder.latched = false;
     auto competing = operation_interlock().try_acquire();
     menu.run_motor_test();
     assert(grinder.pulses == 0 && !ui.active && menu.motor_timer_ == nullptr);

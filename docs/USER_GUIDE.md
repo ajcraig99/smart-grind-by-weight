@@ -67,9 +67,12 @@ Access **Menu → Grind Settings** to configure:
   - **Purge mode** (default): Prompts you to discard stale grinds before continuing
   - **Amount slider**: Configure purge/prime amount (0.1g-2.5g, default 1.0g). Amount is a minimum target; actual output will be slightly higher.
   - **"Always keep" checkbox**: Appears during purge confirmation - switches to Prime mode when checked and you continue
-  - **CONTINUE** re-tares before the main grind, so empty the cup (or swap it)
-    before pressing it. If the scale reads as if the cup were still off, the
-    grinder asks you to put it back; a lighter replacement cup can be confirmed
+  - **CONTINUE** grinds on. Grounds left in the cup count toward the dose. If
+    you lifted the cup to empty it, or swapped it, the grinder re-tares first,
+    so the dose is right either way. You can lift the cup as soon as the motor
+    stops; the prompt appears at once. If the scale reads as if the cup were
+    still off, the grinder asks you to put it back; a lighter replacement cup
+    can be confirmed. An unanswered prompt ends the grind after 5 minutes
 
   *Explanation:* The time between motor start and grinds hitting the cup (grind latency) is used to predict the coast time (how long grinds will keep coming after the motor is disengaged). Purging clears stale coffee and saturates the grinder with fresh grounds, ensuring accurate latency detection. If you prefer to keep all coffee without manual intervention, select Prime mode.
 
@@ -207,7 +210,7 @@ During Grinding:
     |-- Instruction message
     |-- "Always keep" checkbox
     |-- STOP button (cancels the grind)
-    \-- CONTINUE button (re-tares, then grinds)
+    \-- CONTINUE button (grinds on; re-tares first if the cup was emptied or swapped)
 ```
 
 ---

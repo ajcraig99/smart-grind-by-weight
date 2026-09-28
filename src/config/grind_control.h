@@ -22,8 +22,14 @@ enum class GrinderPurgeMode {
 #define GRIND_PURGE_AMOUNT_MIN_G 0.1f
 #define GRIND_PURGE_AMOUNT_MAX_G 2.5f
 
+// CONTINUE on the purge prompt keeps the zero taken before the purge, so
+// kept grounds count toward the dose, unless the cup was lifted or its
+// reading moved by more than this.
+#define GRIND_PURGE_RETARE_THRESHOLD_G 0.5f
+
 // Grind freshness tracking
 #define GRIND_FRESHNESS_DEFAULT_HOURS 8.0f
+#define GRIND_FRESHNESS_MAX_HOURS 48.0f                                   // Longest Freshness setting in Grind Settings
 
 //------------------------------------------------------------------------------
 // GRIND CONTROL TUNING
@@ -33,7 +39,7 @@ enum class GrinderPurgeMode {
 #define GRIND_TIMEOUT_SEC 60                                              // Maximum time for grind operation
 #define MANUAL_GRIND_TIMEOUT_SEC 30                                       // Safety cutoff for target-free manual grinding
 #define GRIND_MAX_PULSE_ATTEMPTS 10                                       // Maximum pulse corrections before stopping
-#define GRIND_PAUSE_MAX_MS 300000UL                                       // A paused time grind ends after 5 minutes
+#define GRIND_PAUSE_MAX_MS 300000UL                                       // A paused time grind or an unanswered purge prompt ends after 5 minutes
 
 // Dry-run protection (empty hopper or blocked chute)
 #define GRIND_DRY_RUN_TIMEOUT_MS 5000                                     // Motor-on time allowed without progress in PRIME or PREDICTIVE

@@ -12,6 +12,10 @@ class GrindStartFeedbackTest(unittest.TestCase):
         source = (ROOT / "src/ui/controllers/grinding_controller.cpp").read_text()
         start = source.index("void GrindingUIController::handle_grind_button()")
         end = source.index("void GrindingUIController::handle_pulse_button()", start)
+        ui_source = (ROOT / "src/ui/ui_manager.cpp").read_text()
+        notice_start = ui_source.index("bool UIManager::show_motor_safety_stop_notice()")
+        notice_end = ui_source.index("\n}\n", notice_start) + 3
+        notice = ui_source[notice_start:notice_end]
         harness = r'''
 #include <cassert>
 #include <cstdint>
@@ -50,17 +54,19 @@ struct UIManager {
     State* state_machine;
     Controller* grind_controller;
     Profile* profile_controller;
-    HardwareManager* hardware=nullptr;
+    HardwareManager* hardware_manager=nullptr;
     int current_tab=1, notices=0;
     const char* last_title=nullptr;
     GrindMode current_mode=GrindMode::WEIGHT;
-    HardwareManager* get_hardware_manager() { return hardware; }
+    HardwareManager* get_hardware_manager() { return hardware_manager; }
+    bool show_motor_safety_stop_notice();
     void switch_to_state(UIState s) { state_machine->current=s; }
     void show_confirmation(const char* title, const char*, const char*, int,
                            std::nullptr_t, const char*) {
         last_title=title; ++notices;
     }
 };
+''' + notice + r'''
 struct GrindingUIController {
     UIManager* ui_manager_;
     char error_message_[32]{}; float error_grind_weight_=0; int error_grind_progress_=0;

@@ -151,6 +151,7 @@ bool GrindController::start_grind(float target, uint32_t time_ms, GrindMode grin
     if (!token) return false;
     operation_token_ = token;
 
+    purge_prompt_due_ = false;
     if (grind_mode == GrindMode::WEIGHT) {
         // Read grinder purge settings from preferences (weight mode only)
         grinder_purge_mode_for_session = static_cast<GrinderPurgeMode>(GRIND_PURGE_MODE_DEFAULT);
@@ -159,9 +160,12 @@ bool GrindController::start_grind(float target, uint32_t time_ms, GrindMode grin
             int purge_mode_int = preferences->getInt(PREF_KEY_GRINDER_MODE, GRIND_PURGE_MODE_DEFAULT);
             grinder_purge_mode_for_session = static_cast<GrinderPurgeMode>(purge_mode_int);
             float configured_amount = preferences->getFloat(PREF_KEY_GRINDER_AMOUNT_G, GRIND_PURGE_AMOUNT_DEFAULT_G);
+            // std::clamp passes NaN through, and priming would never reach it.
+            if (!std::isfinite(configured_amount)) configured_amount = GRIND_PURGE_AMOUNT_DEFAULT_G;
             configured_amount = std::clamp(configured_amount, GRIND_PURGE_AMOUNT_MIN_G, GRIND_PURGE_AMOUNT_MAX_G);
             grinder_purge_amount_g_for_session = configured_amount;
         }
+        purge_prompt_due_ = grinder_purge_mode_for_session == GrinderPurgeMode::PURGE && grounds_are_stale();
     }
 
     // Finish pending history writes only after OTA/hardware eligibility checks.
@@ -229,7 +233,10 @@ bool GrindController::start_grind(float target, uint32_t time_ms, GrindMode grin
     net_weight_removal_guard_.reset(0.0f);
     last_guard_sample_ms_ = 0;
     pre_final_settled_weight_ = 0.0f;
+    pulse_settling_start_ms_ = 0;
     resume_after_purge_ = false;
+    post_purge_weight_ = 0.0f;
+    vessel_lifted_since_purge_ = false;
 
     if (diagnostics_controller_) {
         diagnostics_controller_->reset_diagnostic(DiagnosticCode::MECHANICAL_INSTABILITY);
@@ -334,16 +341,16 @@ void GrindController::stop_grind() {
     operation_token_ = 0;
 }
 
-bool GrindController::continue_from_purge(bool check_vessel) {
+PurgeContinueResult GrindController::continue_from_purge(bool check_vessel) {
     const auto control_lock = lock_control();
     // Called by UI when user confirms purge completion
     if (phase != GrindPhase::PURGE_CONFIRM) {
         LOG_BLE("[%lums CONTROLLER] Warning: continue_from_purge() called in wrong phase: %s\n",
                 millis(), get_phase_name());
-        return true;
+        return PurgeContinueResult::NOT_WAITING;
     }
     // The control loop will show the scale error; never restart from stale data.
-    if (!weight_sensor || !weight_sensor->has_recent_sample()) return true;
+    if (!weight_sensor || !weight_sensor->has_recent_sample()) return PurgeContinueResult::SCALE_NOT_READY;
 
     // Relative to the zero taken with the vessel in place, a missing vessel
     // reads at least its own weight low. Re-taring then would zero the
@@ -352,10 +359,8 @@ bool GrindController::continue_from_purge(bool check_vessel) {
     if (check_vessel && current_weight <= net_weight_removal_guard_.removal_threshold_g()) {
         LOG_BLE("[%lums CONTROLLER] Purge continue held: %.2fg suggests the vessel is off\n",
                 millis(), current_weight);
-        return false;
+        return PurgeContinueResult::VESSEL_MISSING;
     }
-
-    LOG_BLE("[%lums CONTROLLER] User confirmed purge, re-taring before PREDICTIVE\n", millis());
 
     // Add time spent in PURGE_CONFIRM to timeout offset (exclude from timeout calculation)
     if (timeout_pause_start > 0) {
@@ -366,6 +371,24 @@ bool GrindController::continue_from_purge(bool check_vessel) {
         timeout_pause_start = 0;
     }
 
+    GrindLoopData loop_data = {};
+    loop_data.now = millis();
+    loop_data.timestamp_ms = loop_data.now - start_time;
+    loop_data.current_weight = current_weight;
+
+    // Grounds left in an untouched cup count toward the dose, so the zero
+    // taken before the purge stays.
+    const float moved_g = fabsf(weight_sensor->get_weight_high_latency() - post_purge_weight_);
+    if (!vessel_lifted_since_purge_ && moved_g <= GRIND_PURGE_RETARE_THRESHOLD_G) {
+        LOG_BLE("[%lums CONTROLLER] User confirmed purge; cup untouched, continuing to PREDICTIVE\n", millis());
+        if (grinder) grinder->start();
+        time_grind_start_ms = loop_data.now;
+        switch_phase(GrindPhase::PREDICTIVE, loop_data);
+        return PurgeContinueResult::CONTINUED;
+    }
+
+    LOG_BLE("[%lums CONTROLLER] User confirmed purge; cup emptied or swapped (%s, moved %.2fg), re-taring\n",
+            millis(), vessel_lifted_since_purge_ ? "lifted" : "not lifted", moved_g);
     // Zero again with the emptied (or different) cup in place, so purged
     // grounds left behind are not counted as dose. TARE_CONFIRM starts the
     // motor once the scale has settled and then resumes in PREDICTIVE.
@@ -373,8 +396,8 @@ bool GrindController::continue_from_purge(bool check_vessel) {
     // use the fixed removal threshold rather than the first cup's.
     net_weight_removal_guard_.reset(0.0f);
     resume_after_purge_ = true;
-    switch_phase(GrindPhase::TARING);  // No loop_data needed for phase transition
-    return true;
+    switch_phase(GrindPhase::TARING, loop_data);
+    return PurgeContinueResult::CONTINUED;
 }
 
 void GrindController::pause_grind() {
@@ -457,6 +480,16 @@ void GrindController::update() {
     }
 
     if (control_loop_paused_) {
+        // The purge prompt holds the operation interlock, so it cannot wait forever.
+        if (loop_data.now - phase_start_time >= GRIND_PAUSE_MAX_MS) {
+            abort_session(GrindSessionResult::TIMEOUT, "Paused too long", loop_data);
+            queue_log_message("[CONTROLLER] Purge prompt unanswered for %lums; grind ended\n", GRIND_PAUSE_MAX_MS);
+            return;
+        }
+        // Lifting the cup to tip out the purge is expected here.
+        float lift_weight = 0.0f;
+        if (vessel_removal_confirmed(&lift_weight)) vessel_lifted_since_purge_ = true;
+
         emit_progress_update(loop_data);
 
         // Keep measurement baseline aligned for when logging resumes
@@ -574,32 +607,21 @@ void GrindController::update() {
                 break;
             }
 
-            bool settled = weight_sensor->check_settling_complete(GRIND_SCALE_PRECISION_SETTLING_TIME_MS);
+            float settled_weight = 0.0f;
+            bool settled = weight_sensor->check_settling_complete(GRIND_SCALE_PRECISION_SETTLING_TIME_MS,
+                                                                  &settled_weight);
             bool settling_timed_out = (loop_data.now - phase_start_time) >= GRIND_SCALE_SETTLING_TIMEOUT_MS;
             if (settled || settling_timed_out) {
                 if (settling_timed_out && !settled) {
                     queue_log_message("[GRINDER] Settling timeout, resuming grind\n");
+                    settled_weight = weight_sensor->get_weight_high_latency();
                 }
                 flow_start_confirmed = false;
                 grind_latency_ms = 0;
 
-                // Check if grounds are stale and purge confirmation should be shown
-                bool should_show_purge_popup = false;
-                if (!grinder_purged_since_boot) {
-                    // First grind since boot - grounds are stale
-                    should_show_purge_popup = true;
-                } else {
-                    // Check if enough time has elapsed since last grind
-                    uint64_t current_ms = esp_timer_get_time() / 1000;
-                    uint64_t elapsed_ms = current_ms - last_purge_runtime_ms;
-                    float freshness_hours = preferences ? preferences->getFloat(PREF_KEY_GRIND_FRESHNESS_HOURS, GRIND_FRESHNESS_DEFAULT_HOURS) : GRIND_FRESHNESS_DEFAULT_HOURS;
-                    uint64_t threshold_ms = (uint64_t)(freshness_hours * 3600000.0f);
-                    should_show_purge_popup = (elapsed_ms > threshold_ms);
-                }
-
-                // Determine next phase based on mode AND staleness
-                if (grinder_purge_mode_for_session == GrinderPurgeMode::PURGE && should_show_purge_popup) {
+                if (purge_prompt_due_) {
                     // Purge mode with stale grounds: wait for user confirmation before continuing
+                    post_purge_weight_ = settled_weight;
                     timeout_pause_start = loop_data.now;  // Track when pause started for timeout offset
                     switch_phase(GrindPhase::PURGE_CONFIRM, loop_data);
                 } else {
@@ -726,20 +748,23 @@ void GrindController::update() {
     bool vessel_removed = false;
     float guard_sample_weight = loop_data.current_weight;
     if (net_weight_guard_active) {
-        // The control loop runs several times per ADC sample. Count each
-        // sample once, so one bad reading cannot fill the confirmation count.
-        uint32_t sample_ms = 0;
-        if (weight_sensor &&
-            weight_sensor->get_latest_sample(&guard_sample_weight, &sample_ms) &&
-            sample_ms != last_guard_sample_ms_) {
-            last_guard_sample_ms_ = sample_ms;
-            vessel_removed = net_weight_removal_guard_.update(guard_sample_weight);
-        }
+        vessel_removed = vessel_removal_confirmed(&guard_sample_weight);
     } else {
         net_weight_removal_guard_.cancel_pending();
     }
 
-    if (vessel_removed && phase == GrindPhase::FINAL_SETTLING) {
+    // Between the purge and CONTINUE the motor is off, and lifting the cup to
+    // tip out the purge is part of the purge step: show the prompt at once.
+    const bool purge_step = phase == GrindPhase::PURGE_CONFIRM ||
+                            (phase == GrindPhase::PRIME_SETTLING && purge_prompt_due_);
+    if (vessel_removed && purge_step) {
+        vessel_lifted_since_purge_ = true;
+        if (phase == GrindPhase::PRIME_SETTLING) {
+            queue_log_message("[GRINDER] Vessel lifted after the purge; showing the purge prompt\n");
+            timeout_pause_start = loop_data.now;
+            switch_phase(GrindPhase::PURGE_CONFIRM, loop_data);
+        }
+    } else if (vessel_removed && phase == GrindPhase::FINAL_SETTLING) {
         // The dose was already decided; lifting the cup early is not an error.
         // Report the settled weight measured before the lift.
         grinder->stop();
@@ -794,6 +819,35 @@ void GrindController::update() {
 }
 
 // OLD predictive_grind method removed - logic now inline in update()
+
+// Grounds are stale on the first grind since boot, or when the last one was
+// longer ago than the Freshness setting.
+bool GrindController::grounds_are_stale() const {
+    if (!grinder_purged_since_boot) return true;
+    const uint64_t elapsed_ms = esp_timer_get_time() / 1000 - last_purge_runtime_ms;
+    float freshness_hours = preferences
+        ? preferences->getFloat(PREF_KEY_GRIND_FRESHNESS_HOURS, GRIND_FRESHNESS_DEFAULT_HOURS)
+        : GRIND_FRESHNESS_DEFAULT_HOURS;
+    // A corrupt value would make the conversion below undefined.
+    if (!std::isfinite(freshness_hours) || freshness_hours < 0.0f ||
+        freshness_hours > GRIND_FRESHNESS_MAX_HOURS) {
+        freshness_hours = GRIND_FRESHNESS_DEFAULT_HOURS;
+    }
+    return elapsed_ms > static_cast<uint64_t>(freshness_hours * 3600000.0f);
+}
+
+// Feeds the removal guard. The control loop runs several times per ADC
+// sample; counting each sample once means one bad reading cannot fill the
+// confirmation count.
+bool GrindController::vessel_removal_confirmed(float* sample_weight) {
+    uint32_t sample_ms = 0;
+    if (!weight_sensor || !weight_sensor->get_latest_sample(sample_weight, &sample_ms) ||
+        sample_ms == last_guard_sample_ms_) {
+        return false;
+    }
+    last_guard_sample_ms_ = sample_ms;
+    return net_weight_removal_guard_.update(*sample_weight);
+}
 
 // A motor-on weight phase that gains less than GRIND_DRY_RUN_MIN_PROGRESS_G
 // for GRIND_DRY_RUN_TIMEOUT_MS is grinding nothing: an empty hopper or a
@@ -932,6 +986,7 @@ void GrindController::switch_phase(GrindPhase new_phase, const GrindLoopData& lo
         dry_run_reference_weight_ = weight_sensor ? weight_sensor->get_weight_low_latency() : 0.0f;
         dry_run_reference_ms_ = now;
     }
+    if (phase == GrindPhase::PULSE_SETTLING) pulse_settling_start_ms_ = now;
     
     // Reset loop counter for new phase
     current_phase_loop_count = 0;

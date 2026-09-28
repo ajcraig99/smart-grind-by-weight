@@ -275,7 +275,7 @@ bool WeightSensor::tare() {
     }
 
     LOG_LOADCELL_DEBUG("[DEBUG %lums] BLOCKING_TARE_COMPLETE: Tare operation completed\n", millis());
-    return completed;
+    return completed && last_tare_settled_.load();
 }
 
 bool WeightSensor::calibrate(float known_weight) {
@@ -800,6 +800,7 @@ bool WeightSensor::sample_and_feed_filter() {
                         }
                         // Average the whole settling window, not its last 2-3 samples.
                         tare_offset = raw_filter.get_smoothed_raw(GRIND_SCALE_PRECISION_SETTLING_TIME_MS);
+                        last_tare_settled_.store(settled);
                         tare_initialized_.store(true);
                         tareTimes = 0;
                         doTare = 0;

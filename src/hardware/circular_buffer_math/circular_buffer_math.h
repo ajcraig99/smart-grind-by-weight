@@ -52,8 +52,10 @@ private:
     // Using 1024 for power-of-2 efficiency and future headroom
     static const uint16_t MAX_BUFFER_SIZE = 1024;
     
-    // A settling decision needs at least this many samples, taken over at
-    // least this long; 0-2 samples have no meaningful spread.
+    // A settling decision needs at least this many samples; 0-2 samples have
+    // no meaningful spread. Shorter windows are widened to
+    // MIN_SETTLING_WINDOW_MS so three samples fit at 10 SPS; the samples
+    // need not span all of it.
     static constexpr int MIN_SETTLING_SAMPLES = 3;
     static constexpr uint32_t MIN_SETTLING_WINDOW_MS = (HW_LOADCELL_SAMPLE_INTERVAL_MS * 7) / 2;
 
@@ -116,7 +118,7 @@ public:
     uint32_t get_buffer_time_span_ms() const;
     
     // Settling analysis - window_ms based with raw value threshold. Needs at
-    // least MIN_SETTLING_SAMPLES over max(window_ms, MIN_SETTLING_WINDOW_MS),
+    // least MIN_SETTLING_SAMPLES within the last max(window_ms, MIN_SETTLING_WINDOW_MS),
     // a standard deviation within the threshold, and end-to-end drift within
     // twice the threshold so a slow trickle does not read as settled.
     bool is_settled(uint32_t window_ms, int32_t threshold_raw_units) const;

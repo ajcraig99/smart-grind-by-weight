@@ -21,7 +21,7 @@ constexpr float GRIND_AUTOTUNE_LATENCY_MIN_MS = 30, GRIND_AUTOTUNE_LATENCY_MAX_M
 unsigned millis() { return 1; }
 enum class AutoTunePhase { IDLE, PRIMING };
 struct WeightSensor {} sensor;
-struct Grinder {} grinder;
+struct Grinder { bool latched = false; bool has_safety_stop() const { return latched; } } grinder;
 struct GrindController { float get_motor_response_latency() { return 75; } } controller;
 struct File {
     explicit operator bool() const { return true; }
@@ -65,6 +65,10 @@ int main() {
     auto available = operation_interlock().try_acquire();
     assert(available); operation_interlock().release(available);
     tuning.weight_sensor = &sensor;
+    grinder.latched = true;  // a dead-man stop refuses tuning before any side effect
+    assert(!tuning.start() && !tuning.is_running && tuning.operation_token == 0);
+    assert(LittleFS.opens == 0 && LittleFS.removes == 0 && tuning.phase_changes == 0);
+    grinder.latched = false;
     assert(tuning.start());
     assert(tuning.is_running && !tuning.cancel_requested && tuning.phase_changes == 1);
     assert(operation_interlock().owns(tuning.operation_token));

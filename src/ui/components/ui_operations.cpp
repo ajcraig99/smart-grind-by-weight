@@ -12,7 +12,7 @@ void UIOperations::execute_tare(HardwareManager* hw_manager, OperationResultCall
         if (*succeeded) {
             LOG_BLE("Scale tared successfully\n");
         } else {
-            LOG_BLE("Scale tare did not finish\n");
+            LOG_BLE("Scale tare failed: timed out, or the scale kept moving\n");
         }
     };
     

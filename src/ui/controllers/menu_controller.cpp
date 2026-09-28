@@ -216,6 +216,7 @@ void MenuUIController::handle_purge() {
 
 void MenuUIController::handle_motor_test() {
     if (!ui_manager_) return;
+    if (ui_manager_->show_motor_safety_stop_notice()) return;
 
     ui_manager_->show_confirmation(
         "MOTOR TEST",
@@ -269,13 +270,19 @@ void MenuUIController::handle_scale_tare() {
 }
 
 void MenuUIController::show_tare_failed() {
+    auto* hardware = ui_manager_->get_hardware_manager();
+    WeightSensor* sensor = hardware ? hardware->get_weight_sensor() : nullptr;
+    const bool has_reading = sensor && sensor->has_recent_sample();
     ui_manager_->show_confirmation(
-        "Tare incomplete", "The scale kept moving.\nKeep it still, then\ntap TARE again.",
+        "Tare incomplete",
+        has_reading ? "The scale kept moving.\nKeep it still, then\ntap TARE again."
+                    : "No reading from the load cell.\nCheck its wiring, then\ntap TARE again.",
         "OK", lv_color_hex(THEME_COLOR_WARNING), nullptr, "BACK");
 }
 
 void MenuUIController::handle_autotune() {
     if (!ui_manager_) return;
+    if (ui_manager_->show_motor_safety_stop_notice()) return;
 
     // Show confirmation screen with setup instructions
     auto autotune_controller = ui_manager_->autotune_controller_.get();
@@ -869,7 +876,7 @@ void MenuUIController::run_motor_test() {
 
     auto* hardware = ui_manager_->get_hardware_manager();
     auto* grinder = hardware ? hardware->get_grinder() : nullptr;
-    if (!grinder) return;
+    if (!grinder || grinder->has_safety_stop()) return;
 
     const auto token = operation_interlock().try_acquire();
     if (!token) return;

@@ -22,6 +22,7 @@ fork at `b4a0be6`. The review's file:line references are to upstream
 | `1c3c6c7` | Grind control: dry run, purge re-tare, removal guard, timeouts |
 | `09b9e57` | Touchscreen fixes |
 | `a13c928` | Dose limit of 40 g |
+| `e35bd56` | Touchscreen guard gaps; removal threshold after the purge re-tare |
 
 Verification on this branch: host tests (`tools/tests`) and V1 and V2 firmware
 builds. **Nothing here has been tested on hardware.** The bench checks at the
@@ -115,6 +116,27 @@ needs checking on the screen: over-wide titles, the auto-tune console under
 Cancel, the calibration noise text over its title, status icons over the close
 button, and the purge checkbox size.
 
+## Follow-up review of this branch
+
+Two further reviews checked the commits above: one the motor, grind and scale
+changes, one the network, Bluetooth and update changes. Their IDs start with
+G and W so they do not clash with the review's.
+
+| ID | Finding | Status | Where | Notes |
+|---|---|---|---|---|
+| G1 | The purge re-tare left kept grounds out of the dose | Fixed | | Re-tares only if the cup was lifted or its reading moved more than 0.5 g |
+| G2 | Lifting the cup right after the purge ends the grind | Fixed | | Shows the purge prompt instead, when one follows |
+| G3 | Removal threshold kept the first cup's weight after the re-tare | Fixed | `e35bd56` | Fixed -10 g threshold after a re-tare |
+| G4 | The -10 g fallback is far more sensitive than the referenced rule | Open | | Needs bench measurement of hand forces (bench check 8) |
+| G5 | Some motor-driver init failures leave the pin undriven | Fixed | | Driven LOW on every failure path |
+| G6 | A NaN purge amount or freshness setting is not rejected | Fixed | | |
+| G7 | CONTINUE with a stale scale hides the prompt | Fixed | | The prompt stays |
+| G8 | Pulse settling waits up to 6 s per correction, not 3 s | Fixed | | 3 s from the motor stop |
+| G9 | A moving scale never fails a tare | Fixed | | The notice also tells a moving scale from a silent one |
+| G10 | Motor Test and Tune Pulses ignore the safety stop | Fixed | | "Motor stopped" notice |
+| G11 | The purge prompt has no time limit | Fixed | | Ends after 5 minutes, like a paused time grind |
+| G12 | The settling rule is worded more strictly than the code | Fixed | | Comment corrected |
+
 ## Bench checks before first use
 
 1. Scope the motor GPIO through power-up, reset, USB flashing and a panic
@@ -128,12 +150,18 @@ button, and the purge checkbox size.
    "No beans?" about 5 s after priming starts.
 5. Settling and tare times on your load cell; the stricter checks may add a
    few hundred milliseconds per pulse on a noisy setup.
-6. Purge: press CONTINUE with the cup off (prompt expected), tap BACK (the
-   purge prompt returns with its STOP button), then CONTINUE with the cup back
-   (re-tare, then grind). Lift the cup after the re-tare: the grind should stop.
+6. Purge: keep the grounds and tap CONTINUE (no re-tare; weigh the cup: the
+   dose includes the purge). After a restart, when the prompt is due again,
+   lift the cup as the motor stops (the prompt appears at once), tip it out
+   and tap CONTINUE with the cup off
+   (prompt expected), tap BACK (the purge prompt returns with its STOP button),
+   then CONTINUE with the cup back (re-tare, then grind). Lift the cup after
+   the re-tare: the grind should stop.
 7. Lift the cup mid-grind (stop with "Err: neg wt") and during final settling
    (completes with the result).
 8. Touch: swipe across the round button, double-tap STOP and OK, and tap a
-   dimmed screen.
+   dimmed screen. On a second grind after boot (the zero then includes the
+   cup), steady the cup or portafilter handle as you normally would and note
+   whether it stops the grind with "Err: neg wt" (G4).
 9. A Wi-Fi and a Bluetooth update with and without **Allow Update**, then a
    deliberately bad image to confirm rollback.

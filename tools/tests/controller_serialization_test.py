@@ -190,7 +190,7 @@ int main() {
         for signature in (
             "bool GrindController::start_grind(", "void GrindController::update()",
             "void GrindController::stop_grind()", "void GrindController::return_to_idle()",
-            "bool GrindController::continue_from_purge(", "void GrindController::pause_grind()",
+            "PurgeContinueResult GrindController::continue_from_purge(", "void GrindController::pause_grind()",
             "void GrindController::resume_grind()", "void GrindController::start_additional_pulse()",
             "void GrindController::process_queued_flash_operations()",
             "void GrindController::ui_acknowledge_phase_transition()",

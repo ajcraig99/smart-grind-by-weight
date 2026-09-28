@@ -57,18 +57,22 @@ void Grinder::init(int pin) {
     };
     
     if (rmt_new_tx_channel(&tx_chan_config, &rmt_channel) != ESP_OK) return;
+    // Deleting the channel disables the pin's output driver, so every failure
+    // path below drives it LOW again.
     rmt_tx_event_callbacks_t callbacks{};
     callbacks.on_trans_done = &Grinder::on_transmit_done;
     rmt_copy_encoder_config_t encoder_config{};
     if (rmt_tx_register_event_callbacks(rmt_channel, &callbacks, this) != ESP_OK ||
         rmt_new_copy_encoder(&encoder_config, &current_encoder) != ESP_OK) {
         rmt_del_channel(rmt_channel);
+        hold_pin_low(motor_pin);
         return;
     }
     if (rmt_enable(rmt_channel) != ESP_OK) {
         rmt_del_encoder(current_encoder);
         current_encoder = nullptr;
         rmt_del_channel(rmt_channel);
+        hold_pin_low(motor_pin);
         return;
     }
 

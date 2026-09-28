@@ -84,8 +84,10 @@ int main() {
         source = (ROOT / "src/controllers/grind_controller.cpp").read_text()
         update = function(source, "void GrindController::update()")
         start = update.index("    bool vessel_removed = false;")
-        end = update.index("    if (vessel_removed && phase == GrindPhase::FINAL_SETTLING)")
+        end = update.index("    // Between the purge and CONTINUE")
         guard = update[start:end]
+        confirmed = function(source, "bool GrindController::vessel_removal_confirmed(float* sample_weight)")
+        confirmed = confirmed.replace("GrindController::", "")
         code = r'''
 #include <cassert>
 #include <cstdint>
@@ -102,6 +104,7 @@ struct Controller {
     Sensor* weight_sensor;
     NetWeightRemovalGuard net_weight_removal_guard_;
     uint32_t last_guard_sample_ms_ = 0;
+''' + confirmed + r'''
     bool cycle(bool net_weight_guard_active, const GrindLoopData& loop_data) {
 ''' + guard + r'''
         (void)guard_sample_weight;

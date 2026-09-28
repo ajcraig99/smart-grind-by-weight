@@ -59,6 +59,11 @@ bool AutoTuneController::start() {
         return false;
     }
 
+    if (grinder->has_safety_stop()) {
+        LOG_BLE("ERROR: AutoTune cannot start - motor safety stop is latched until restart\n");
+        return false;
+    }
+
     const auto token = operation_interlock().try_acquire();
     if (!token) return false;
     operation_token = token;

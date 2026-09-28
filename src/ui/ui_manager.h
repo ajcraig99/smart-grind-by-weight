@@ -137,7 +137,10 @@ public:
     
     void set_background_active(bool active);
     bool refresh_auto_action_settings(bool verify_storage = false);
-    
+    // Explains that the dead-man stopped the motor until restart. Returns
+    // false, showing nothing, while the motor can still run.
+    bool show_motor_safety_stop_notice();
+
 
 private:
     void create_ui();

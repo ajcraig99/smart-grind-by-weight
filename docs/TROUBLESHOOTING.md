@@ -10,6 +10,8 @@
 - [PlatformIO Project Initialization Issues](#platformio-project-initialization-issues)
 - [Unexpected Net Weight Error](#unexpected-net-weight-error)
 - [No Beans? Error](#no-beans-error)
+- [Paused Too Long](#paused-too-long)
+- [Tare Failed or Incomplete](#tare-failed-or-incomplete)
 - [Motor Safety Stop](#motor-safety-stop)
 - [Grind Timeout Screen](#grind-timeout-screen)
 - [Unreliable Pulse Corrections](#unreliable-pulse-corrections)
@@ -275,7 +277,15 @@ Current firmware records the vessel weight immediately before tare. It only
 treats a negative reading as vessel removal when the reading approaches that
 full pre-tare weight (or falls below -10 g when the previous zero already
 included the vessel) for three consecutive scale samples. Each sample counts
-once, so a single negative spike is ignored.
+once, so a single negative spike is ignored. An upward push on the cup or
+portafilter handle of more than 10 g for about 0.3 s reads the same as a lift
+when the zero already included the vessel, so let it rest freely while the
+grinder runs.
+
+In Purge mode, lifting the cup to tip out the purge is expected: the purge
+prompt appears instead of the error. When no prompt follows (Prime mode, or
+grounds still fresh), lifting the cup in the pause after priming still stops
+the grind, because the motor is about to restart.
 
 If the error still occurs, download the diagnostic log from the grinder web UI
 and include the pre-tare reference, removal threshold and reported weight in a
@@ -294,10 +304,35 @@ platform and that the load cell responds on **Menu → Scale**.
 
 ---
 
+## Paused Too Long
+
+**Applies to:** A grind ending with "Paused too long".
+
+A time grind left paused, or a purge prompt left unanswered, ends after
+5 minutes. While it waits the grinder refuses firmware updates and settings
+changes from the web page, so it cannot wait indefinitely. Start a new grind.
+
+---
+
+## Tare Failed or Incomplete
+
+**Applies to:** "Tare failed" during calibration, or "Tare incomplete" on
+**Menu → Scale**.
+
+- **"The scale kept moving"**: the reading did not settle within about
+  3 seconds. The zero was still taken, from the moving reading, so tare again
+  once the platform is still: keep hands off it and let vibration from the
+  grinder or the bench die down. If it keeps happening on a still platform,
+  check **Menu → Diagnostics** for a noisy load cell.
+- **"No reading from the load cell"**: the scale stopped sending readings. See
+  [HX711 Not Detected / Wrong Sample Rate](#hx711-not-detected--wrong-sample-rate).
+
+---
+
 ## Motor Safety Stop
 
-**Applies to:** A grind ending with "Motor safety stop", or a start refused
-with "Motor stopped".
+**Applies to:** A grind ending with "Motor safety stop", or a grind start,
+**Motor Test** or **Tune Pulses** refused with "Motor stopped".
 
 The grind control loop must check in with the motor driver at least once a
 second while the motor runs continuously. If it does not, a separate timer

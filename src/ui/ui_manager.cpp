@@ -355,6 +355,15 @@ void UIManager::show_confirmation(const char* title, const char* message,
     }
 }
 
+bool UIManager::show_motor_safety_stop_notice() {
+    Grinder* grinder = hardware_manager ? hardware_manager->get_grinder() : nullptr;
+    if (!grinder || !grinder->has_safety_stop()) return false;
+    show_confirmation(
+        "Motor stopped", "The control loop stalled, so the\nmotor was stopped. Restart the\ngrinder to use it again.",
+        "OK", lv_color_hex(THEME_COLOR_WARNING), nullptr, "BACK");
+    return true;
+}
+
 void UIManager::init_controllers() {
     ready_controller_ = std::make_unique<ReadyUIController>(this);
     edit_controller_ = std::make_unique<EditUIController>(this);

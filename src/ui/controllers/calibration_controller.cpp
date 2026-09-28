@@ -109,8 +109,12 @@ void CalibrationUIController::handle_ok() {
             UIOperations::execute_tare(ui_manager_->get_hardware_manager(), [this](bool tared) {
                 if (!tared) {
                     // Returning to calibration restarts it at the empty step.
+                    WeightSensor* sensor = ui_manager_->get_hardware_manager()->get_weight_sensor();
+                    const bool has_reading = sensor && sensor->has_recent_sample();
                     ui_manager_->show_confirmation(
-                        "Tare failed", "The scale kept moving.\nKeep it still and empty,\nthen try again.",
+                        "Tare failed",
+                        has_reading ? "The scale kept moving.\nKeep it still and empty,\nthen try again."
+                                    : "No reading from the load cell.\nCheck its wiring, then\ntry again.",
                         "OK", lv_color_hex(THEME_COLOR_WARNING), nullptr, "BACK");
                     return;
                 }

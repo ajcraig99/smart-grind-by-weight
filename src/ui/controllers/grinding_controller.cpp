@@ -266,17 +266,15 @@ void GrindingUIController::handle_grind_button() {
 // Explains a refused start using what the UI can see; the controller only
 // reports success or failure.
 void GrindingUIController::show_start_failure() {
+    if (ui_manager_->show_motor_safety_stop_notice()) {
+        return;
+    }
     HardwareManager* hardware = ui_manager_->get_hardware_manager();
-    Grinder* grinder = hardware ? hardware->get_grinder() : nullptr;
     WeightSensor* sensor = hardware ? hardware->get_weight_sensor() : nullptr;
     const bool weight_grind = ui_manager_->current_tab != ReadyScreen::MANUAL_TAB_INDEX &&
                               ui_manager_->current_mode == GrindMode::WEIGHT;
-    if (grinder && grinder->has_safety_stop()) {
-        ui_manager_->show_confirmation(
-            "Motor stopped", "The control loop stalled, so the\nmotor was stopped. Restart the\ngrinder to use it again.",
-            "OK", lv_color_hex(THEME_COLOR_WARNING), nullptr, "BACK");
-    } else if (weight_grind && sensor &&
-               (sensor->has_hardware_fault() || !sensor->has_recent_sample())) {
+    if (weight_grind && sensor &&
+        (sensor->has_hardware_fault() || !sensor->has_recent_sample())) {
         ui_manager_->show_confirmation(
             "Scale not ready", "No reading from the load cell.\nCheck its wiring, then see\nDiagnostics in the menu.",
             "OK", lv_color_hex(THEME_COLOR_WARNING), nullptr, "BACK");
@@ -347,15 +345,25 @@ void GrindingUIController::continue_after_purge(bool check_vessel) {
         return;
     }
 
-    // The controller re-tares before grinding on. It holds while the scale
-    // reads as if the cup were still off; a lighter replacement cup can
-    // still be confirmed.
-    if (!ui_manager_->grind_controller->continue_from_purge(check_vessel)) {
-        ui_manager_->show_confirmation(
-            "Cup missing?", "The scale is lighter than at\nthe start. Put the cup back,\nor continue with this one.",
-            "CONTINUE", lv_color_hex(THEME_COLOR_WARNING),
-            [this]() { continue_after_purge(false); }, "BACK");
-        return;
+    // The controller holds while the scale reads as if the cup were still
+    // off; a lighter replacement cup can still be confirmed.
+    switch (ui_manager_->grind_controller->continue_from_purge(check_vessel)) {
+        case PurgeContinueResult::VESSEL_MISSING:
+            ui_manager_->show_confirmation(
+                "Cup missing?", "The scale is lighter than at\nthe start. Put the cup back,\nor continue with this one.",
+                "CONTINUE", lv_color_hex(THEME_COLOR_WARNING),
+                [this]() { continue_after_purge(false); }, "BACK");
+            return;
+        case PurgeContinueResult::SCALE_NOT_READY:
+            // The prompt stays; the control loop ends the grind if the scale
+            // stays silent.
+            return;
+        case PurgeContinueResult::NOT_WAITING:
+            // The grind already moved on; its own event sets the screen.
+            ui_manager_->purge_confirm_screen.hide();
+            return;
+        case PurgeContinueResult::CONTINUED:
+            break;
     }
 
     // Save "Always keep" only once the grind really continues: BACK from the

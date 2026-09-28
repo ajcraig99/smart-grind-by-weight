@@ -129,7 +129,8 @@ void WeightGrindStrategy::run_pulse_decision_phase(GrindController& controller,
 
     float settled_weight;
     if (!controller.weight_sensor->check_settling_complete(GRIND_SCALE_PRECISION_SETTLING_TIME_MS, &settled_weight)) {
-        if (loop_data.now - controller.phase_start_time < GRIND_PULSE_SETTLING_TIMEOUT_MS) {
+        // Timed from PULSE_SETTLING, so one timeout covers both phases.
+        if (loop_data.now - controller.pulse_settling_start_ms_ < GRIND_PULSE_SETTLING_TIMEOUT_MS) {
             return;
         }
         // A scale that never settles still gets a decision, on the smoothed weight.
@@ -177,7 +178,7 @@ void WeightGrindStrategy::run_pulse_settling_phase(GrindController& controller,
     const uint32_t elapsed_ms = loop_data.now - controller.phase_start_time;
     if (elapsed_ms >= static_cast<uint32_t>(controller.grind_latency_ms) + GRIND_MOTOR_SETTLING_TIME_MS) {
         // PULSE_DECISION applies its own settling check, so a scale that never
-        // settles here moves on after the timeout.
+        // settles here moves on after the timeout and is decided on at once.
         if (controller.weight_sensor->check_settling_complete(GRIND_MOTOR_SETTLING_TIME_MS) ||
             elapsed_ms >= GRIND_PULSE_SETTLING_TIMEOUT_MS) {
             controller.switch_phase(GrindPhase::PULSE_DECISION, loop_data);

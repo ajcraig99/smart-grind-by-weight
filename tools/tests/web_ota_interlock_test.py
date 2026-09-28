@@ -44,6 +44,7 @@ class WebOtaInterlockTest(unittest.TestCase):
 #include <string>
 #include <thread>
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #define SMART_GRIND_SIM 1
@@ -109,6 +110,8 @@ struct GrindController {
     const char* PREF_KEY_GRINDER_MODE="mode";
     const char* PREF_KEY_GRINDER_AMOUNT_G="amount";
     OperationInterlock::Token operation_token_=0;
+    bool purge_prompt_due_=false;
+    bool grounds_are_stale() const { return true; }
     bool start_grind(float,uint32_t,GrindMode);
 } controller;
 struct BluetoothManager {

@@ -138,7 +138,7 @@ class WeightSensor {
 public:
  bool adc_driver=true,fault=false,waiting=true,read_ok=true;
  int32_t raw=0x800000;
- std::atomic<bool> has_sample_{false},tare_initialized_{false};
+ std::atomic<bool> has_sample_{false},tare_initialized_{false},last_tare_settled_{false};
  std::atomic<uint32_t> last_sample_ms_{0};
  std::atomic<int32_t> diagnostic_raw_adc_{-1};
  Filter raw_filter;
@@ -216,6 +216,7 @@ int main(){
   while(sensor.doTare){clock_ms+=100;assert(sensor.sample_and_feed_filter());assert(++samples<100);}
   assert(samples==sensor.DATA_SET+1+(settled?0:sensor.TARE_MAX_EXTRA_SAMPLES));
   assert(sensor.tare_offset==42 && sensor.tare_initialized_ && sensor.tareStatus);
+  assert(sensor.last_tare_settled_==settled); // a blocking tare() reports a moving scale
  }
  sensor.raw=0x800000;clock_ms=UINT32_MAX-100;assert(sensor.sample_and_feed_filter());
  clock_ms=398;assert(sensor.has_recent_sample());clock_ms=399;assert(!sensor.has_recent_sample());

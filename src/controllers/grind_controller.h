@@ -61,6 +61,14 @@ struct PulseReport {
     float duration_ms;
 };
 
+// Outcome of CONTINUE on the purge prompt.
+enum class PurgeContinueResult {
+    CONTINUED,        // Grinding on; re-tares first if the cup was emptied or swapped
+    VESSEL_MISSING,   // Still waiting: the scale reads as if the cup were off
+    SCALE_NOT_READY,  // Still waiting: no fresh scale reading
+    NOT_WAITING       // The session has already left the purge prompt
+};
+
 
 
 // Controls the grinding process with predictive weight stopping and precision pulse corrections
@@ -169,13 +177,23 @@ private:
     NetWeightRemovalGuard net_weight_removal_guard_;
     uint32_t last_guard_sample_ms_ = 0;   // Timestamp of the sample the guard last counted
     float pre_final_settled_weight_ = 0;  // Settled weight that led to FINAL_SETTLING
+    // Start of the settling before a pulse decision; the settling timeout
+    // runs from here across PULSE_SETTLING and PULSE_DECISION.
+    unsigned long pulse_settling_start_ms_ = 0;
 
     // Dry-run detection: weight and time of the last GRIND_DRY_RUN_MIN_PROGRESS_G gain
     float dry_run_reference_weight_ = 0;
     unsigned long dry_run_reference_ms_ = 0;
 
-    // CONTINUE after a purge re-tares, then resumes in PREDICTIVE, not PRIME.
+    // A re-tare after the purge prompt resumes in PREDICTIVE, not PRIME.
     bool resume_after_purge_ = false;
+    // Set at start: this session stops at the purge prompt after priming.
+    bool purge_prompt_due_ = false;
+    // Settled reading when the purge prompt appeared, and whether the vessel
+    // has been lifted since. Either change means the cup was emptied or
+    // swapped, so CONTINUE re-tares; otherwise kept grounds count as dose.
+    float post_purge_weight_ = 0.0f;
+    bool vessel_lifted_since_purge_ = false;
 
     DiagnosticsController* diagnostics_controller_ = nullptr;
 
@@ -207,10 +225,10 @@ public:
     void user_tare_request();
     void return_to_idle(); // Called by UI to acknowledge completion/timeout
     void stop_grind();
-    // Called by UI to continue from PURGE_CONFIRM: re-tares, then resumes in
-    // PREDICTIVE. Returns false, still waiting, when check_vessel is set and
-    // the scale reads as if the vessel were still off.
-    bool continue_from_purge(bool check_vessel = true);
+    // Called by UI to continue from PURGE_CONFIRM into PREDICTIVE, re-taring
+    // first if the cup was emptied or swapped. With check_vessel set it keeps
+    // waiting while the scale reads as if the vessel were still off.
+    PurgeContinueResult continue_from_purge(bool check_vessel = true);
     void update(); // Core 0 main control method - runs at fixed RTOS interval
     
     // Time mode pulse functionality
@@ -303,6 +321,8 @@ private:
     void monitor_mechanical_instability(const GrindLoopData& loop_data);
 
     bool check_timeout() const;
+    bool grounds_are_stale() const;
+    bool vessel_removal_confirmed(float* sample_weight);
     bool dry_run_detected(const GrindLoopData& loop_data);
     void abort_session(GrindSessionResult result, const char* message, const GrindLoopData& loop_data);
     uint8_t get_current_phase_id() const;

@@ -69,6 +69,8 @@ private:
     static const uint8_t DATA_SET = 16 + 1 + 1;  // SAMPLES + IGN_HIGH_SAMPLE + IGN_LOW_SAMPLE
     // A tare waits up to this many further samples for a settled window.
     static const uint8_t TARE_MAX_EXTRA_SAMPLES = 10;
+    // False when the last tare had to use an unsettled window.
+    std::atomic<bool> last_tare_settled_{false};
     bool doTare;
     uint8_t tareTimes;
     bool tareStatus;
@@ -126,7 +128,9 @@ public:
     void power_down();
     
     // Tare operations
-    bool tare();                          // Blocking tare; false if it did not finish in time
+    // Blocking tare. False if it timed out, or if the scale kept moving; the
+    // zero is then still taken from the unsettled window.
+    bool tare();
     void tareNoDelay();                   // Exact HX711_ADC method
     bool getTareStatus();                 // Exact HX711_ADC method
     
