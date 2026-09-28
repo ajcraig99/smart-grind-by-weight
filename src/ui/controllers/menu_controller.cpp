@@ -817,7 +817,14 @@ void MenuUIController::handle_display_off_toggle() {
 void MenuUIController::perform_factory_reset() {
     if (!ui_manager_) return;
 
-    LOG_DEBUG_PRINTLN("Factory reset: clearing NVS preferences and rebooting...");
+    LOG_DEBUG_PRINTLN("Factory reset: clearing grind history and NVS preferences, then rebooting...");
+
+    // Grind history lives on LittleFS, outside NVS. Session numbering restarts
+    // with NVS, so old files would otherwise be overwritten by new sessions.
+    extern GrindLogger grind_logger;
+    if (!grind_logger.clear_all_sessions_from_flash()) {
+        LOG_DEBUG_PRINTLN("Factory reset: some grind history files could not be removed");
+    }
 
     nvs_flash_deinit();
     esp_err_t erase_result = nvs_flash_erase();
@@ -941,7 +948,8 @@ void MenuUIController::motor_timer_cb(lv_timer_t* timer) {
 
     stop_motor_timer();
     ui_manager_->set_background_active(false);
-    return_to_menu();
+    // The test started from the menu; do not pull the user back there from
+    // wherever they went during the pulse.
     operation_interlock().release(motor_test_token_);
     motor_test_token_ = 0;
 }

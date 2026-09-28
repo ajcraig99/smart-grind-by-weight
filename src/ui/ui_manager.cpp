@@ -300,11 +300,16 @@ void UIManager::switch_to_state(UIState new_state) {
                     uint64_t current_ms = esp_timer_get_time() / 1000;
                     uint64_t last_purge_ms = grind_controller->get_last_purge_runtime_ms();
                     uint64_t elapsed_ms = current_ms - last_purge_ms;
-                    float elapsed_hours = elapsed_ms / 3600000.0f;
-                    int hours = (int)elapsed_hours;
+                    const unsigned long minutes = static_cast<unsigned long>(elapsed_ms / 60000ULL);
 
-                    snprintf(message_buffer, sizeof(message_buffer),
-                             "Last grind >%dh ago. Remove the purge grinds if desired.", hours);
+                    // Freshness can be set below an hour; do not report "0h".
+                    if (minutes < 60) {
+                        snprintf(message_buffer, sizeof(message_buffer),
+                                 "Last grind %lu min ago. Remove the purge grinds if desired.", minutes);
+                    } else {
+                        snprintf(message_buffer, sizeof(message_buffer),
+                                 "Last grind >%luh ago. Remove the purge grinds if desired.", minutes / 60);
+                    }
                 }
             } else {
                 // Fallback message

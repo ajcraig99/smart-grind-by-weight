@@ -178,6 +178,8 @@ void GrindingScreenChart::update_target_time(float seconds) {
 }
 
 void GrindingScreenChart::update_current_weight(float weight) {
+    // Round-to-zero readings would otherwise show "-0.0g".
+    if (weight > -0.05f && weight < 0.05f) weight = 0.0f;
     char current_text[16], target_text[16];
     snprintf(current_text, sizeof(current_text), SYS_WEIGHT_DISPLAY_FORMAT, weight);
     snprintf(target_text, sizeof(target_text), " / " SYS_WEIGHT_DISPLAY_FORMAT, target_weight_value);

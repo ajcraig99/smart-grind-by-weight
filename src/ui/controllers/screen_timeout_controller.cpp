@@ -100,6 +100,7 @@ void ScreenTimeoutController::update() {
         }
         display->set_brightness(dimmed);
         screen_dimmed_ = true;
+        display->set_touch_wakes_only(true);
 
         // Show screensaver image if enabled
         if (screensaver_controller_ &&
@@ -151,6 +152,7 @@ void ScreenTimeoutController::refresh_settings_if_needed(uint32_t now_ms) {
 }
 
 void ScreenTimeoutController::restore_normal_display(DisplayManager* display) {
+    display->set_touch_wakes_only(false);
     bool screensaver_visible = screensaver_controller_ && screensaver_controller_->is_visible();
     if (screensaver_visible) {
         screensaver_controller_->hide();

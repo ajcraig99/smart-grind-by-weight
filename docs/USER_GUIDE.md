@@ -41,6 +41,11 @@ All profiles are fully customizable. Default grind-by-weight targets (fallback t
 - **Swipe up/down** on the ready screen to toggle between grind-by-weight and grind-by-time modes (when enabled in Menu → Grind Settings)
 - **Tap** to select profiles or buttons
 - **Long press** on profile targets to edit/customize them
+- A swipe that starts on the round button never presses it, and for 0.7 s
+  after the button changes (for example from STOP or OK to PLAY) a second tap
+  is ignored, so a double tap cannot start a new grind. STOP always acts at
+  once
+- When the screen has dimmed, the first touch only wakes it
 
 > **Color cues:** The GRIND button background turns **red** in weight mode and **blue** in time mode, so you always know which behaviour is armed.
 
@@ -96,7 +101,8 @@ Need a simple live readout? Open **Menu → Scale** to jump into a full-screen w
 ### Display Modes
 - **Arc Layout**: Clean, minimal arc-based interface
 - **Nerdy Layout**: Detailed charts showing flow rates and real-time grinding analytics
-- **Switching**: Tap anywhere on grind screen to switch between layouts during grinding
+- **Switching**: Press and hold anywhere above the buttons on the grind screen to switch
+  layouts. The choice is saved when the grinder returns to the main screen
 - **Screensaver**: A custom or built-in design can show on startup or when the
   display dims. An optional later panel-off stage protects the AMOLED during
   long idle periods.

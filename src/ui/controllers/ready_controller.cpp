@@ -174,13 +174,16 @@ void ReadyUIController::register_events() {
             return;
         }
 
+        // A swipe is never also a tap on whatever it started on, such as the
+        // grind button: drop the rest of this press, whatever the swipe does.
+        lv_indev_wait_release(input);
+
         if ((dir == LV_DIR_LEFT || dir == LV_DIR_RIGHT) && ui->ready_screen.get_tabview()) {
             lv_obj_t* ready_tabs = ui->ready_screen.get_tabview();
             int target_tab = static_cast<int>(lv_tabview_get_tab_act(ready_tabs));
             target_tab += dir == LV_DIR_LEFT ? 1 : -1;
             if (target_tab >= 0 && target_tab < ReadyScreen::TAB_COUNT) {
                 lv_tabview_set_act(ready_tabs, static_cast<uint32_t>(target_tab), LV_ANIM_ON);
-                lv_indev_wait_release(input);
             }
             lv_event_stop_bubbling(e);
             return;

@@ -7,6 +7,12 @@ namespace {
 constexpr uint32_t kTouchI2CFrequencyHz = 300000;
 constexpr int kTouchI2CTimeoutMs = 5;
 constexpr char kTag[] = "TouchDriver";
+// FocalTech TD_STATUS holds the number of touch points. A larger count can
+// only come from a failed read: with ACK checking off, a NACKed read is 0xFF.
+constexpr uint8_t kMaxTouchPoints = 5;
+// A press survives this many consecutive unusable reads, so one bad read in
+// the middle of a press is not a release (and a click).
+constexpr uint8_t kMaxUnusableReadsWhilePressed = 3;
 
 void suppress_touch_i2c_logs() {
 #if DEBUG_SUPPRESS_TOUCH_I2C_ERRORS
@@ -88,19 +94,27 @@ void TouchDriver::update() {
     uint8_t buf[5] = {0};
     uint8_t reg = 0x02; // FT3168_REG_NUM_TOUCHES
     esp_err_t err = i2c_master_transmit_receive(device_handle, &reg, sizeof(reg), buf, sizeof(buf), kTouchI2CTimeoutMs);
-    if (err != ESP_OK) {
+    uint8_t touches = buf[0] & 0x0F;
+    const uint16_t x = ((buf[1] & 0x0F) << 8) | buf[2];
+    const uint16_t y = ((buf[3] & 0x0F) << 8) | buf[4];
+    const bool usable = err == ESP_OK && touches <= kMaxTouchPoints &&
+                        (touches == 0 || (x < HW_DISPLAY_WIDTH_PX && y < HW_DISPLAY_HEIGHT_PX));
+    if (!usable) {
         // Touch controller NACKs when no touch data - treat as no-touch without logging.
-        if (err != ESP_ERR_INVALID_STATE && err != ESP_ERR_TIMEOUT) {
+        if (err != ESP_OK && err != ESP_ERR_INVALID_STATE && err != ESP_ERR_TIMEOUT) {
             ESP_LOGW(kTag, "Touch poll failed: %s", esp_err_to_name(err));
         }
-        last_touch.pressed = false;
-        return;
+        // Keep the current state; release a press only if reads keep failing.
+        if (!was_pressed || ++unusable_reads_ < kMaxUnusableReadsWhilePressed) {
+            return;
+        }
+        touches = 0;
     }
-    
-    uint8_t touches = buf[0] & 0x0F;
+    unusable_reads_ = 0;
+
     if (touches > 0) {
-        last_touch.x = ((buf[1] & 0x0F) << 8) | buf[2];
-        last_touch.y = ((buf[3] & 0x0F) << 8) | buf[4];
+        last_touch.x = x;
+        last_touch.y = y;
         last_touch.pressed = true;
         if (!was_pressed) {
             press_event_pending = true;

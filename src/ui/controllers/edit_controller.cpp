@@ -92,7 +92,7 @@ void EditUIController::handle_plus(lv_event_code_t code) {
         return;
     }
 
-    if (code == LV_EVENT_CLICKED) {
+    if (code == LV_EVENT_SHORT_CLICKED) {  // CLICKED also follows a long-press jog
         const auto& traits = get_grind_mode_traits(ui_manager_->current_mode);
         ui_manager_->edit_target = clamp_profile_target(*ui_manager_->profile_controller, ui_manager_->current_mode,
                                                         ui_manager_->edit_target + traits.fine_increment);
@@ -113,7 +113,7 @@ void EditUIController::handle_minus(lv_event_code_t code) {
         return;
     }
 
-    if (code == LV_EVENT_CLICKED) {
+    if (code == LV_EVENT_SHORT_CLICKED) {  // CLICKED also follows a long-press jog
         const auto& traits = get_grind_mode_traits(ui_manager_->current_mode);
         ui_manager_->edit_target = clamp_profile_target(*ui_manager_->profile_controller, ui_manager_->current_mode,
                                                         ui_manager_->edit_target - traits.fine_increment);

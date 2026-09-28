@@ -51,6 +51,29 @@ line. Earlier release history remains available in the original project's
 - Build with `-O2` instead of `-Ofast`, which let the compiler delete the
   checks that reject corrupt (NaN or infinite) calibration and settings values.
 
+### Touchscreen
+
+- A swipe that starts on the round grind button no longer presses it, and a
+  second tap within 0.7 s of the button changing meaning is ignored, so
+  STOP-STOP or OK-OK can no longer start a new grind. STOP still acts at once.
+- The first touch on a dimmed screen only wakes it.
+- The touch driver holds a press through up to two failed reads instead of
+  turning one bad read into a release and a click, and ignores implausible
+  readings from failed transfers.
+- The completion screen keeps showing the result after the cup is lifted.
+- A refused start explains a missing scale reading ("Scale not ready") or a
+  latched motor safety stop instead of a generic notice.
+- Holding + or - no longer adds an extra step on release.
+- The layout switch on the grind screen needs a press and hold, and the choice
+  is saved after the grind rather than written to flash mid-grind.
+- The motor test no longer returns to the menu from whatever screen is open
+  when it ends.
+- Factory reset also clears grind history, as its confirmation says; session
+  numbers restarting would otherwise overwrite old history files.
+- Readings of 100 g or more fit inside the progress ring, the error screen no
+  longer shows "-0.0g", and the purge prompt shows minutes instead of
+  "Last grind >0h ago". Wider gap between paired buttons, and text fixes.
+
 ### Grind control
 
 - Stop a weight grind with "No beans?" when the motor runs for 5 seconds

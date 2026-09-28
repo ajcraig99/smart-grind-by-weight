@@ -50,7 +50,7 @@ void set_label_text_float(lv_obj_t* label, float value, const char* unit) {
     char buf[24];
     
     if (unit) {
-        snprintf(buf, sizeof(buf), "%.2fg %s", value, unit);
+        snprintf(buf, sizeof(buf), "%.2f %s", value, unit);
     } else {
         snprintf(buf, sizeof(buf), "%.2f", value);
     }
@@ -94,7 +94,9 @@ lv_obj_t* create_dual_button_row(lv_obj_t* parent, lv_obj_t** left_button, lv_ob
     lv_obj_set_layout(row_container, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(row_container, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(row_container, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(row_container, 10, 0);
+    // Wide enough that a tap aimed at one button (often CANCEL beside a
+    // destructive confirm) does not land on the other.
+    lv_obj_set_style_pad_gap(row_container, 24, 0);
 
     *left_button = create_button(row_container, left_name, left_color, -1, height, font);
     lv_obj_set_flex_grow(*left_button, 1);

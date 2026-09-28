@@ -62,7 +62,7 @@ The latency value is automatically calibrated via **Auto-Tune Motor Response** (
 - Hardware-adaptive pulse control via runtime motor latency
 - Conservative approach: undershoots target, then corrects with bounded pulses
 - Mechanical instability detection with hysteresis and persistence
-- 60-second grind timeout protection with user acknowledgment requirement
+- 60-second grind timeout protection; the error screen stays until acknowledged or for 60 seconds
 - Motor dead-man: a continuous run is cut off if the control loop stops
   checking in for 1 second, independently of the grind logic
 

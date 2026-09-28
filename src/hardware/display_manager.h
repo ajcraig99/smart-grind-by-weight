@@ -50,6 +50,7 @@ private:
     bool panel_powered_on;
     bool consume_wake_touch_until_release;
     uint32_t wake_touch_guard_started_ms;
+    bool touch_wakes_only = false;
 
     portMUX_TYPE metrics_mux = portMUX_INITIALIZER_UNLOCKED;
     DisplayPerformanceSnapshot metrics_window;
@@ -63,6 +64,9 @@ public:
     void set_brightness(float brightness);
     void set_panel_power(bool powered_on);
     bool is_panel_powered_on() const { return panel_powered_on; }
+    // While dimmed, the next press only wakes the display and never reaches
+    // the control under the finger.
+    void set_touch_wakes_only(bool wakes_only) { touch_wakes_only = wakes_only; }
     bool draw_rgb565_file(const char* path, uint16_t width, uint16_t height);
     
     uint32_t get_width() const { return screen_width; }

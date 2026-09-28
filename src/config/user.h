@@ -35,6 +35,12 @@
 #define USER_FINE_WEIGHT_ADJUSTMENT_G 0.1f                                     // Small weight increment for fine tuning
 #define USER_FINE_TIME_ADJUSTMENT_S 0.1f                                       // Fine adjustment step for time editing
 
+//------------------------------------------------------------------------------
+// TOUCH SAFETY
+//------------------------------------------------------------------------------
+#define USER_BUTTON_REARM_MS 700                                               // Taps ignored this long after a grind-screen button changes meaning (except STOP)
+#define USER_BUTTON_DRAG_CANCEL_PX 30                                          // A press that travels further than this is a swipe, not a tap
+
 // USER_JOG parameters moved to system.h to be near SYS_JOG parameters
 
 //------------------------------------------------------------------------------

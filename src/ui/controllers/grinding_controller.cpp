@@ -1,6 +1,7 @@
 #include "grinding_controller.h"
 
 #include <Arduino.h>
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 
@@ -56,48 +57,64 @@ void GrindingUIController::register_events() {
         return;
     }
 
+    auto record_press = [](lv_event_t* e) {
+        if (lv_event_get_code(e) != LV_EVENT_PRESSED) {
+            return;
+        }
+        if (auto* controller = static_cast<GrindingUIController*>(lv_event_get_user_data(e))) {
+            controller->record_press(e);
+        }
+    };
+
     if (grind_button_) {
+        lv_obj_add_event_cb(grind_button_, record_press, LV_EVENT_PRESSED, this);
         lv_obj_add_event_cb(grind_button_, [](lv_event_t* e) {
             if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
                 return;
             }
             auto* controller = static_cast<GrindingUIController*>(lv_event_get_user_data(e));
-            if (controller) {
+            // STOP always acts at once; any other meaning needs a deliberate tap.
+            if (controller &&
+                (controller->grind_button_stops() ||
+                 controller->is_deliberate_tap(e, controller->grind_button_changed_ms_))) {
                 controller->handle_grind_button();
             }
         }, LV_EVENT_CLICKED, this);
     }
 
     if (pulse_button_) {
+        lv_obj_add_event_cb(pulse_button_, record_press, LV_EVENT_PRESSED, this);
         lv_obj_add_event_cb(pulse_button_, [](lv_event_t* e) {
             if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
                 return;
             }
             auto* controller = static_cast<GrindingUIController*>(lv_event_get_user_data(e));
-            if (controller) {
+            if (controller && controller->is_deliberate_tap(e, controller->pulse_button_changed_ms_)) {
                 controller->handle_pulse_button();
             }
         }, LV_EVENT_CLICKED, this);
     }
 
+    // The layout area sits directly above STOP; a press and hold switches
+    // layouts so a slightly high tap aimed at STOP does not.
     if (lv_obj_t* arc = ui_manager_->grinding_screen.get_arc_screen_obj()) {
         lv_obj_add_event_cb(arc, [](lv_event_t* e) {
-            if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
+            if (lv_event_get_code(e) == LV_EVENT_LONG_PRESSED) {
                 if (auto* controller = static_cast<GrindingUIController*>(lv_event_get_user_data(e))) {
                     controller->handle_layout_toggle();
                 }
             }
-        }, LV_EVENT_CLICKED, this);
+        }, LV_EVENT_LONG_PRESSED, this);
     }
 
     if (lv_obj_t* chart = ui_manager_->grinding_screen.get_chart_screen_obj()) {
         lv_obj_add_event_cb(chart, [](lv_event_t* e) {
-            if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
+            if (lv_event_get_code(e) == LV_EVENT_LONG_PRESSED) {
                 if (auto* controller = static_cast<GrindingUIController*>(lv_event_get_user_data(e))) {
                     controller->handle_layout_toggle();
                 }
             }
-        }, LV_EVENT_CLICKED, this);
+        }, LV_EVENT_LONG_PRESSED, this);
     }
 
     // NOTE: Purge confirm reuses existing grind_button_ (CANCEL) and pulse_button_ (CONTINUE)
@@ -155,11 +172,14 @@ void GrindingUIController::update(UIState current_state) {
 
     switch (current_state) {
         case UIState::GRIND_COMPLETE: {
+            // Keep showing the result when the cup is lifted. In time mode the
+            // reading may still rise with extra pulses, so follow it upwards.
+            float shown_weight = final_grind_weight_;
             WeightSensor* weight_sensor = ui_manager_->hardware_manager->get_weight_sensor();
-            if (weight_sensor) {
-                float current_weight = weight_sensor->get_display_weight();
-                ui_manager_->grinding_screen.update_current_weight(current_weight);
+            if (weight_sensor && ui_manager_->current_mode == GrindMode::TIME) {
+                shown_weight = std::max(shown_weight, weight_sensor->get_display_weight());
             }
+            ui_manager_->grinding_screen.update_current_weight(shown_weight);
             ui_manager_->grinding_screen.update_progress(final_grind_progress_);
             break;
         }
@@ -221,17 +241,7 @@ void GrindingUIController::handle_grind_button() {
             started = ui_manager_->grind_controller->start_grind(target_weight, target_time_ms, ui_manager_->current_mode);
         }
         if (!started) {
-            HardwareManager* hardware = ui_manager_->get_hardware_manager();
-            Grinder* grinder = hardware ? hardware->get_grinder() : nullptr;
-            if (grinder && grinder->has_safety_stop()) {
-                ui_manager_->show_confirmation(
-                    "Motor stopped", "The control loop stalled, so the\nmotor was stopped. Restart the\ngrinder to use it again.",
-                    "OK", lv_color_hex(THEME_COLOR_WARNING), nullptr, "BACK");
-            } else {
-                ui_manager_->show_confirmation(
-                    "Could not start", "Check scale and grinder.\nAn update may be active.",
-                    "OK", lv_color_hex(THEME_COLOR_WARNING), nullptr, "BACK");
-            }
+            show_start_failure();
         }
         LOG_BLE("[%lums GRIND_START] start_grind() returned\n", millis());
     } else if (ui_manager_->state_machine->is_state(UIState::GRINDING)) {
@@ -243,6 +253,30 @@ void GrindingUIController::handle_grind_button() {
         if (ui_manager_->grind_controller) {
             ui_manager_->grind_controller->return_to_idle();
         }
+    }
+}
+
+// Explains a refused start using what the UI can see; the controller only
+// reports success or failure.
+void GrindingUIController::show_start_failure() {
+    HardwareManager* hardware = ui_manager_->get_hardware_manager();
+    Grinder* grinder = hardware ? hardware->get_grinder() : nullptr;
+    WeightSensor* sensor = hardware ? hardware->get_weight_sensor() : nullptr;
+    const bool weight_grind = ui_manager_->current_tab != ReadyScreen::MANUAL_TAB_INDEX &&
+                              ui_manager_->current_mode == GrindMode::WEIGHT;
+    if (grinder && grinder->has_safety_stop()) {
+        ui_manager_->show_confirmation(
+            "Motor stopped", "The control loop stalled, so the\nmotor was stopped. Restart the\ngrinder to use it again.",
+            "OK", lv_color_hex(THEME_COLOR_WARNING), nullptr, "BACK");
+    } else if (weight_grind && sensor &&
+               (sensor->has_hardware_fault() || !sensor->has_recent_sample())) {
+        ui_manager_->show_confirmation(
+            "Scale not ready", "No reading from the load cell.\nCheck its wiring, then see\nDiagnostics in the menu.",
+            "OK", lv_color_hex(THEME_COLOR_WARNING), nullptr, "BACK");
+    } else {
+        ui_manager_->show_confirmation(
+            "Could not start", "Check scale and grinder.\nAn update may be active.",
+            "OK", lv_color_hex(THEME_COLOR_WARNING), nullptr, "BACK");
     }
 }
 
@@ -345,27 +379,27 @@ void GrindingUIController::update_grind_button_icon() {
 
     if (ui_manager_->state_machine->is_state(UIState::PURGE_CONFIRM)) {
         // During purge confirm, show STOP icon (user can cancel the grind)
-        lv_img_set_src(grind_icon_, LV_SYMBOL_STOP);
+        set_grind_icon(LV_SYMBOL_STOP);
         lv_obj_set_style_bg_color(grind_button_, lv_color_hex(THEME_COLOR_ERROR), 0);
     } else if (ui_manager_->state_machine->is_state(UIState::GRINDING)) {
-        lv_img_set_src(grind_icon_, LV_SYMBOL_STOP);
+        set_grind_icon(LV_SYMBOL_STOP);
         lv_obj_set_style_bg_color(grind_button_, lv_color_hex(THEME_COLOR_PRIMARY), 0);
     } else if (ui_manager_->state_machine->is_state(UIState::GRIND_COMPLETE)) {
-        lv_img_set_src(grind_icon_, LV_SYMBOL_OK);
+        set_grind_icon(LV_SYMBOL_OK);
         lv_obj_set_style_bg_color(grind_button_, lv_color_hex(THEME_COLOR_SUCCESS), 0);
     } else if (ui_manager_->state_machine->is_state(UIState::GRIND_TIMEOUT)) {
-        lv_img_set_src(grind_icon_, LV_SYMBOL_CLOSE);
+        set_grind_icon(LV_SYMBOL_CLOSE);
         lv_obj_set_style_bg_color(grind_button_, lv_color_hex(THEME_COLOR_WARNING), 0);
     } else if (ui_manager_->state_machine->is_state(UIState::READY) &&
                ui_manager_->current_tab == ReadyScreen::MENU_TAB_INDEX) {
-        lv_img_set_src(grind_icon_, LV_SYMBOL_SETTINGS);
+        set_grind_icon(LV_SYMBOL_SETTINGS);
         lv_obj_set_style_bg_color(grind_button_, lv_color_hex(THEME_COLOR_NEUTRAL), 0);
     } else if (ui_manager_->state_machine->is_state(UIState::READY) &&
                ui_manager_->current_tab == ReadyScreen::WIFI_TAB_INDEX) {
-        lv_img_set_src(grind_icon_, LV_SYMBOL_WIFI);
+        set_grind_icon(LV_SYMBOL_WIFI);
         lv_obj_set_style_bg_color(grind_button_, lv_color_hex(THEME_COLOR_NEUTRAL), 0);
     } else {
-        lv_img_set_src(grind_icon_, LV_SYMBOL_PLAY);
+        set_grind_icon(LV_SYMBOL_PLAY);
         lv_obj_set_style_bg_color(grind_button_,
                                   ui_manager_->current_mode == GrindMode::TIME
                                       ? lv_color_hex(THEME_COLOR_ACCENT)
@@ -397,31 +431,35 @@ void GrindingUIController::update_button_layout() {
         lv_obj_align(grind_button_, LV_ALIGN_BOTTOM_MID, -60, -10);
         if (pulse_button_) {
             lv_obj_align(pulse_button_, LV_ALIGN_BOTTOM_MID, 60, -10);
+            if (lv_obj_has_flag(pulse_button_, LV_OBJ_FLAG_HIDDEN)) {
+                // Appearing under a finger counts as a change of meaning.
+                pulse_button_changed_ms_ = millis();
+            }
             lv_obj_clear_flag(pulse_button_, LV_OBJ_FLAG_HIDDEN);
 
             if (in_purge_confirm) {
-                lv_img_set_src(pulse_icon_, LV_SYMBOL_OK);
+                set_pulse_icon(LV_SYMBOL_OK);
                 lv_obj_set_style_bg_color(pulse_button_, lv_color_hex(THEME_COLOR_SUCCESS), 0);
                 lv_obj_clear_state(pulse_button_, LV_STATE_DISABLED);
                 lv_obj_set_style_bg_opa(pulse_button_, LV_OPA_COVER, 0);
             } else if (in_time_grinding) {
                 // Pause / Resume toggle
                 if (is_time_grind_paused) {
-                    lv_img_set_src(pulse_icon_, LV_SYMBOL_PLAY);
+                    set_pulse_icon(LV_SYMBOL_PLAY);
                     lv_obj_set_style_bg_color(pulse_button_, lv_color_hex(THEME_COLOR_SUCCESS), 0);
                 } else {
-                    lv_img_set_src(pulse_icon_, LV_SYMBOL_PAUSE);
+                    set_pulse_icon(LV_SYMBOL_PAUSE);
                     lv_obj_set_style_bg_color(pulse_button_, lv_color_hex(THEME_COLOR_ACCENT), 0);
                 }
                 lv_obj_clear_state(pulse_button_, LV_STATE_DISABLED);
                 lv_obj_set_style_bg_opa(pulse_button_, LV_OPA_COVER, 0);
             } else if (ui_manager_->grind_controller && ui_manager_->grind_controller->can_pulse()) {
-                lv_img_set_src(pulse_icon_, LV_SYMBOL_PLUS);
+                set_pulse_icon(LV_SYMBOL_PLUS);
                 lv_obj_set_style_bg_color(pulse_button_, lv_color_hex(THEME_COLOR_ACCENT), 0);
                 lv_obj_clear_state(pulse_button_, LV_STATE_DISABLED);
                 lv_obj_set_style_bg_opa(pulse_button_, LV_OPA_COVER, 0);
             } else {
-                lv_img_set_src(pulse_icon_, LV_SYMBOL_PLUS);
+                set_pulse_icon(LV_SYMBOL_PLUS);
                 lv_obj_set_style_bg_color(pulse_button_, lv_color_hex(THEME_COLOR_ACCENT), 0);
                 lv_obj_add_state(pulse_button_, LV_STATE_DISABLED);
                 lv_obj_set_style_bg_opa(pulse_button_, LV_OPA_50, LV_STATE_DISABLED);
@@ -659,6 +697,9 @@ void GrindingUIController::dispatch_event(const GrindEventData& event_data) {
 }
 
 void GrindingUIController::enter_ready_state() {
+    // A layout chosen during the grind is saved now that the motor is off.
+    ui_manager_->grinding_screen.save_layout_if_changed();
+
     if (!grind_button_) {
         return;
     }
@@ -729,6 +770,53 @@ void GrindingUIController::enter_menu_state() {
     if (pulse_button_) {
         lv_obj_add_flag(pulse_button_, LV_OBJ_FLAG_HIDDEN);
     }
+}
+
+void GrindingUIController::record_press(lv_event_t* e) {
+    if (lv_indev_t* indev = lv_event_get_indev(e)) {
+        lv_indev_get_point(indev, &press_point_);
+    }
+}
+
+// A tap counts only if the finger stayed near where it went down (a swipe
+// that starts on a button is not a tap) and the button has not just changed
+// meaning under the finger (the second tap of a double tap).
+bool GrindingUIController::is_deliberate_tap(lv_event_t* e, uint32_t changed_ms) const {
+    if (millis() - changed_ms < USER_BUTTON_REARM_MS) {
+        return false;
+    }
+    lv_indev_t* indev = lv_event_get_indev(e);
+    if (!indev) {
+        return true;
+    }
+    lv_point_t point;
+    lv_indev_get_point(indev, &point);
+    return LV_ABS(point.x - press_point_.x) <= USER_BUTTON_DRAG_CANCEL_PX &&
+           LV_ABS(point.y - press_point_.y) <= USER_BUTTON_DRAG_CANCEL_PX;
+}
+
+bool GrindingUIController::grind_button_stops() const {
+    return ui_manager_ && ui_manager_->state_machine &&
+           (ui_manager_->state_machine->is_state(UIState::GRINDING) ||
+            ui_manager_->state_machine->is_state(UIState::PURGE_CONFIRM));
+}
+
+void GrindingUIController::set_grind_icon(const char* symbol) {
+    if (grind_symbol_ && std::strcmp(grind_symbol_, symbol) == 0) {
+        return;
+    }
+    grind_symbol_ = symbol;
+    grind_button_changed_ms_ = millis();
+    lv_img_set_src(grind_icon_, symbol);
+}
+
+void GrindingUIController::set_pulse_icon(const char* symbol) {
+    if (pulse_symbol_ && std::strcmp(pulse_symbol_, symbol) == 0) {
+        return;
+    }
+    pulse_symbol_ = symbol;
+    pulse_button_changed_ms_ = millis();
+    lv_img_set_src(pulse_icon_, symbol);
 }
 
 void GrindingUIController::start_grind_complete_timer() {

@@ -14,11 +14,15 @@ private:
     GrindingScreenChart chart_screen;
     Preferences* preferences;
     GrindMode current_mode;
+    bool layout_save_pending = false;
     
 public:
     GrindingScreen();
     void init(Preferences* prefs);
     void set_layout(GrindScreenLayout layout);
+    // Layout changes are saved here, not while grinding: an NVS write can
+    // erase flash, which stalls both cores.
+    void save_layout_if_changed();
     GrindScreenLayout get_layout() const { return current_layout; }
     
     // IGrindingScreen implementation - delegates to active screen

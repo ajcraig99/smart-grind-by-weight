@@ -49,6 +49,7 @@ void GrindingScreenArc::create() {
     weight_label = lv_label_create(progress_arc);
     lv_label_set_text(weight_label, "0.0g");
     lv_obj_set_style_text_font(weight_label, &lv_font_montserrat_56, 0);
+    weight_font = &lv_font_montserrat_56;
     lv_obj_set_style_text_color(weight_label, lv_color_hex(THEME_COLOR_TEXT_PRIMARY), 0);
     lv_obj_center(weight_label);
     std::snprintf(displayed_weight_text, sizeof(displayed_weight_text), "0.0g");
@@ -100,17 +101,32 @@ void GrindingScreenArc::update_target_time(float seconds) {
 }
 
 void GrindingScreenArc::update_current_weight(float weight) {
+    // Round-to-zero readings would otherwise show "-0.0g".
+    if (weight > -0.05f && weight < 0.05f) weight = 0.0f;
     char weight_text[16];
     snprintf(weight_text, sizeof(weight_text), SYS_WEIGHT_DISPLAY_FORMAT, weight);
     if (std::strcmp(displayed_weight_text, weight_text) == 0) {
         return;
     }
     std::snprintf(displayed_weight_text, sizeof(displayed_weight_text), "%s", weight_text);
+    fit_weight_font(weight_text);
     lv_label_set_text(weight_label, weight_text);
+}
+
+// The ring leaves about 176 px for the reading, and "100.0g" at 56 px is
+// wider than that; use the title font for longer readings. (It is already
+// linked; a 48 px face would add about 100 kB of flash for this case.)
+void GrindingScreenArc::fit_weight_font(const char* text) {
+    const lv_font_t* font = std::strlen(text) >= 6 ? &lv_font_montserrat_36
+                                                   : &lv_font_montserrat_56;
+    if (font == weight_font) return;
+    weight_font = font;
+    lv_obj_set_style_text_font(weight_label, font, 0);
 }
 
 void GrindingScreenArc::update_tare_display() {
     std::snprintf(displayed_weight_text, sizeof(displayed_weight_text), "TARE");
+    fit_weight_font("TARE");
     lv_label_set_text(weight_label, "TARE");
     displayed_progress = 0;
     lv_arc_set_value(progress_arc, 0);  // Reset arc to 0 during taring
@@ -127,6 +143,7 @@ void GrindingScreenArc::update_progress(int percent) {
         float elapsed_s = (percent / 100.0f) * target_time_seconds_;
         char elapsed_text[16];
         snprintf(elapsed_text, sizeof(elapsed_text), "%.1fs", elapsed_s);
+        fit_weight_font(elapsed_text);
         lv_label_set_text(weight_label, elapsed_text);
     }
 }

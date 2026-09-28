@@ -15,6 +15,9 @@ private:
     char displayed_weight_text[16];
     int displayed_progress;
     float target_time_seconds_;
+    const lv_font_t* weight_font = nullptr;
+
+    void fit_weight_font(const char* text);
 
 public:
     void create() override;

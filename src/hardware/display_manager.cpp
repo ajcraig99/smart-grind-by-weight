@@ -44,6 +44,7 @@ void DisplayManager::init() {
     g_display_manager = this;
     panel_powered_on = true;
     consume_wake_touch_until_release = false;
+    touch_wakes_only = false;
     wake_touch_guard_started_ms = 0;
     
 #if HW_DISPLAY_VARIANT_V2
@@ -190,6 +191,14 @@ void DisplayManager::update() {
 
     const uint32_t started_us = micros();
     touch_driver.update();
+    // Decide when the press is detected: the screen timeout may undim before
+    // LVGL next reads the touch.
+    if (touch_wakes_only && touch_driver.get_touch_data().just_pressed) {
+        touch_driver.consume_press_event();
+        consume_wake_touch_until_release = true;
+        wake_touch_guard_started_ms = millis();
+        touch_wakes_only = false;
+    }
     lv_timer_handler();
 
     const uint32_t now_ms = millis();

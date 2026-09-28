@@ -16,6 +16,8 @@ private:
     bool disabled = false;
     bool press_event_pending = false;
     
+    uint8_t unusable_reads_ = 0;  // Consecutive failed or implausible reads
+
     // Touch activity tracking
     uint32_t last_touch_time = 0;
 

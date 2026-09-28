@@ -125,7 +125,7 @@ because a value that is too short can make finishing pulses unreliable.
 
 ### Diagnostics System
 
-The system includes comprehensive load cell health monitoring accessible via **Menu → Diagnostics**. A warning icon (⚠) appears in the top-right corner when diagnostics are active - tap it to navigate directly to the diagnostics page.
+The system includes comprehensive load cell health monitoring accessible via **Menu → Diagnostics**. A warning icon (⚠) appears in the top-right corner when a diagnostic is active; open **Menu → Diagnostics** to see which one.
 
 **Diagnostic Types:**
 1. **Load Cell Not Calibrated** - Appears until calibration is completed via Menu → Calibrate (Tools section)

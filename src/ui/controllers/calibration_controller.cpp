@@ -159,7 +159,7 @@ void CalibrationUIController::handle_cancel() {
 void CalibrationUIController::handle_plus(lv_event_code_t code) {
     if (!ui_manager_) return;
 
-    if (code == LV_EVENT_CLICKED) {
+    if (code == LV_EVENT_SHORT_CLICKED) {  // CLICKED also follows a long-press jog
         float cal_weight = ui_manager_->calibration_screen.get_calibration_weight();
         cal_weight = ui_manager_->get_profile_controller()->clamp_weight(cal_weight + USER_FINE_WEIGHT_ADJUSTMENT_G);
         ui_manager_->calibration_screen.update_calibration_weight(cal_weight);
@@ -177,7 +177,7 @@ void CalibrationUIController::handle_plus(lv_event_code_t code) {
 void CalibrationUIController::handle_minus(lv_event_code_t code) {
     if (!ui_manager_) return;
 
-    if (code == LV_EVENT_CLICKED) {
+    if (code == LV_EVENT_SHORT_CLICKED) {  // CLICKED also follows a long-press jog
         float cal_weight = ui_manager_->calibration_screen.get_calibration_weight();
         cal_weight = ui_manager_->get_profile_controller()->clamp_weight(cal_weight - USER_FINE_WEIGHT_ADJUSTMENT_G);
         ui_manager_->calibration_screen.update_calibration_weight(cal_weight);

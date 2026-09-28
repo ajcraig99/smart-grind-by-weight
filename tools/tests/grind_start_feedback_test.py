@@ -36,7 +36,16 @@ struct Profile {
     float get_current_time() { return 5; }
 };
 struct Grinder { bool latched=false; bool has_safety_stop() const { return latched; } };
-struct HardwareManager { Grinder grinder; Grinder* get_grinder() { return &grinder; } };
+struct WeightSensor {
+    bool fault=false, fresh=true;
+    bool has_hardware_fault() const { return fault; }
+    bool has_recent_sample() const { return fresh; }
+};
+struct HardwareManager {
+    Grinder grinder; WeightSensor sensor;
+    Grinder* get_grinder() { return &grinder; }
+    WeightSensor* get_weight_sensor() { return &sensor; }
+};
 struct UIManager {
     State* state_machine;
     Controller* grind_controller;
@@ -56,21 +65,30 @@ struct GrindingUIController {
     UIManager* ui_manager_;
     char error_message_[32]{}; float error_grind_weight_=0; int error_grind_progress_=0;
     void handle_grind_button();
+    void show_start_failure();
 };
 ''' + source[start:end] + r'''
 int main() {
     for (bool accepted : {false, true}) {
         for (int tab : {0, 1}) {
             for (bool latched : {false, true}) {
-                State state; Controller control; Profile profile; HardwareManager hardware;
-                control.accept=accepted; hardware.grinder.latched=latched;
-                UIManager ui{&state, &control, &profile, &hardware}; ui.current_tab=tab;
-                GrindingUIController handler{&ui}; handler.handle_grind_button();
-                assert(control.calls==1 && control.stops==0);
-                assert(ui.notices==(accepted ? 0 : 1));
-                if (!accepted) {
-                    // A latched motor safety stop explains itself instead of the generic notice.
-                    assert(std::strcmp(ui.last_title, latched ? "Motor stopped" : "Could not start")==0);
+                for (int scale : {0, 1, 2}) {  // healthy, hardware fault, no fresh sample
+                    State state; Controller control; Profile profile; HardwareManager hardware;
+                    control.accept=accepted; hardware.grinder.latched=latched;
+                    hardware.sensor.fault=scale==1; hardware.sensor.fresh=scale!=2;
+                    UIManager ui{&state, &control, &profile, &hardware}; ui.current_tab=tab;
+                    GrindingUIController handler{&ui}; handler.handle_grind_button();
+                    assert(control.calls==1 && control.stops==0);
+                    assert(ui.notices==(accepted ? 0 : 1));
+                    if (!accepted) {
+                        // A refused start explains itself: a latched motor safety stop
+                        // first, then a scale that a weight grind needs.
+                        const bool weight_grind = tab != ReadyScreen::MANUAL_TAB_INDEX;
+                        const char* expected = latched ? "Motor stopped"
+                                             : weight_grind && scale != 0 ? "Scale not ready"
+                                                                          : "Could not start";
+                        assert(std::strcmp(ui.last_title, expected)==0);
+                    }
                 }
             }
         }

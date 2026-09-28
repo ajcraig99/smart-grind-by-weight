@@ -12,7 +12,9 @@ void GrindingScreen::init(Preferences* prefs) {
     // Load saved layout preference using the provided preferences instance
     if (preferences && preferences->isKey("grind_layout")) {
         int saved_layout = preferences->getInt("grind_layout", (int)GrindScreenLayout::MINIMAL_ARC);
-        current_layout = (GrindScreenLayout)saved_layout;
+        current_layout = saved_layout == (int)GrindScreenLayout::NERDY_CHART
+            ? GrindScreenLayout::NERDY_CHART
+            : GrindScreenLayout::MINIMAL_ARC;
     } else {
         current_layout = GrindScreenLayout::MINIMAL_ARC;
     }
@@ -43,11 +45,14 @@ void GrindingScreen::set_layout(GrindScreenLayout layout) {
     if (was_visible) {
         active_screen->show();
     }
-    
-    // Save preference using the provided preferences instance
-    if (preferences) {
-        preferences->putInt("grind_layout", (int)layout);
-    }
+
+    layout_save_pending = true;
+}
+
+void GrindingScreen::save_layout_if_changed() {
+    if (!layout_save_pending || !preferences) return;
+    preferences->putInt("grind_layout", (int)current_layout);
+    layout_save_pending = false;
 }
 
 // Delegate all calls to active screen
