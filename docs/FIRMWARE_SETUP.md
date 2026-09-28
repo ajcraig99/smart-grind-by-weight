@@ -88,6 +88,12 @@ matching image with:
 python3 tools/grinder.py upload smart-grind-by-weight-vX.X.X.bin
 ```
 
+Wireless updates always need **Allow Update** on the touchscreen. If an update
+leaves the touchscreen unusable, reinstall over USB with
+`python3 tools/grinder.py flash-usb --hardware v1 --port <port>` (or
+`--hardware v2`), which keeps settings and history; see
+[Initial USB Flashing](DEVELOPMENT.md#initial-usb-flashing).
+
 **Manual firmware download:** [Community releases page](https://github.com/Clinteastman/smart-grind-by-weight/releases)
 
 **Build from source:** See [DEVELOPMENT.md](DEVELOPMENT.md)

@@ -71,6 +71,9 @@ const BLE_OTA_READY = 0x01;
 const BLE_OTA_RECEIVING = 0x02;
 const BLE_OTA_SUCCESS = 0x03;
 const BLE_OTA_ERROR = 0x04;
+const BLE_OTA_VALIDATION_ERROR = 0x05;
+const BLE_OTA_NOT_AUTHORIZED = 0x06;
+const BLE_OTA_FAILURE_STATUSES = [BLE_OTA_ERROR, BLE_OTA_VALIDATION_ERROR, BLE_OTA_NOT_AUTHORIZED];
 
 const DEVICE_NAME = 'GrindByWeight';
 const CHUNK_SIZE = 512; // Browser BLE limit - cannot exceed 512 bytes per write
@@ -282,10 +285,24 @@ function handleStatusUpdate(event) {
                 updateProgress(100);
                 break;
             case BLE_OTA_ERROR:
-                updateStatus('Firmware update failed', 'error');
+            case BLE_OTA_VALIDATION_ERROR:
+            case BLE_OTA_NOT_AUTHORIZED:
+                updateStatus(otaFailureMessage(currentOtaStatus), 'error');
                 break;
         }
     }
+}
+
+function otaFailureMessage(status) {
+    if (status === BLE_OTA_NOT_AUTHORIZED) {
+        return 'The grinder refused the update. On the grinder open Menu > Firmware Update ' +
+               'and tap Allow Update, then try again within 2 minutes.';
+    }
+    if (status === BLE_OTA_VALIDATION_ERROR) {
+        return 'The grinder rejected the firmware image.';
+    }
+    return 'Firmware update failed. Check that the grinder is idle and not transferring data; ' +
+           'after an update, wait 30 seconds before starting another.';
 }
 
 // Wait for specific OTA status
@@ -296,6 +313,14 @@ async function waitForOtaStatus(expectedStatus, timeoutMs = 30000) {
         const checkStatus = () => {
             if (currentOtaStatus === expectedStatus) {
                 resolve(true);
+                return;
+            }
+
+            // A refusal or error ends the wait at once, with the reason.
+            if (BLE_OTA_FAILURE_STATUSES.includes(currentOtaStatus)) {
+                const error = new Error(otaFailureMessage(currentOtaStatus));
+                error.deviceStatus = currentOtaStatus;
+                reject(error);
                 return;
             }
             
@@ -420,6 +445,7 @@ async function flashFirmware() {
             startView.setUint8(offset, 0); // no firmware version
         }
         
+        currentOtaStatus = BLE_OTA_IDLE; // Ignore a failure left over from an earlier attempt
         await controlChar.writeValue(startData);
         updateStatus('Sent start command, waiting for device...', 'info');
         
@@ -458,6 +484,7 @@ async function flashFirmware() {
                 await waitForOtaStatus(BLE_OTA_SUCCESS, 15000);
                 updateStatus('Firmware update completed successfully!', 'success');
             } catch (statusError) {
+                if (statusError.deviceStatus !== undefined) throw statusError; // The patch failed.
                 // Timeout or disconnect during final phase is normal - device is rebooting
                 updateStatus('Firmware update completed - device rebooting', 'success');
             }

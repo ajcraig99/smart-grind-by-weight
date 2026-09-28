@@ -134,8 +134,8 @@ void setup() {
     bluetooth_manager.init(hardware_manager.get_preferences());
     
     // Check for OTA failure to determine initial state
-    String failed_ota_build = bluetooth_manager.check_ota_failure_after_boot();
-    bool ota_failed = !failed_ota_build.isEmpty();
+    String failed_ota_build;
+    const bool ota_failed = bluetooth_manager.check_ota_failure_after_boot(failed_ota_build);
 
     // Check calibration status to determine initial screen
     bool is_calibrated = hardware_manager.get_weight_sensor()->is_calibrated();
@@ -241,7 +241,10 @@ void loop() {
         pending_uptime_minutes = 0;
     }
     
-    FirmwareValidation::update(current_time, task_manager.are_tasks_healthy());
+    if (FirmwareValidation::update(current_time, task_manager.are_tasks_healthy())) {
+        // The running image is kept, so the check after the update is done.
+        bluetooth_manager.forget_update_check();
+    }
 
     // Check OTA state and suspend hardware tasks if needed
     static bool hardware_suspended = false;

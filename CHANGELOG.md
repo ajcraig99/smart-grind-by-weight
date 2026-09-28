@@ -34,7 +34,17 @@ line. Earlier release history remains available in the original project's
   start during a Bluetooth or screensaver transfer.
 - Run the web server task on core 1 at priority 3 instead of any core at
   priority 10, so HTTP handlers cannot preempt grind control or weight
-  sampling. Discard oversized request bodies without buffering them.
+  sampling. Refuse requests that fail the name or origin check, uploads that
+  are not multipart forms and oversized bodies as soon as their headers
+  arrive, discarding the body unread; a page on another site could otherwise
+  make the grinder buffer megabytes before refusing it.
+- On the setup network, only page reads and captive-portal probes are
+  answered for any host name; the API needs the setup address, and a "null"
+  origin is accepted only by the setup form and network scan.
+- A Wi-Fi update refused because the grinder is busy or offline no longer
+  uses up the permission from **Allow Update**, and an upload or install sent
+  before the update is ready no longer uses up its token.
+- The screensaver upload accepts one image per request.
 - Send WebSocket acknowledgements after releasing the grind controller lock.
 
 ### Motor safety
@@ -139,9 +149,22 @@ line. Earlier release history remains available in the original project's
 
 ### Firmware update robustness
 
-- Confirm a newly installed image only after 20 seconds of healthy running. A
-  crash, watchdog reset or power loss before then rolls back to the previous
-  firmware.
+- Confirm a newly installed image only after 20 seconds of healthy running,
+  with every task still looping rather than merely created. A crash, watchdog
+  reset or power loss before then rolls back to the previous firmware. A
+  failed confirmation is retried, and a grinder whose load cell does not
+  answer still confirms.
+- Refuse a new Wi-Fi or Bluetooth update until the image installed by the last
+  one is confirmed; it would overwrite the previous firmware, and the
+  confirmation would then apply to the untested image.
+- Report a rolled-back update with "Update Failed" also after Wi-Fi updates,
+  and when the new image fails before it is confirmed.
+- Keep the update screen while a prepared Wi-Fi update waits for its upload,
+  instead of briefly showing "Update Failed".
+- A Bluetooth update is no longer aborted as stalled when a chunk arrives
+  while the stall check runs.
+- The web Bluetooth flasher explains a refused update (**Allow Update**) and
+  stops waiting as soon as the grinder reports an error.
 - Abort a Bluetooth update that receives no data for 30 seconds, restoring the
   motor tasks.
 - Leave the update screen with an "Update Failed" notice when a Wi-Fi or

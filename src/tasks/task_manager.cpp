@@ -1,4 +1,5 @@
 #include "task_manager.h"
+#include "task_heartbeat.h"
 #include "../config/build_info.h"
 #include "weight_sampling_task.h"
 #include "grind_control_task.h"
@@ -464,6 +465,7 @@ void TaskManager::ui_render_task_impl() {
         
         uint32_t end_time = millis();
         record_task_timing(2, start_time, end_time); // Task index 2 for UI render
+        task_heartbeats().beat(HeartbeatTask::UI_RENDER, end_time);
         
         // Use vTaskDelayUntil for predictable timing
         vTaskDelayUntil(&xLastWakeTime, xFrequency);
@@ -487,6 +489,7 @@ void TaskManager::bluetooth_task_impl() {
         
         uint32_t end_time = millis();
         record_task_timing(4, start_time, end_time); // Task index 4 for bluetooth
+        task_heartbeats().beat(HeartbeatTask::BLUETOOTH, end_time);
         
         // Use vTaskDelayUntil for predictable timing
         vTaskDelayUntil(&xLastWakeTime, xFrequency);
@@ -499,7 +502,7 @@ void TaskManager::file_io_task_impl() {
 }
 
 void TaskManager::record_task_timing(int task_index, uint32_t start_time, uint32_t end_time) {
-    if (task_index < 0 || task_index >= 6) return;
+    if (task_index < 0 || task_index >= 5) return;
     
     TaskMetrics& metrics = task_metrics[task_index];
     uint32_t cycle_duration = end_time - start_time;
@@ -542,12 +545,22 @@ void TaskManager::print_task_heartbeat(int task_index, const char* task_name) co
 }
 
 bool TaskManager::are_tasks_healthy() const {
-    return tasks_initialized && 
-           task_handles.weight_sampling_task && 
-           task_handles.grind_control_task &&
-           task_handles.ui_render_task &&
-           task_handles.bluetooth_task &&
-           task_handles.file_io_task;
+    if (!tasks_initialized || ota_suspended) return false;
+    const uint32_t now = millis();
+    const auto looping = [now](TaskHandle_t handle, HeartbeatTask task) {
+        return handle && task_heartbeats().recent(task, now, SYS_TASK_HEALTH_MAX_SILENCE_MS);
+    };
+    // The sampling task ends by design when the HX711 does not respond; the
+    // rest of the firmware still works (time mode, menus, updates).
+    const WeightSensor* sensor = hardware_manager ? hardware_manager->get_weight_sensor() : nullptr;
+    const bool sampling_ended_on_fault =
+        !task_handles.weight_sampling_task && sensor && sensor->has_hardware_fault();
+    return (looping(task_handles.weight_sampling_task, HeartbeatTask::WEIGHT_SAMPLING) ||
+            sampling_ended_on_fault) &&
+           looping(task_handles.grind_control_task, HeartbeatTask::GRIND_CONTROL) &&
+           looping(task_handles.ui_render_task, HeartbeatTask::UI_RENDER) &&
+           looping(task_handles.bluetooth_task, HeartbeatTask::BLUETOOTH) &&
+           looping(task_handles.file_io_task, HeartbeatTask::FILE_IO);
 }
 
 void TaskManager::print_task_status() const {

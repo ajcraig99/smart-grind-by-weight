@@ -41,15 +41,19 @@ local API assumes the home network is not fully trusted. Three layers apply.
   IP address.
 - An `Origin` header, when present, must be `http://` plus that same host. This
   stops cross-site form posts and WebSocket handshakes. `Origin: null` is
-  tolerated only on the setup network.
+  tolerated only for the setup form and network scan (`/api/v1/setup/*`) on
+  the setup network.
 - Clients that send no `Origin` (Home Assistant, scripts) are admitted.
-- Captive-portal reads on the setup network may use any host name so phones
-  open the setup page; setup writes must address the setup AP itself, and the
-  setup page is always served from the AP address.
+- Page reads and captive-portal probes on the setup network may use any host
+  name so phones open the setup page; they are redirected to the setup address.
+  API routes, WebSocket handshakes and writes must address the setup AP itself.
 - Upload callbacks run before middleware, so the firmware and screensaver
   upload routes admit the request when the first chunk arrives.
-- Request bodies above a per-route limit are discarded unparsed with `413`
-  (forms 2 KiB, screensaver image plus 4 KiB, firmware slot plus 8 KiB).
+- A request that will be refused is claimed as soon as its headers end, so its
+  body is discarded unparsed: a body above the route's limit (`413`; forms
+  2 KiB, screensaver image plus 4 KiB, firmware slot plus 8 KiB), a request
+  that fails admission (`403`), or an upload that is not a multipart form
+  (`415`).
 
 **On-device permissions.** Admission does not authenticate a client on the
 LAN. Anything that can run the motor or replace the firmware therefore needs a
@@ -57,9 +61,11 @@ decision made at the grinder:
 
 - Firmware updates over Wi-Fi or Bluetooth need Menu > Firmware Update > Allow
   Update. The permission covers one update and lapses after 2 minutes. The web
-  prepare step consumes it and returns a single-use token that the following
-  upload or release install must present, so another LAN client cannot slip its
-  own image in behind the user's.
+  prepare step consumes it once the grinder is reserved for the update, and
+  returns a single-use token that the following upload or release install must
+  present, so another LAN client cannot slip its own image in after the prepare
+  step. An upload or install sent before the update is ready does not use up
+  the token.
 - Remote grind starts (`start`, `start_manual`) are off until Menu > Wi-Fi >
   Remote start is confirmed. Even then they are accepted only while the
   grinder shows its main screen (never during calibration, menus, editing or
@@ -84,6 +90,13 @@ releases.
 - Settings, history and the diagnostic log remain readable and writable by any
   LAN client that sends no `Origin`. Settings are range-checked and cannot
   enable remote start or updates.
+- The update permission is not tied to whoever granted it: while it is open,
+  the first client on the LAN (or in Bluetooth range) to start an update uses
+  it, and `/api/v1/status` shows that it is open.
+- An update that breaks the touchscreen, but keeps every task looping for
+  20 seconds, is confirmed and cannot be replaced wirelessly, because
+  **Allow Update** cannot be tapped. Reinstall over USB (see
+  [Firmware setup](FIRMWARE_SETUP.md#command-line-fallback)).
 - The web server library buffers header lines without a size limit, so a LAN
   client can still exhaust memory with oversized headers.
 - Traffic is plain HTTP on the local network.
@@ -130,9 +143,18 @@ releases.
   suspended. When any update ends without a restart, the grinder replaces the
   update screen with an "Update Failed" notice.
 - A newly installed image is confirmed only after it has run for 20 seconds
-  with every task alive (`FirmwareValidation`). A crash, watchdog reset or
-  power loss before then makes the bootloader start the previous firmware.
-  During those 20 seconds ESP-IDF refuses to start another update.
+  with every task still looping (`FirmwareValidation`; each task loop records a
+  heartbeat, and the sampling task may end when no HX711 answers). A crash,
+  watchdog reset or power loss before then makes the bootloader start the
+  previous firmware. A failed confirmation is retried.
+- Until then the grinder refuses another Wi-Fi or Bluetooth update: it would
+  overwrite the previous, known-good image, and the confirmation applies to the
+  newest boot selection rather than the running image.
+- Before restarting, an update records what it installed: the version or build
+  number sent by the Bluetooth tools, or the start of the image's ELF SHA-256
+  for Wi-Fi updates. The record is kept until the new image is confirmed, so a
+  rollback shows "Update Failed" on the previous firmware (from this firmware
+  onwards).
 
 ## Service boundaries
 

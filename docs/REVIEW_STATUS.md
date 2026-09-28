@@ -23,6 +23,7 @@ fork at `b4a0be6`. The review's file:line references are to upstream
 | `09b9e57` | Touchscreen fixes |
 | `a13c928` | Dose limit of 40 g |
 | `e35bd56` | Touchscreen guard gaps; removal threshold after the purge re-tare |
+| `c40f5a2` | Follow-up review: purge prompt, settling, tare, motor safety stop |
 
 Verification on this branch: host tests (`tools/tests`) and V1 and V2 firmware
 builds. **Nothing here has been tested on hardware.** The bench checks at the
@@ -124,18 +125,31 @@ G and W so they do not clash with the review's.
 
 | ID | Finding | Status | Where | Notes |
 |---|---|---|---|---|
-| G1 | The purge re-tare left kept grounds out of the dose | Fixed | | Re-tares only if the cup was lifted or its reading moved more than 0.5 g |
-| G2 | Lifting the cup right after the purge ends the grind | Fixed | | Shows the purge prompt instead, when one follows |
+| G1 | The purge re-tare left kept grounds out of the dose | Fixed | `c40f5a2` | Re-tares only if the cup was lifted or its reading moved more than 0.5 g |
+| G2 | Lifting the cup right after the purge ends the grind | Fixed | `c40f5a2` | Shows the purge prompt instead, when one follows |
 | G3 | Removal threshold kept the first cup's weight after the re-tare | Fixed | `e35bd56` | Fixed -10 g threshold after a re-tare |
 | G4 | The -10 g fallback is far more sensitive than the referenced rule | Open | | Needs bench measurement of hand forces (bench check 8) |
-| G5 | Some motor-driver init failures leave the pin undriven | Fixed | | Driven LOW on every failure path |
-| G6 | A NaN purge amount or freshness setting is not rejected | Fixed | | |
-| G7 | CONTINUE with a stale scale hides the prompt | Fixed | | The prompt stays |
-| G8 | Pulse settling waits up to 6 s per correction, not 3 s | Fixed | | 3 s from the motor stop |
-| G9 | A moving scale never fails a tare | Fixed | | The notice also tells a moving scale from a silent one |
-| G10 | Motor Test and Tune Pulses ignore the safety stop | Fixed | | "Motor stopped" notice |
-| G11 | The purge prompt has no time limit | Fixed | | Ends after 5 minutes, like a paused time grind |
-| G12 | The settling rule is worded more strictly than the code | Fixed | | Comment corrected |
+| G5 | Some motor-driver init failures leave the pin undriven | Fixed | `c40f5a2` | Driven LOW on every failure path |
+| G6 | A NaN purge amount or freshness setting is not rejected | Fixed | `c40f5a2` | |
+| G7 | CONTINUE with a stale scale hides the prompt | Fixed | `c40f5a2` | The prompt stays |
+| G8 | Pulse settling waits up to 6 s per correction, not 3 s | Fixed | `c40f5a2` | 3 s from the motor stop |
+| G9 | A moving scale never fails a tare | Fixed | `c40f5a2` | The notice also tells a moving scale from a silent one |
+| G10 | Motor Test and Tune Pulses ignore the safety stop | Fixed | `c40f5a2` | "Motor stopped" notice |
+| G11 | The purge prompt has no time limit | Fixed | `c40f5a2` | Ends after 5 minutes, like a paused time grind |
+| G12 | The settling rule is worded more strictly than the code | Fixed | `c40f5a2` | Comment corrected |
+| W1 | Bodies of refused requests are buffered before the check | Fixed | | Refused as soon as the headers end (403, 413, 415), body discarded unread |
+| W2 | Updates accepted while the new image awaits confirmation | Fixed | | Web and Bluetooth refuse; confirmation waits if another image is selected to boot |
+| W3 | The health check only confirms that tasks were created | Fixed | | Per-task loop heartbeats. Touch reads are not checked: the driver notes that the controller NACKs when idle. USB recovery documented |
+| W4 | The update permission is not tied to whoever granted it | Open | | Design decision: a code shown on the grinder would have to be sent by the web page and both Bluetooth tools |
+| W5 | A prepared Wi-Fi update briefly shows "Update Failed" | Fixed | | |
+| W6 | A rollback is silent | Fixed | | Record kept until confirmation; Wi-Fi updates record the image's hash |
+| W7 | The stall check can abort a healthy Bluetooth update | Fixed | | Wrap-safe signed comparison |
+| W8 | A refused step uses up the permission or the upload token | Fixed | | |
+| W9 | Setup-network exemptions cover the whole API | Fixed | | Any-host reads for pages and probes only; "null" origin for the setup API only |
+| W10 | A failed confirmation is never retried | Fixed | | Retried every 5 s |
+| W11 | The web flasher ignores refusal and error statuses | Fixed | | |
+| W12 | The screensaver upload accepts repeated file parts | Fixed | | One image per request |
+| W13 | The busy check for transfers is not atomic with the transfer flag | Open | | A grind started in the few milliseconds before a transfer sets its flag overlaps flash I/O; needs transfers to take the operation interlock |
 
 ## Bench checks before first use
 
@@ -164,4 +178,7 @@ G and W so they do not clash with the review's.
    cup), steady the cup or portafilter handle as you normally would and note
    whether it stops the grind with "Err: neg wt" (G4).
 9. A Wi-Fi and a Bluetooth update with and without **Allow Update**, then a
-   deliberately bad image to confirm rollback.
+   deliberately bad image to confirm rollback and the "Update Failed" notice.
+   Straight after an update, a second one should be refused for about
+   20 seconds. Install one update with the load cell unplugged: the log should
+   still report the new firmware as confirmed after 20 seconds.

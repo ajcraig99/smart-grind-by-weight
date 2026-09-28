@@ -286,7 +286,7 @@ bool DeviceApi::process_commands(bool main_screen_ready) {
 DeviceApi::Reply DeviceApi::start_remote_grind(const Command& command, bool main_screen_ready) {
     const bool manual = command.action == CommandAction::START_MANUAL;
     const char* action = manual ? "start_manual" : "start";
-    if (device_web_server.is_ota_active() || device_web_server.is_ota_preparing()) {
+    if (device_web_server.is_ota_in_progress()) {
         return {action, false, "firmware update is active"};
     }
     if (grind_controller_->get_phase() != GrindPhase::IDLE) {

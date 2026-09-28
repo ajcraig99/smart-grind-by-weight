@@ -22,6 +22,7 @@
 #include "../hardware/hardware_manager.h"
 #include "../logging/grind_logging.h"
 #include "../logging/diagnostic_log.h"
+#include "../system/firmware_validation.h"
 #include "../system/update_authorization.h"
 #include "network_manager.h"
 #include "device_api.h"
@@ -378,7 +379,7 @@ bool DeviceWebServer::is_ota_ready() const {
 bool DeviceWebServer::request_ota_preparation() {
     const std::lock_guard<std::recursive_mutex> ota_lock(ota_mutex_);
     if (!initialized_ || !network_manager.is_connected() || is_ota_active() ||
-        firmware_update_check_active_.load() ||
+        FirmwareValidation::running_image_pending() || firmware_update_check_active_.load() ||
         ota_preparation_state_.load() != OtaPreparationState::IDLE ||
         !grind_controller_ || grind_controller_->is_active() ||
         (bluetooth_manager_ && bluetooth_manager_->is_transfer_active())) return false;
@@ -626,6 +627,17 @@ void DeviceWebServer::configure_routes() {
             if (request->getResponse()) return;
             auto* state = static_cast<ScreensaverUploadState*>(request->_tempObject);
             if (index == 0) {
+                if (state) {
+                    // One image per request: a further file part would start
+                    // a second upload over the first one's state.
+                    if (!state->complete && bluetooth_manager_) {
+                        bluetooth_manager_->abort_screensaver_image_upload();
+                    }
+                    state->complete = true;
+                    state->success = false;
+                    request->send(400, "application/json", "{\"error\":\"Send one image per request\"}");
+                    return;
+                }
                 if (!RequestGuard::admit(request)) return;
                 state = static_cast<ScreensaverUploadState*>(calloc(1, sizeof(ScreensaverUploadState)));
                 request->_tempObject = state;
@@ -713,6 +725,11 @@ void DeviceWebServer::configure_routes() {
                           "{\"error\":\"Allow the update on the grinder first: Menu > Firmware Update > Allow Update\"}");
             return;
         }
+        if (FirmwareValidation::running_image_pending()) {
+            request->send(409, "application/json",
+                          "{\"error\":\"The grinder is still checking its last update; try again in 30 seconds\"}");
+            return;
+        }
         if (firmware_update_check_active_.load()) {
             request->send(409, "application/json", "{\"error\":\"Wait for the firmware update check to finish\"}");
             return;
@@ -725,13 +742,20 @@ void DeviceWebServer::configure_routes() {
             request->send(409, "application/json", "{\"error\":\"Wait for the Bluetooth transfer to finish\"}");
             return;
         }
-        if (!update_authorization().consume(millis())) {
-            request->send(403, "application/json",
-                          "{\"error\":\"The update permission expired; allow it on the grinder again\"}");
+        if (!network_manager.is_connected()) {
+            request->send(409, "application/json", "{\"error\":\"Connect the grinder to your Wi-Fi network first\"}");
             return;
         }
+        // Reserve the grinder before using up the permission, so a refusal
+        // here leaves the permission for another attempt.
         if (!request_ota_preparation()) {
             request->send(409, "application/json", "{\"error\":\"Another operation is using the grinder\"}");
+            return;
+        }
+        if (!update_authorization().consume(millis())) {
+            recover_from_ota_failure();
+            request->send(403, "application/json",
+                          "{\"error\":\"The update permission expired; allow it on the grinder again\"}");
             return;
         }
         issue_upload_token();
@@ -756,6 +780,11 @@ void DeviceWebServer::configure_routes() {
             return;
         }
         const std::lock_guard<std::recursive_mutex> ota_lock(ota_mutex_);
+        // An early request must not use up the token.
+        if (!is_ota_ready()) {
+            request->send(409, "application/json", "{\"error\":\"Prepare the update before installing\"}");
+            return;
+        }
         const AsyncWebParameter* token = request->getParam("token");
         if (!token || !take_upload_token(token->value())) {
             request->send(403, "application/json", "{\"error\":\"This install was not prepared by this page\"}");
@@ -790,6 +819,11 @@ void DeviceWebServer::configure_routes() {
                 // Upload chunks arrive before server middleware runs, so admit
                 // the request and check its preparation token here.
                 if (!RequestGuard::admit(request)) return;
+                // An upload sent before the update is ready must not use up the token.
+                if (!is_ota_ready()) {
+                    request->send(409, "text/plain", "Prepare the firmware update before uploading");
+                    return;
+                }
                 const AsyncWebParameter* token = request->getParam("token");
                 if (!token || !take_upload_token(token->value())) {
                     request->send(403, "text/plain", "This upload was not prepared by this page");
@@ -989,7 +1023,7 @@ void DeviceWebServer::handle_ota_upload(AsyncWebServerRequest* request, const St
             return;
         }
         const esp_partition_t* target = esp_ota_get_next_update_partition(nullptr);
-        if (!target || request->contentLength() > target->size + 8192U) {
+        if (!target || request->contentLength() > target->size + NETWORK_MAX_FIRMWARE_BODY_SLACK_BYTES) {
             finish_ota(false);
             request->send(413, "text/plain", "Firmware image is too large");
             return;
@@ -1052,6 +1086,10 @@ void DeviceWebServer::finish_ota(bool success) {
     ota_failed_.store(!success);
     ota_active_.store(false);
     if (success) {
+        // The next boot compares itself with this image, so a rollback of an
+        // image that fails before it is confirmed is reported.
+        OTAHandler::expect_image(hardware_manager_ ? hardware_manager_->get_preferences() : nullptr,
+                                 FirmwareValidation::image_id(esp_ota_get_boot_partition()));
         ota_bluetooth_stopped_.store(false);
         ota_preparation_state_.store(OtaPreparationState::IDLE);
         reboot_at_ms_.store(millis() + OTA_REBOOT_DELAY_MS);

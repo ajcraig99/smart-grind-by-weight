@@ -118,7 +118,7 @@ bool GrindController::start_grind(float target, uint32_t time_ms, GrindMode grin
     LOG_BLE("[%lums CONTROLLER] start_grind() called with target=%.1fg, time=%lums, mode=%s\n",
             millis(), target, (unsigned long)time_ms, mode_name);
 #ifndef SMART_GRIND_SIM
-    if (device_web_server.is_ota_active() || device_web_server.is_ota_preparing()) {
+    if (device_web_server.is_ota_in_progress()) {
         LOG_BLE("[CONTROLLER] Grind blocked while firmware update is active\n");
         return false;
     }

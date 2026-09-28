@@ -21,6 +21,7 @@
 #include "../hardware/WeightSensor.h"
 #include "../controllers/grind_controller.h"
 #include "../network/device_web_server.h"
+#include "../system/firmware_validation.h"
 #include "../system/update_authorization.h"
 
 extern HardwareManager hardware_manager;
@@ -716,6 +717,11 @@ void BluetoothManager::handle_ota_control_command(BLECharacteristic* characteris
                 set_ota_status(BLE_OTA_ERROR);
                 break;
             }
+            if (FirmwareValidation::running_image_pending()) {
+                log("Bluetooth OTA: Rejected; the grinder is still checking its last update\n");
+                set_ota_status(BLE_OTA_ERROR);
+                break;
+            }
             // Anyone in radio range can write this characteristic, so the
             // update must first be allowed on the touchscreen.
             if (!update_authorization().is_granted(millis())) {
@@ -1167,8 +1173,12 @@ bool BluetoothManager::is_data_channel_busy_for_settings() const {
            image_handler.is_upload_active();
 }
 
-String BluetoothManager::check_ota_failure_after_boot() {
-    return ota_handler.check_ota_failure_after_boot();
+bool BluetoothManager::check_ota_failure_after_boot(String& expected) {
+    return ota_handler.check_ota_failure_after_boot(expected);
+}
+
+void BluetoothManager::forget_update_check() {
+    ota_handler.forget_update_check();
 }
 
 void BluetoothManager::refresh_system_info() {

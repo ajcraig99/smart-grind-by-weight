@@ -1,4 +1,5 @@
 #include "grind_control_task.h"
+#include "task_heartbeat.h"
 #include "../config/build_info.h"
 #include "../controllers/grind_controller.h"
 #include "../hardware/WeightSensor.h"
@@ -153,6 +154,7 @@ void GrindControlTask::task_impl() {
         
         // Record performance metrics
         record_timing(cycle_start_time, cycle_end_time);
+        task_heartbeats().beat(HeartbeatTask::GRIND_CONTROL, cycle_end_time);
         
         // Use vTaskDelayUntil for predictable timing (eliminates busy-wait)
         vTaskDelayUntil(&xLastWakeTime, xFrequency);

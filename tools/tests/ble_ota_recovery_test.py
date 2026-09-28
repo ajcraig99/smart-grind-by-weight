@@ -39,7 +39,13 @@ struct String {
     const char* c_str() const { return text.c_str(); }
     int toInt() const { return std::stoi(text); }
     bool operator!=(const String& other) const { return text != other.text; }
+    bool operator==(const String& other) const { return text == other.text; }
+    bool operator==(const char* other) const { return text == other; }
 };
+namespace FirmwareValidation {
+String running_id = "0123456789abcdef";
+String running_image_id() { return running_id; }
+}
 struct Preferences {
     std::map<std::string, String> values;
     void putString(const char* k, String v) { values[k]=v; }
@@ -166,6 +172,7 @@ int main() {
     assert(!ota.abort_if_stalled(1000+29999));
     now_ms=20000; assert(ota.process_data_chunk(bytes,4));
     assert(!ota.abort_if_stalled(20000+29999)); // Each chunk restarts the window.
+    assert(!ota.abort_if_stalled(19999)); // Time read just before that chunk: not a stall.
     assert(ota.abort_if_stalled(20000+30000));
     recovered(ota,prefs);
     assert(!ota.abort_if_stalled(UINT32_MAX)); // Nothing left to abort.
@@ -175,6 +182,29 @@ int main() {
     assert(!ota.abort_if_stalled(UINT32_MAX-10+29999));
     assert(ota.abort_if_stalled(UINT32_MAX-10+30000));
     recovered(ota,prefs);
+
+    // The check after an update keeps its expectation until the new image is
+    // confirmed, so a rollback before then is still reported.
+    Preferences p; OTAHandler check; check.init(&p);
+    String expected("stale");
+    assert(!check.check_ota_failure_after_boot(expected) && expected.isEmpty());
+    p.putString("new_fw_ver", "test");  // web flasher, version now running
+    assert(!check.check_ota_failure_after_boot(expected) && p.values.count("new_fw_ver"));
+    check.forget_update_check();
+    assert(p.values.empty());
+    p.putString("new_build_nr", "1"); p.putString("new_fw_ver", "2.0.0");  // rolled back
+    assert(check.check_ota_failure_after_boot(expected) && expected == "2.0.0" && p.values.empty());
+    p.putString("new_build_nr", "2");  // Python tool, other build running
+    assert(check.check_ota_failure_after_boot(expected) && expected == "2" && p.values.empty());
+    p.putString("new_build_nr", "1");
+    assert(!check.check_ota_failure_after_boot(expected) && p.values.count("new_build_nr"));
+    OTAHandler::expect_image(&p, FirmwareValidation::running_id);  // Wi-Fi update now running
+    assert(!p.values.count("new_build_nr") && p.values.count("new_fw_sha"));
+    assert(!check.check_ota_failure_after_boot(expected));
+    OTAHandler::expect_image(&p, "fedcba9876543210");  // Wi-Fi update rolled back
+    assert(check.check_ota_failure_after_boot(expected) && expected.isEmpty() && p.values.empty());
+    OTAHandler::expect_image(&p, "");  // an unreadable image records nothing
+    assert(p.values.empty());
 }
 '''
 

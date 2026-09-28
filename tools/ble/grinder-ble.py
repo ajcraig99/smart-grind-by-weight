@@ -578,7 +578,8 @@ class GrinderBLETool:
                                 "again within 2 minutes.")
             else:
                 self.safe_print("[ERROR] The grinder did not accept the update start. Check that it is "
-                                "idle and not transferring data.")
+                                "idle and not transferring data; after an update, wait 30 seconds "
+                                "before starting another.")
             return False
         
         start_time = time.time()

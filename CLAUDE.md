@@ -28,6 +28,7 @@ python3 tools/grinder.py analyze
 - `python3 -m unittest discover -s tools/tests -p '*_test.py'` - Firmware regression tests (compile real sources against stubs with the host g++)
 - `node tools/tests/settings_web_test.mjs` - Embedded settings page workflow
 - `node tools/tests/ota_web_test.mjs` - Embedded firmware-update page feedback
+- `node tools/tests/web_flasher_status_test.mjs` - Web Bluetooth flasher update statuses
 
 ## Architecture
 

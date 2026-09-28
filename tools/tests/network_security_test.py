@@ -37,10 +37,11 @@ DeviceNames setup() {
 }
 
 Verdict check(const DeviceNames& names, const char* host, const char* origin,
-              bool safe, bool websocket = false) {
+              bool safe, bool websocket = false, const char* path = "/") {
     RequestHeaders request;
     request.host = host;
     request.origin = origin;
+    request.path = path;
     request.safe_method = safe;
     request.websocket = websocket;
     return evaluate(request, names);
@@ -104,18 +105,34 @@ void station_admission() {
 void setup_admission() {
     const DeviceNames names = setup();
     // Captive-portal probes read with arbitrary host names.
-    assert(check(names, "connectivitycheck.gstatic.com", nullptr, true) == Verdict::ALLOW);
-    assert(check(names, "captive.apple.com", nullptr, true) == Verdict::ALLOW);
+    assert(check(names, "connectivitycheck.gstatic.com", nullptr, true, false, "/generate_204") ==
+           Verdict::ALLOW);
+    assert(check(names, "captive.apple.com", nullptr, true, false, "/hotspot-detect.html") ==
+           Verdict::ALLOW);
+    assert(check(names, "example.com", nullptr, true) == Verdict::ALLOW);
+    // API reads still need the setup address: no DNS-rebinding read of the
+    // network scan or status, and no request without a known path.
+    for (const char* path : {"/api/v1/setup/networks", "/api/v1/status", "/api/v1/logs"}) {
+        assert(check(names, "evil.com", nullptr, true, false, path) == Verdict::REJECT_HOST);
+        assert(check(names, "4.4.4.1", nullptr, true, false, path) == Verdict::ALLOW);
+    }
+    assert(check(names, "evil.com", nullptr, true, false, nullptr) == Verdict::REJECT_HOST);
     // Writes must address the setup network itself.
     assert(check(names, "example.com", "http://example.com", false) == Verdict::REJECT_HOST);
     assert(check(names, "example.com", nullptr, false) == Verdict::REJECT_HOST);
     assert(check(names, "4.4.4.1", "http://example.com", false) == Verdict::REJECT_ORIGIN);
     assert(check(names, "4.4.4.1", "http://4.4.4.1", false) == Verdict::ALLOW);
-    assert(check(names, "4.4.4.1", "null", false) == Verdict::ALLOW);
     assert(check(names, "4.4.4.1", nullptr, false) == Verdict::ALLOW);
     assert(check(names, "evil.com", nullptr, true, true) == Verdict::REJECT_HOST);
-    // "null" is tolerated only on the setup network.
-    assert(check(home(), "smartgrind.local", "null", true) == Verdict::REJECT_ORIGIN);
+    // "null" is tolerated only for the setup API on the setup network.
+    assert(check(names, "4.4.4.1", "null", false, false, "/api/v1/setup/wifi") == Verdict::ALLOW);
+    assert(check(names, "4.4.4.1", "null", true, false, "/api/v1/setup/networks") == Verdict::ALLOW);
+    assert(check(names, "4.4.4.1", "null", false) == Verdict::REJECT_ORIGIN);
+    assert(check(names, "4.4.4.1", "null", false, false, "/api/v1/ota/prepare") ==
+           Verdict::REJECT_ORIGIN);
+    assert(check(names, "4.4.4.1", "null", true, true, "/ws") == Verdict::REJECT_ORIGIN);
+    assert(check(home(), "smartgrind.local", "null", true, false, "/api/v1/setup/wifi") ==
+           Verdict::REJECT_ORIGIN);
 }
 
 void update_authorization_rules() {
@@ -179,7 +196,8 @@ void diagnostic_report_rules() {
         assert(!nvs_string_value_is_reportable(secret));
     }
     assert(!nvs_string_value_is_reportable(nullptr));
-    for (const char* shown : {"style", "gm_host", "wifi_host", "new_build_nr", "new_fw_ver"}) {
+    for (const char* shown : {"style", "gm_host", "wifi_host", "new_build_nr", "new_fw_ver",
+                              "new_fw_sha"}) {
         assert(nvs_string_value_is_reportable(shown));
     }
 }
@@ -202,6 +220,118 @@ class NetworkSecurityTest(unittest.TestCase):
             cpp, binary = Path(tmp) / "policies.cpp", Path(tmp) / "policies"
             cpp.write_text(HARNESS)
             subprocess.run(["g++", "-std=c++17", "-Wall", "-Wextra", "-Werror", "-pthread",
+                            "-I", str(ROOT / "src"), str(cpp), "-o", str(binary)], check=True)
+            subprocess.run([str(binary)], check=True, timeout=20)
+
+    def test_refusals_are_claimed_before_the_body(self):
+        # The guard's handler is consulted when the headers end. Whatever it
+        # claims has its body discarded unparsed, so every request that will be
+        # refused must be claimed there.
+        guard = (ROOT / "src/network/request_guard.cpp").read_text()
+        internals = guard[guard.index("namespace {") + len("namespace {"):guard.index("}  // namespace\n")]
+        admit = guard[guard.index("bool admit(AsyncWebServerRequest* request) {"):]
+        admit = admit[:admit.index("\n}\n") + 3]
+        harness = r'''
+#include <cassert>
+#include <cstdint>
+#include <string>
+#include "network/request_policy.h"
+#define LOG_BLE(...) ((void)0)
+#define NETWORK_MAX_FIRMWARE_BODY_SLACK_BYTES 8192
+#define NETWORK_MAX_SCREENSAVER_BODY_BYTES 259000
+#define NETWORK_MAX_FORM_BODY_BYTES 4096
+uint32_t millis() { return 1; }
+struct String : std::string {
+    using std::string::string;
+    String(const std::string& text) : std::string(text) {}
+};
+enum WebRequestMethod { HTTP_GET = 1, HTTP_POST = 2, HTTP_DELETE = 4, HTTP_HEAD = 8, HTTP_OPTIONS = 16 };
+using WebRequestMethodComposite = int;
+enum class NetworkState { WIFI_CONNECTED, WIFI_SETUP_AP };
+struct {
+    NetworkState current = NetworkState::WIFI_CONNECTED;
+    String hostname() const { return "smartgrind"; }
+    String ip_address() const { return "192.168.1.50"; }
+    NetworkState state() const { return current; }
+} network_manager;
+struct SetupAddress { String toString() const { return "4.4.4.1"; } };
+struct { SetupAddress softAPIP() const { return {}; } } WiFi;
+struct esp_partition_t { size_t size; } slot{3145728};
+const esp_partition_t* esp_ota_get_next_update_partition(void*) { return &slot; }
+struct AsyncWebHeader { String text; const String& value() const { return text; } };
+struct AsyncWebServerRequest {
+    String path = "/", authority = "smartgrind.local";
+    int verb = HTTP_GET; size_t length = 0; bool form = false, ws = false;
+    const AsyncWebHeader* origin = nullptr;
+    int status = 0;
+    const String& url() const { return path; }
+    const String& host() const { return authority; }
+    int method() const { return verb; }
+    size_t contentLength() const { return length; }
+    bool multipart() const { return form; }
+    bool isWebSocketUpgrade() const { return ws; }
+    const AsyncWebHeader* getHeader(const char*) const { return origin; }
+    const char* methodToString() const { return "POST"; }
+    void send(int code, const char*, const char*) { status = code; }
+};
+struct AsyncWebHandler {
+    virtual ~AsyncWebHandler() = default;
+    virtual bool canHandle(AsyncWebServerRequest*) const { return false; }
+    virtual void handleRequest(AsyncWebServerRequest*) {}
+    virtual bool isRequestHandlerTrivial() const { return false; }
+};
+namespace RequestGuard { bool admit(AsyncWebServerRequest* request); }
+namespace {
+''' + internals + r'''
+}
+namespace RequestGuard {
+''' + admit + r'''
+}
+int main() {
+    EarlyRejector rejector;
+    assert(rejector.isRequestHandlerTrivial());
+    // Normal requests go on to their routes.
+    AsyncWebServerRequest page; assert(!rejector.canHandle(&page));
+    AsyncWebServerRequest firmware; firmware.path = "/api/v1/ota"; firmware.verb = HTTP_POST;
+    firmware.length = 2000000; firmware.form = true;
+    assert(!rejector.canHandle(&firmware));
+    // A large body from a foreign page is refused before it is read.
+    AsyncWebHeader foreign{"http://evil.com"};
+    AsyncWebServerRequest cross = firmware; cross.origin = &foreign; cross.form = false;
+    assert(rejector.canHandle(&cross));
+    rejector.handleRequest(&cross); assert(cross.status == 403);
+    AsyncWebServerRequest rebound = firmware; rebound.authority = "evil.com";
+    assert(rejector.canHandle(&rebound));
+    // An admitted upload that is not a multipart form would be buffered as fields.
+    for (const char* path : {"/api/v1/ota", "/api/v1/screensaver/image"}) {
+        AsyncWebServerRequest fields = firmware; fields.path = path; fields.length = 200000;
+        fields.form = false;
+        assert(rejector.canHandle(&fields));
+        rejector.handleRequest(&fields); assert(fields.status == 415);
+    }
+    AsyncWebServerRequest empty = firmware; empty.form = false; empty.length = 0;
+    assert(!rejector.canHandle(&empty));  // No body: the route answers.
+    // Oversized bodies are still refused, admitted or not.
+    AsyncWebServerRequest huge = firmware; huge.length = slot.size + 8193;
+    assert(rejector.canHandle(&huge));
+    rejector.handleRequest(&huge); assert(huge.status == 413);
+    AsyncWebServerRequest form; form.path = "/api/v1/settings"; form.verb = HTTP_POST;
+    form.length = 4097; assert(rejector.canHandle(&form));
+    form.length = 4096; assert(!rejector.canHandle(&form));
+    // On the setup network, captive probes pass and API reads need its address.
+    network_manager.current = NetworkState::WIFI_SETUP_AP;
+    AsyncWebServerRequest probe; probe.path = "/generate_204"; probe.authority = "connectivitycheck.gstatic.com";
+    assert(!rejector.canHandle(&probe));
+    AsyncWebServerRequest scan = probe; scan.path = "/api/v1/setup/networks";
+    assert(rejector.canHandle(&scan));
+    scan.authority = "4.4.4.1"; assert(!rejector.canHandle(&scan));
+}
+'''
+        with tempfile.TemporaryDirectory() as tmp:
+            cpp, binary = Path(tmp) / "guard.cpp", Path(tmp) / "guard"
+            cpp.write_text(harness)
+            # LOG_BLE is compiled out here, leaving the log helper's inputs unused.
+            subprocess.run(["g++", "-std=c++17", "-Wall", "-Wextra", "-Wno-unused-parameter",
                             "-I", str(ROOT / "src"), str(cpp), "-o", str(binary)], check=True)
             subprocess.run([str(binary)], check=True, timeout=20)
 

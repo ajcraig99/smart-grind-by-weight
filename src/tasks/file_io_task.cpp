@@ -1,4 +1,5 @@
 #include "file_io_task.h"
+#include "task_heartbeat.h"
 #include "../config/build_info.h"
 #include "../logging/grind_logging.h"
 #include "../config/constants.h"
@@ -163,6 +164,7 @@ void FileIOTask::task_impl() {
         
         // Record performance metrics
         record_timing(cycle_start_time, cycle_end_time);
+        task_heartbeats().beat(HeartbeatTask::FILE_IO, cycle_end_time);
         
         // Use vTaskDelayUntil for predictable timing (eliminates busy-wait)
         vTaskDelayUntil(&xLastWakeTime, xFrequency);

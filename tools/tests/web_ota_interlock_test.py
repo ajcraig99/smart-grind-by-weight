@@ -93,7 +93,7 @@ struct Sensor {
 struct Preferences {
     int getInt(const char*,int value) { return value; }
     float getFloat(const char*,float value) { return value; }
-};
+} stored_preferences;
 struct GrindMotor { bool initialized=true, safety_stop=false; bool is_initialized() { return initialized; }
                     bool has_safety_stop() { return safety_stop; } } grind_motor;
 struct GrindController {
@@ -121,12 +121,28 @@ struct BluetoothManager {
     void disable() { enabled=false; }
 } bluetooth;
 struct Grinder { unsigned stops=0; void stop() { assert(!operation_interlock().try_acquire()); ++stops; } } motor;
-struct HardwareManager { Grinder* get_grinder() { return &motor; } } hardware;
+struct HardwareManager {
+    Grinder* get_grinder() { return &motor; }
+    Preferences* get_preferences() { return &stored_preferences; }
+} hardware;
+constexpr size_t NETWORK_MAX_FIRMWARE_BODY_SLACK_BYTES = 8192;
+bool image_pending = false;
+String expected_image;
+namespace FirmwareValidation {
+bool running_image_pending() { return image_pending; }
+template <class Partition> String image_id(const Partition*) { return "0123456789abcdef"; }
+}
+struct OTAHandler {
+    static void expect_image(Preferences* prefs, const String& id) {
+        assert(prefs == &stored_preferences); expected_image = id;
+    }
+};
 struct { void update() {} } device_api;
 struct { void flush() {} } Serial;
 struct { unsigned restarts=0; void restart() { ++restarts; } } ESP;
 struct esp_partition_t { size_t size=1000000; } partition;
 const esp_partition_t* esp_ota_get_next_update_partition(void*) { return &partition; }
+const esp_partition_t* esp_ota_get_boot_partition() { return &partition; }
 struct Update {
     bool fail_begin=false, fail_write=false, valid=true, opened=false;
     unsigned aborts=0, writes=0;
@@ -179,6 +195,11 @@ int main() {
         assert(!controller.start_grind(18,5000,mode)); assert_available();
     }
     grind_motor.safety_stop=false;
+    // An image still awaiting confirmation is not replaced by another update.
+    image_pending=true;
+    assert(!web.request_ota_preparation());
+    assert(web.ota_preparation_state_==OtaPreparationState::IDLE); assert_available();
+    image_pending=false;
     auto competitor=operation_interlock().try_acquire();
     assert(!web.request_ota_preparation());
     assert(web.ota_preparation_state_==OtaPreparationState::IDLE);
@@ -226,8 +247,10 @@ int main() {
     web.recover_from_ota_failure(); // Preparation cleanup cannot release an active transfer.
     assert(!operation_interlock().try_acquire()); web.finish_ota(false); assert_available();
     ready(web); AsyncWebServerRequest success;
+    assert(expected_image.empty()); // failed updates record nothing
     web.handle_ota_upload(&success,"firmware.bin",0,bytes,3,true);
     assert(web.is_ota_active() && web.reboot_pending_ && !operation_interlock().try_acquire());
+    assert(expected_image=="0123456789abcdef"); // the next boot checks for this image
     assert(!web.request_ota_preparation());
     now += OTA_REBOOT_DELAY_MS; web.update(); assert(ESP.restarts==1);
     operation_interlock().release(web.operation_token_); // Simulate boot, never used by production.

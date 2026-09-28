@@ -1,4 +1,5 @@
 #include "weight_sampling_task.h"
+#include "task_heartbeat.h"
 #include "../config/build_info.h"
 #include "../hardware/WeightSensor.h"
 #include "../logging/grind_logging.h"
@@ -155,6 +156,7 @@ void WeightSamplingTask::task_impl() {
         
         // Record performance metrics
         record_timing(cycle_start_time, cycle_end_time);
+        task_heartbeats().beat(HeartbeatTask::WEIGHT_SAMPLING, cycle_end_time);
         
         // Use vTaskDelayUntil for predictable timing (eliminates busy-wait)
         vTaskDelayUntil(&xLastWakeTime, xFrequency);

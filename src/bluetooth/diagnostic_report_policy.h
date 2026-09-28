@@ -11,6 +11,7 @@ inline bool nvs_string_value_is_reportable(const char* key) {
     static constexpr const char* REPORTABLE_KEYS[] = {
         "new_build_nr",  // Pending OTA build number
         "new_fw_ver",    // Pending OTA firmware version
+        "new_fw_sha",    // Pending OTA image identity (start of its ELF hash)
         "wifi_host",     // Configured hostname
         "style",         // Screensaver style
         "gm_host",       // GaggiMate host name

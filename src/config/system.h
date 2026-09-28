@@ -91,6 +91,7 @@
 // all tasks alive. A crash, watchdog reset or power loss before then makes the
 // bootloader start the previous firmware again.
 #define SYS_FIRMWARE_VALIDATION_DELAY_MS 20000                                 // Healthy run time before confirming an update
+#define SYS_TASK_HEALTH_MAX_SILENCE_MS 2000                                    // A task counts as alive if it finished a loop this recently
 
 //------------------------------------------------------------------------------
 // LOGGING CONFIGURATION

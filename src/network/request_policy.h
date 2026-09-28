@@ -28,6 +28,7 @@ struct DeviceNames {
 struct RequestHeaders {
     const char* host = nullptr;        // Host header, possibly with ":80"
     const char* origin = nullptr;      // Origin header, nullptr when absent
+    const char* path = nullptr;        // Request path without the query
     bool safe_method = true;           // GET, HEAD or OPTIONS
     bool websocket = false;            // WebSocket upgrade
 };
@@ -84,6 +85,10 @@ inline bool matches_value(const char* host, size_t length, const char* value) {
     return value && *value && equal_ignore_case(host, length, value, std::strlen(value));
 }
 
+inline bool starts_with(const char* text, const char* prefix) {
+    return text && std::strncmp(text, prefix, std::strlen(prefix)) == 0;
+}
+
 }  // namespace detail
 
 // True when the Host header names this grinder.
@@ -127,16 +132,21 @@ inline bool origin_matches(const char* origin, const char* authority) {
 }
 
 inline Verdict evaluate(const RequestHeaders& request, const DeviceNames& names) {
-    // Captive-portal probes use arbitrary host names; plain reads are served
-    // so the phone opens the setup page. Anything that changes state still
-    // has to address the setup AP itself.
-    const bool captive_read = names.setup_access_point && request.safe_method && !request.websocket;
+    // Captive-portal probes use arbitrary host names; plain page reads are
+    // answered (with a redirect to the setup address) so the phone opens the
+    // setup page. The API and anything that changes state still have to
+    // address the setup AP itself: a client on both networks could otherwise
+    // be steered there by a page on another site.
+    const bool api = !request.path || detail::starts_with(request.path, "/api/");
+    const bool captive_read =
+        names.setup_access_point && request.safe_method && !request.websocket && !api;
     if (!captive_read && !host_allowed(request.host, names)) return Verdict::REJECT_HOST;
     if (request.origin) {
-        // Some captive-portal browsers send "null" for pages they opened;
-        // the setup network has no route to other sites to abuse that.
+        // Some captive-portal browsers send "null" for the setup page they
+        // opened; accept it for the setup API only.
         const bool setup_null_origin =
-            names.setup_access_point && std::strcmp(request.origin, "null") == 0;
+            names.setup_access_point && detail::starts_with(request.path, "/api/v1/setup/") &&
+            std::strcmp(request.origin, "null") == 0;
         if (!setup_null_origin && !origin_matches(request.origin, request.host)) {
             return Verdict::REJECT_ORIGIN;
         }

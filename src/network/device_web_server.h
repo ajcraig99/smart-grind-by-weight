@@ -35,6 +35,11 @@ public:
     bool is_ota_preparing() const {
         return ota_preparation_state_.load() == OtaPreparationState::REQUESTED;
     }
+    // From the prepare request until the update ends, including while the
+    // prepared update waits for its upload.
+    bool is_ota_in_progress() const {
+        return is_ota_active() || ota_preparation_state_.load() != OtaPreparationState::IDLE;
+    }
     uint8_t ota_progress_percent() const;
     bool ota_failed() const { return ota_failed_.load(); }
     FirmwareUpdateState firmware_update_state() const { return firmware_update_state_.load(); }

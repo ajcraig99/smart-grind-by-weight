@@ -160,8 +160,22 @@ public:
     void restore_normal_power_mode();
     
     /**
-     * Check if OTA failed after reboot and return expected build number if so
-     * @return Expected build number if OTA failed, empty string if no failure or no expectation
+     * Check whether the last update is the firmware now running. The
+     * expectation is kept until forget_update_check(), so an image that fails
+     * before it is confirmed and is rolled back is still reported.
+     * @param expected Set to the expected version or build number, if known
+     * @return true if the running firmware is not the one the update installed
      */
-    String check_ota_failure_after_boot();
+    bool check_ota_failure_after_boot(String& expected);
+
+    /**
+     * Drop the post-update expectation once the running image is confirmed.
+     */
+    void forget_update_check();
+
+    /**
+     * Record the image a Wi-Fi update installed, for the check after reboot.
+     * @param image_id FirmwareValidation::image_id() of the installed image
+     */
+    static void expect_image(Preferences* prefs, const String& image_id);
 };

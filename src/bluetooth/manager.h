@@ -257,10 +257,16 @@ public:
     void refresh_system_info();
     
     /**
-     * Check if OTA failed after reboot and return expected build number if so
-     * @return Expected build number if OTA failed, empty string if no failure
+     * Check whether the last update is the firmware now running
+     * @param expected Set to the expected version or build number, if known
+     * @return true if the update did not take or was rolled back
      */
-    String check_ota_failure_after_boot();
+    bool check_ota_failure_after_boot(String& expected);
+
+    /**
+     * Drop the post-update expectation once the running image is confirmed
+     */
+    void forget_update_check();
     
     // BLE Callbacks
     void onConnect(BLEServer* server) override;

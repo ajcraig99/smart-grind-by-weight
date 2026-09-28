@@ -4,6 +4,7 @@
 #include "../hardware/touch_driver.h"
 #include "../hardware/hardware_manager.h"
 #include "../tasks/task_manager.h"
+#include "../system/firmware_validation.h"
 #include <Arduino.h>
 #include <BLEDevice.h>
 #include <sdkconfig.h>
@@ -309,8 +310,10 @@ void OTAHandler::abort_ota() {
 bool OTAHandler::abort_if_stalled(uint32_t now_ms) {
     // A callback holding the lock is receiving or applying the update.
     std::unique_lock<std::recursive_mutex> update_lock(update_mutex, std::try_to_lock);
+    // now_ms is read before the lock: a chunk stored in between is newer and
+    // must not wrap round to a long stall.
     if (!update_lock.owns_lock() || !ota_in_progress ||
-        now_ms - last_activity_ms < BLE_OTA_STALL_TIMEOUT_MS) {
+        static_cast<int32_t>(now_ms - last_activity_ms) < static_cast<int32_t>(BLE_OTA_STALL_TIMEOUT_MS)) {
         return false;
     }
     LOG_BLE("OTA: No data for %lus; aborting update\n",
@@ -354,10 +357,7 @@ void OTAHandler::recover_failed_update() {
     ota_in_progress = false;
     received_size = 0;
     patch_size = 0;
-    if (preferences) {
-        preferences->remove("new_build_nr");
-        preferences->remove("new_fw_ver");
-    }
+    forget_update_check();
     // A watchdog recovery that requires reboot deliberately keeps ownership.
     // Only successful recovery makes motor operations available again.
     operation_interlock().release(operation_token);
@@ -443,58 +443,55 @@ bool OTAHandler::finalize_update() {
     return true;
 }
 
-String OTAHandler::check_ota_failure_after_boot() {
+bool OTAHandler::check_ota_failure_after_boot(String& expected) {
+    expected = "";
     if (!preferences) {
-        return "";
+        return false;
     }
 
-    String expected_build = preferences->getString("new_build_nr", "");
-    String expected_version = preferences->getString("new_fw_ver", "");
-
-    if (expected_build.isEmpty() && expected_version.isEmpty()) {
-        return "";
+    const String expected_build = preferences->getString("new_build_nr", "");
+    const String expected_version = preferences->getString("new_fw_ver", "");
+    const String expected_image = preferences->getString("new_fw_sha", "");
+    if (expected_build.isEmpty() && expected_version.isEmpty() && expected_image.isEmpty()) {
+        return false;
     }
 
-    int current_build = BUILD_NUMBER;
-    String current_version = BUILD_FIRMWARE_VERSION;
-
-    // Web flasher sends firmware version - use that for verification (more reliable)
-    if (!expected_version.isEmpty()) {
-        if (expected_version != current_version) {
-            LOG_BLE("OTA: Version check failed - expected v%s, got v%s\n",
-                         expected_version.c_str(), current_version.c_str());
-            preferences->remove("new_build_nr");
-            preferences->remove("new_fw_ver");
-            return expected_version;  // Return expected version for display
-        } else {
-            LOG_BLE("OTA: Version check passed - expected v%s, got v%s\n",
-                         expected_version.c_str(), current_version.c_str());
-            preferences->remove("new_build_nr");
-            preferences->remove("new_fw_ver");
-            return "";
-        }
+    // Wi-Fi updates record the image itself; the web flasher sends a firmware
+    // version, and the Python tool a build number.
+    bool running_expected;
+    if (!expected_image.isEmpty()) {
+        const String running_image = FirmwareValidation::running_image_id();
+        running_expected = expected_image == running_image;
+        LOG_BLE("OTA: Image check %s - expected %s, running %s\n", running_expected ? "passed" : "failed",
+                expected_image.c_str(), running_image.c_str());
+    } else if (!expected_version.isEmpty()) {
+        running_expected = expected_version == BUILD_FIRMWARE_VERSION;
+        LOG_BLE("OTA: Version check %s - expected v%s, got v%s\n", running_expected ? "passed" : "failed",
+                expected_version.c_str(), BUILD_FIRMWARE_VERSION);
+    } else {
+        running_expected = expected_build.toInt() == BUILD_NUMBER;
+        LOG_BLE("OTA: Build number check %s - expected #%s, got #%d\n", running_expected ? "passed" : "failed",
+                expected_build.c_str(), BUILD_NUMBER);
     }
 
-    // Python flasher sends build number only - use that for verification
-    if (!expected_build.isEmpty()) {
-        int expected_build_num = expected_build.toInt();
-        if (current_build != expected_build_num) {
-            LOG_BLE("OTA: Build number check failed - expected #%d, got #%d\n",
-                         expected_build_num, current_build);
-            preferences->remove("new_build_nr");
-            preferences->remove("new_fw_ver");
-            return expected_build;
-        } else {
-            LOG_BLE("OTA: Build number check passed - expected #%d, got #%d\n",
-                         expected_build_num, current_build);
-            preferences->remove("new_build_nr");
-            preferences->remove("new_fw_ver");
-            return "";
-        }
-    }
+    // Keep the expectation until the new image is confirmed: if it fails
+    // before then, the previous firmware boots and reports the rollback.
+    if (running_expected) return false;
+    expected = !expected_version.isEmpty() ? expected_version : expected_build;
+    forget_update_check();
+    return true;
+}
 
-    // Clean up if we get here (no verification data)
+void OTAHandler::forget_update_check() {
+    if (!preferences) return;
     preferences->remove("new_build_nr");
     preferences->remove("new_fw_ver");
-    return "";
+    preferences->remove("new_fw_sha");
+}
+
+void OTAHandler::expect_image(Preferences* prefs, const String& image_id) {
+    if (!prefs || image_id.isEmpty()) return;
+    prefs->remove("new_build_nr");
+    prefs->remove("new_fw_ver");
+    prefs->putString("new_fw_sha", image_id);
 }

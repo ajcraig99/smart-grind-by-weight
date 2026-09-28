@@ -75,6 +75,9 @@ jobs:
       - name: Test embedded firmware update feedback
         run: node tools/tests/ota_web_test.mjs
 
+      - name: Test web Bluetooth flasher status handling
+        run: node tools/tests/web_flasher_status_test.mjs
+
       - name: Build firmware
         env:
           PLATFORMIO_BUILD_CACHE_DIR: .pio/build-cache/${{ matrix.environment }}

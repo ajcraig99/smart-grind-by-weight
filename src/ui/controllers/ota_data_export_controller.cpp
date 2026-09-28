@@ -33,7 +33,9 @@ bool OtaDataExportController::update() {
         return false;
     }
 
-    if (device_web_server.is_ota_preparing() || device_web_server.is_ota_active()) {
+    // Also while a prepared update waits for its upload, so the screen does
+    // not flash "Update Failed" before the upload starts.
+    if (device_web_server.is_ota_in_progress()) {
         firmware_update_screen_active_ = true;
         if (!ui_manager_->state_machine->is_state(UIState::OTA_UPDATE)) {
             ui_manager_->ota_screen.show_ota_mode();
