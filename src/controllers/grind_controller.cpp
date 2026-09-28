@@ -227,6 +227,9 @@ bool GrindController::start_grind(float target, uint32_t time_ms, GrindMode grin
 
     reset_mechanical_anomaly_count();
     net_weight_removal_guard_.reset(0.0f);
+    last_guard_sample_ms_ = 0;
+    pre_final_settled_weight_ = 0.0f;
+    resume_after_purge_ = false;
 
     if (diagnostics_controller_) {
         diagnostics_controller_->reset_diagnostic(DiagnosticCode::MECHANICAL_INSTABILITY);
@@ -331,18 +334,28 @@ void GrindController::stop_grind() {
     operation_token_ = 0;
 }
 
-void GrindController::continue_from_purge() {
+bool GrindController::continue_from_purge(bool check_vessel) {
     const auto control_lock = lock_control();
     // Called by UI when user confirms purge completion
     if (phase != GrindPhase::PURGE_CONFIRM) {
         LOG_BLE("[%lums CONTROLLER] Warning: continue_from_purge() called in wrong phase: %s\n",
                 millis(), get_phase_name());
-        return;
+        return true;
     }
     // The control loop will show the scale error; never restart from stale data.
-    if (!weight_sensor || !weight_sensor->has_recent_sample()) return;
+    if (!weight_sensor || !weight_sensor->has_recent_sample()) return true;
 
-    LOG_BLE("[%lums CONTROLLER] User confirmed purge, continuing to PREDICTIVE\n", millis());
+    // Relative to the zero taken with the vessel in place, a missing vessel
+    // reads at least its own weight low. Re-taring then would zero the
+    // empty platform and grind onto it.
+    const float current_weight = weight_sensor->get_weight_low_latency();
+    if (check_vessel && current_weight <= net_weight_removal_guard_.removal_threshold_g()) {
+        LOG_BLE("[%lums CONTROLLER] Purge continue held: %.2fg suggests the vessel is off\n",
+                millis(), current_weight);
+        return false;
+    }
+
+    LOG_BLE("[%lums CONTROLLER] User confirmed purge, re-taring before PREDICTIVE\n", millis());
 
     // Add time spent in PURGE_CONFIRM to timeout offset (exclude from timeout calculation)
     if (timeout_pause_start > 0) {
@@ -353,12 +366,12 @@ void GrindController::continue_from_purge() {
         timeout_pause_start = 0;
     }
 
-    // Start motor and transition to predictive grinding
-    if (grinder) {
-        grinder->start();
-    }
-    time_grind_start_ms = millis();
-    switch_phase(GrindPhase::PREDICTIVE);  // No loop_data needed for phase transition
+    // Zero again with the emptied (or different) cup in place, so purged
+    // grounds left behind are not counted as dose. TARE_CONFIRM starts the
+    // motor once the scale has settled and then resumes in PREDICTIVE.
+    resume_after_purge_ = true;
+    switch_phase(GrindPhase::TARING);  // No loop_data needed for phase transition
+    return true;
 }
 
 void GrindController::pause_grind() {
@@ -476,7 +489,8 @@ void GrindController::update() {
                                       net_weight_removal_guard_.reference_weight_g(),
                                       net_weight_removal_guard_.removal_threshold_g());
                 } else {
-                    queue_log_message("[SCALE] No vessel reference; removal guard disabled for this grind\n");
+                    queue_log_message("[SCALE] No vessel reference; removal threshold: %.2fg\n",
+                                      net_weight_removal_guard_.removal_threshold_g());
                 }
             }
             if (mode == GrindMode::MANUAL) {
@@ -514,6 +528,12 @@ void GrindController::update() {
                     time_grind_start_ms = loop_data.now;
                     if (mode == GrindMode::TIME) {
                         switch_phase(GrindPhase::TIME_GRINDING, loop_data);
+                    } else if (resume_after_purge_) {
+                        // The grinder is already primed; resume the main grind.
+                        resume_after_purge_ = false;
+                        flow_start_confirmed = false;
+                        grind_latency_ms = 0;
+                        switch_phase(GrindPhase::PREDICTIVE, loop_data);
                     } else {
                         // Always run chute operation for weight mode
                         switch_phase(GrindPhase::PRIME, loop_data);
@@ -523,6 +543,12 @@ void GrindController::update() {
             break;
 
         case GrindPhase::PRIME: {
+            if (dry_run_detected(loop_data)) {
+                abort_session(GrindSessionResult::ERROR, "No beans?", loop_data);
+                queue_log_message("[GRINDER] Dry run: under %.1fg in %dms of priming\n",
+                                  GRIND_DRY_RUN_MIN_PROGRESS_G, GRIND_DRY_RUN_TIMEOUT_MS);
+                return;
+            }
             if (!grinder->is_grinding()) {
                 grinder->start();
             }
@@ -591,6 +617,12 @@ void GrindController::update() {
         }
 
         case GrindPhase::TIME_GRINDING:
+            // A pause holds the operation interlock, so it cannot last forever.
+            if (grind_paused_ && loop_data.now - pause_start_ms_ >= GRIND_PAUSE_MAX_MS) {
+                abort_session(GrindSessionResult::TIMEOUT, "Paused too long", loop_data);
+                queue_log_message("[CONTROLLER] Paused time grind ended after %lums\n", GRIND_PAUSE_MAX_MS);
+                return;
+            }
             if (mode == GrindMode::TIME && active_strategy) {
                 active_strategy->update(session_descriptor, strategy_context, loop_data);
             }
@@ -602,6 +634,12 @@ void GrindController::update() {
             break;
 
         case GrindPhase::PREDICTIVE:
+            if (dry_run_detected(loop_data)) {
+                abort_session(GrindSessionResult::ERROR, "No beans?", loop_data);
+                queue_log_message("[GRINDER] Dry run: under %.1fg gained in %dms of grinding\n",
+                                  GRIND_DRY_RUN_MIN_PROGRESS_G, GRIND_DRY_RUN_TIMEOUT_MS);
+                return;
+            }
             if (mode == GrindMode::WEIGHT && active_strategy) {
                 active_strategy->update(session_descriptor, strategy_context, loop_data);
             }
@@ -626,9 +664,13 @@ void GrindController::update() {
             break;
 
         case GrindPhase::FINAL_SETTLING:
-            // Wait for weight to settle with precision settling window
+            // Wait for weight to settle with precision settling window. A scale
+            // that never settles still finishes, on the smoothed weight.
             if (!weight_sensor ||
                 weight_sensor->check_settling_complete(GRIND_SCALE_PRECISION_SETTLING_TIME_MS)) {
+                final_measurement(loop_data);
+            } else if (loop_data.now - phase_start_time >= GRIND_FINAL_SETTLING_TIMEOUT_MS) {
+                queue_log_message("[GRINDER] Final settling timed out; using the smoothed weight\n");
                 final_measurement(loop_data);
             }
             break;
@@ -679,19 +721,35 @@ void GrindController::update() {
         phase != GrindPhase::TARE_CONFIRM &&
         grinder->is_motor_settled();
     bool vessel_removed = false;
+    float guard_sample_weight = loop_data.current_weight;
     if (net_weight_guard_active) {
-        vessel_removed = net_weight_removal_guard_.update(loop_data.current_weight);
+        // The control loop runs several times per ADC sample. Count each
+        // sample once, so one bad reading cannot fill the confirmation count.
+        uint32_t sample_ms = 0;
+        if (weight_sensor &&
+            weight_sensor->get_latest_sample(&guard_sample_weight, &sample_ms) &&
+            sample_ms != last_guard_sample_ms_) {
+            last_guard_sample_ms_ = sample_ms;
+            vessel_removed = net_weight_removal_guard_.update(guard_sample_weight);
+        }
     } else {
         net_weight_removal_guard_.cancel_pending();
     }
 
-    if (vessel_removed) {
+    if (vessel_removed && phase == GrindPhase::FINAL_SETTLING) {
+        // The dose was already decided; lifting the cup early is not an error.
+        // Report the settled weight measured before the lift.
+        grinder->stop();
+        queue_log_message("[GRINDER] Vessel lifted during final settling; result %.2fg\n",
+                          pre_final_settled_weight_);
+        finish_weight_grind(pre_final_settled_weight_, loop_data);
+    } else if (vessel_removed) {
         timeout_phase = phase;
         grinder->stop();
         last_session_result_ = GrindSessionResult::ERROR;
 
         queue_log_message("--- VESSEL REMOVAL FAILSAFE: %.2fg <= %.2fg (pre-tare %.2fg) in phase %s ---\n",
-                          loop_data.current_weight,
+                          guard_sample_weight,
                           net_weight_removal_guard_.removal_threshold_g(),
                           net_weight_removal_guard_.reference_weight_g(),
                           get_phase_name(timeout_phase));
@@ -734,6 +792,30 @@ void GrindController::update() {
 
 // OLD predictive_grind method removed - logic now inline in update()
 
+// A motor-on weight phase that gains less than GRIND_DRY_RUN_MIN_PROGRESS_G
+// for GRIND_DRY_RUN_TIMEOUT_MS is grinding nothing: an empty hopper or a
+// blocked chute. Each gain restarts the window, so a hopper that runs dry
+// part-way through is caught too.
+bool GrindController::dry_run_detected(const GrindLoopData& loop_data) {
+    if (loop_data.current_weight >= dry_run_reference_weight_ + GRIND_DRY_RUN_MIN_PROGRESS_G) {
+        dry_run_reference_weight_ = loop_data.current_weight;
+        dry_run_reference_ms_ = loop_data.now;
+        return false;
+    }
+    return loop_data.now - dry_run_reference_ms_ >= GRIND_DRY_RUN_TIMEOUT_MS;
+}
+
+// Stops the motor and ends the session on the error screen with `message`.
+void GrindController::abort_session(GrindSessionResult result, const char* message,
+                                    const GrindLoopData& loop_data) {
+    timeout_phase = phase;
+    if (grinder) grinder->stop();
+    final_weight = loop_data.current_weight;
+    last_session_result_ = result;
+    set_error_message(message);
+    switch_phase(GrindPhase::TIMEOUT, loop_data);
+}
+
 void GrindController::reset_mechanical_anomaly_count() {
     const auto control_lock = lock_control();
     mechanical_anomaly_count_ = 0;
@@ -768,7 +850,11 @@ void GrindController::monitor_mechanical_instability(const GrindLoopData& loop_d
 }
 
 void GrindController::final_measurement(const GrindLoopData& loop_data) {
-    final_weight = weight_sensor ? weight_sensor->get_weight_high_latency() : 0.0f;
+    finish_weight_grind(weight_sensor ? weight_sensor->get_weight_high_latency() : 0.0f, loop_data);
+}
+
+void GrindController::finish_weight_grind(float measured_weight, const GrindLoopData& loop_data) {
+    final_weight = measured_weight;
 
     if (mode == GrindMode::WEIGHT && target_weight >= 1.0f && final_weight < NO_WEIGHT_DELIVERED_THRESHOLD_G) {
         timeout_phase = GrindPhase::FINAL_SETTLING;
@@ -839,6 +925,10 @@ void GrindController::switch_phase(GrindPhase new_phase, const GrindLoopData& lo
     phase = new_phase;
     control_loop_paused_ = (phase == GrindPhase::PURGE_CONFIRM);
     phase_start_time = now;
+    if (phase == GrindPhase::PRIME || phase == GrindPhase::PREDICTIVE) {
+        dry_run_reference_weight_ = weight_sensor ? weight_sensor->get_weight_low_latency() : 0.0f;
+        dry_run_reference_ms_ = now;
+    }
     
     // Reset loop counter for new phase
     current_phase_loop_count = 0;
@@ -1289,7 +1379,8 @@ void GrindController::load_motor_latency() {
     motor_response_latency_ms = preferences->getFloat("motor_lat_ms", GRIND_MOTOR_RESPONSE_LATENCY_DEFAULT_MS);
 
     // Validate loaded value
-    if (motor_response_latency_ms < GRIND_AUTOTUNE_LATENCY_MIN_MS ||
+    if (!std::isfinite(motor_response_latency_ms) ||
+        motor_response_latency_ms < GRIND_AUTOTUNE_LATENCY_MIN_MS ||
         motor_response_latency_ms > GRIND_AUTOTUNE_LATENCY_MAX_MS) {
         LOG_BLE("Warning: Invalid motor latency %.1fms in preferences, using default %.1fms\n",
                 motor_response_latency_ms, GRIND_MOTOR_RESPONSE_LATENCY_DEFAULT_MS);
@@ -1326,7 +1417,7 @@ bool GrindController::save_motor_latency(float value) {
 void GrindController::set_motor_response_latency(float value) {
     const auto control_lock = lock_control();
     // Validate value
-    if (value < GRIND_AUTOTUNE_LATENCY_MIN_MS || value > GRIND_AUTOTUNE_LATENCY_MAX_MS) {
+    if (!std::isfinite(value) || value < GRIND_AUTOTUNE_LATENCY_MIN_MS || value > GRIND_AUTOTUNE_LATENCY_MAX_MS) {
         LOG_BLE("ERROR: Cannot set invalid motor latency %.1fms (range: %.1f-%.1fms)\n",
                 value, GRIND_AUTOTUNE_LATENCY_MIN_MS, GRIND_AUTOTUNE_LATENCY_MAX_MS);
         return;
@@ -1351,7 +1442,8 @@ void GrindController::load_coast_ratio() {
     coast_ratio_ = preferences->getFloat(PREF_KEY_COAST_RATIO, GRIND_LATENCY_TO_COAST_RATIO_DEFAULT);
 
     // Validate loaded value
-    if (coast_ratio_ < GRIND_LATENCY_TO_COAST_RATIO_MIN ||
+    if (!std::isfinite(coast_ratio_) ||
+        coast_ratio_ < GRIND_LATENCY_TO_COAST_RATIO_MIN ||
         coast_ratio_ > GRIND_LATENCY_TO_COAST_RATIO_MAX) {
         LOG_BLE("Warning: Invalid coast ratio %.2f in preferences, using default %.2f\n",
                 coast_ratio_, GRIND_LATENCY_TO_COAST_RATIO_DEFAULT);
@@ -1386,7 +1478,7 @@ bool GrindController::save_coast_ratio(float value) {
 
 void GrindController::set_coast_ratio(float value) {
     const auto control_lock = lock_control();
-    if (value < GRIND_LATENCY_TO_COAST_RATIO_MIN || value > GRIND_LATENCY_TO_COAST_RATIO_MAX) {
+    if (!std::isfinite(value) || value < GRIND_LATENCY_TO_COAST_RATIO_MIN || value > GRIND_LATENCY_TO_COAST_RATIO_MAX) {
         LOG_BLE("ERROR: Cannot set invalid coast ratio %.2f (range: %.2f-%.2f)\n",
                 value, GRIND_LATENCY_TO_COAST_RATIO_MIN, GRIND_LATENCY_TO_COAST_RATIO_MAX);
         return;

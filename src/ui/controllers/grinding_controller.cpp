@@ -314,12 +314,28 @@ void GrindingUIController::handle_purge_confirm_continue() {
         }
     }
 
+    continue_after_purge(true);
+}
+
+void GrindingUIController::continue_after_purge(bool check_vessel) {
+    if (!ui_manager_ || !ui_manager_->grind_controller) {
+        return;
+    }
+
+    // The controller re-tares before grinding on. It holds while the scale
+    // reads as if the cup were still off; a lighter replacement cup can
+    // still be confirmed.
+    if (!ui_manager_->grind_controller->continue_from_purge(check_vessel)) {
+        ui_manager_->show_confirmation(
+            "Cup missing?", "The scale is lighter than at\nthe start. Put the cup back,\nor continue with this one.",
+            "CONTINUE", lv_color_hex(THEME_COLOR_WARNING),
+            [this]() { continue_after_purge(false); }, "BACK");
+        return;
+    }
+
     // Hide the purge confirmation screen and continue grinding
     ui_manager_->purge_confirm_screen.hide();
     ui_manager_->switch_to_state(UIState::GRINDING);
-
-    // Tell the grind controller to continue from PURGE_CONFIRM to PREDICTIVE
-    ui_manager_->grind_controller->continue_from_purge();
 }
 
 void GrindingUIController::update_grind_button_icon() {

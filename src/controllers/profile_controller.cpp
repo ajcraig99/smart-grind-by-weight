@@ -1,6 +1,7 @@
 #include "profile_controller.h"
 #include <Arduino.h>
 #include <string.h>
+#include <cmath>
 #include <Preferences.h>
 
 ProfileController::Snapshot ProfileController::snapshot() const {
@@ -47,9 +48,24 @@ void ProfileController::load_profiles() {
     profiles[1].time_seconds = preferences->getFloat("time1", USER_DOUBLE_ESPRESSO_TIME_S);
     profiles[2].time_seconds = preferences->getFloat("time2", USER_CUSTOM_PROFILE_TIME_S);
     
-    // Load grind mode (default to WEIGHT if not set)
+    // Stored values may be corrupt: keep them finite and in range.
+    const float default_weights[] = {USER_SINGLE_ESPRESSO_WEIGHT_G, USER_DOUBLE_ESPRESSO_WEIGHT_G,
+                                     USER_CUSTOM_PROFILE_WEIGHT_G};
+    const float default_times[] = {USER_SINGLE_ESPRESSO_TIME_S, USER_DOUBLE_ESPRESSO_TIME_S,
+                                   USER_CUSTOM_PROFILE_TIME_S};
+    for (int i = 0; i < 3; ++i) {
+        profiles[i].weight = std::isfinite(profiles[i].weight) ? clamp_weight(profiles[i].weight)
+                                                               : default_weights[i];
+        profiles[i].time_seconds = std::isfinite(profiles[i].time_seconds)
+                                       ? clamp_time(profiles[i].time_seconds)
+                                       : default_times[i];
+    }
+
+    // Load grind mode (default to WEIGHT if not set). Only weight and time
+    // are stored; anything else would leave a grind without a strategy.
     int stored_mode = preferences->getInt("grind_mode", static_cast<int>(GrindMode::WEIGHT));
-    current_grind_mode = static_cast<GrindMode>(stored_mode);
+    current_grind_mode = stored_mode == static_cast<int>(GrindMode::TIME) ? GrindMode::TIME
+                                                                          : GrindMode::WEIGHT;
     
     if (current_profile < 0 || current_profile >= USER_PROFILE_COUNT) {
         current_profile = 1;

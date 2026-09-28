@@ -9,6 +9,7 @@
 - [Unknown board ID 'esp32-s3-devkitc-1'](#unknown-board-id-esp32-s3-devkitc-1)
 - [PlatformIO Project Initialization Issues](#platformio-project-initialization-issues)
 - [Unexpected Net Weight Error](#unexpected-net-weight-error)
+- [No Beans? Error](#no-beans-error)
 - [Motor Safety Stop](#motor-safety-stop)
 - [Grind Timeout Screen](#grind-timeout-screen)
 - [Unreliable Pulse Corrections](#unreliable-pulse-corrections)
@@ -272,12 +273,24 @@ even though the cup or portafilter is still in place.
 
 Current firmware records the vessel weight immediately before tare. It only
 treats a negative reading as vessel removal when the reading approaches that
-full pre-tare weight and persists across several samples. Smaller isolated
-negative spikes are ignored.
+full pre-tare weight (or falls below -10 g when the previous zero already
+included the vessel) for three consecutive scale samples. Each sample counts
+once, so a single negative spike is ignored.
 
 If the error still occurs, download the diagnostic log from the grinder web UI
 and include the pre-tare reference, removal threshold and reported weight in a
 GitHub issue.
+
+---
+
+## No Beans? Error
+
+**Applies to:** A weight grind stopping with "No beans?".
+
+The motor ran for 5 seconds, during priming or the main grind, without the
+scale gaining 0.2 g. Refill the hopper, check that beans are feeding and that
+the chute is clear. If beans are feeding, check that the cup sits on the scale
+platform and that the load cell responds on **Menu → Scale**.
 
 ---
 

@@ -233,11 +233,12 @@ void loop() {
         uint32_t intervals = elapsed_ms / kUptimeIntervalMs;
         pending_uptime_minutes += intervals * kUptimeIntervalMinutes;
         last_uptime_update += intervals * kUptimeIntervalMs;
-
-        if (pending_uptime_minutes > 0) {
-            statistics_manager.update_uptime(pending_uptime_minutes);
-            pending_uptime_minutes = 0;
-        }
+    }
+    // The NVS write can erase flash, which stalls both cores; wait for the
+    // grind to finish.
+    if (pending_uptime_minutes > 0 && !grind_controller.is_active()) {
+        statistics_manager.update_uptime(pending_uptime_minutes);
+        pending_uptime_minutes = 0;
     }
     
     FirmwareValidation::update(current_time, task_manager.are_tasks_healthy());

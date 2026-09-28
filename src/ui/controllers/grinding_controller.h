@@ -21,6 +21,7 @@ public:
     void handle_pulse_button();
     void handle_layout_toggle();
     void handle_purge_confirm_continue();
+    void continue_after_purge(bool check_vessel);
 
     void update_grind_button_icon();
     void update_button_layout();

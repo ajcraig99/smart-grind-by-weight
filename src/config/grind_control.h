@@ -33,6 +33,11 @@ enum class GrinderPurgeMode {
 #define GRIND_TIMEOUT_SEC 60                                              // Maximum time for grind operation
 #define MANUAL_GRIND_TIMEOUT_SEC 30                                       // Safety cutoff for target-free manual grinding
 #define GRIND_MAX_PULSE_ATTEMPTS 10                                       // Maximum pulse corrections before stopping
+#define GRIND_PAUSE_MAX_MS 300000UL                                       // A paused time grind ends after 5 minutes
+
+// Dry-run protection (empty hopper or blocked chute)
+#define GRIND_DRY_RUN_TIMEOUT_MS 5000                                     // Motor-on time allowed without progress in PRIME or PREDICTIVE
+#define GRIND_DRY_RUN_MIN_PROGRESS_G 0.2f                                 // Weight gain that counts as progress
 
 // Flow rate detection
 #define GRIND_FLOW_DETECTION_THRESHOLD_GPS 0.5f                           // Minimum coffee flow rate to establish first grinds reachinig the cup = latency
@@ -86,6 +91,8 @@ enum class GrinderPurgeMode {
 // Scale settling timing
 #define GRIND_SCALE_PRECISION_SETTLING_TIME_MS 500                                // High-precision settling time
 #define GRIND_SCALE_SETTLING_TIMEOUT_MS 10000                                     // Maximum time to wait for settling
+#define GRIND_PULSE_SETTLING_TIMEOUT_MS 3000                                      // Longest wait for a settled reading around a correction pulse
+#define GRIND_FINAL_SETTLING_TIMEOUT_MS 5000                                      // Longest wait for the final settled weight
 
 // Tare and calibration timing (hardware sample rate dependent)
 #define GRIND_TARE_SAMPLE_WINDOW_MS 500                                           // Time window for tare sampling

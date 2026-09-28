@@ -57,7 +57,8 @@ python3 tools/grinder.py analyze
 **Grinder Purge/Prime:**
 - **Always runs** before weight-mode grinding to saturate the grinder for accurate latency detection
 - **Prime mode**: Keeps coffee, continues immediately to PREDICTIVE phase
-- **Purge mode** (default): Shows confirmation popup, waits for user to discard stale grinds, then continues
+- **Purge mode** (default): Shows confirmation popup, waits for user to discard stale grinds, then re-tares (TARING → TARE_CONFIRM) and resumes in PREDICTIVE
+- **Dry run**: PRIME or PREDICTIVE gaining under `GRIND_DRY_RUN_MIN_PROGRESS_G` in `GRIND_DRY_RUN_TIMEOUT_MS` stops with "No beans?"
 - **Configurable amount**: 0.1g-2.5g (default 1.0g)
 - **Purge popup**: its checkbox switches the mode from Purge to Prime in preferences
 - **Logging disabled** during PURGE_CONFIRM phase to avoid capturing data while paused

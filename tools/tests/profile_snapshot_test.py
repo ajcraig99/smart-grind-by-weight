@@ -19,6 +19,7 @@ class ProfileSnapshotTest(unittest.TestCase):
         harness = r'''
 #include <cassert>
 #include <atomic>
+#include <cmath>
 #include <cstring>
 #include <cstdint>
 #include <map>
@@ -114,6 +115,24 @@ int main() {
         assert(!live.apply_web_settings(3, GrindMode::TIME, weights_b, times_b));
         assert(store.writes == 0);
     }
+
+    // Corrupt stored values load as defaults or the nearest limit, and an
+    // unknown grind mode loads as weight mode.
+    Preferences corrupt;
+    corrupt.floats["weight0"] = NAN; corrupt.floats["weight1"] = 1e9f;
+    corrupt.floats["time1"] = 0.0f; corrupt.floats["time2"] = -INFINITY;
+    corrupt.integers["grind_mode"] = static_cast<int>(GrindMode::MANUAL);
+    ProfileController loaded; loaded.init(&corrupt);
+    const auto safe = loaded.snapshot();
+    assert(safe.profiles[0].weight == USER_SINGLE_ESPRESSO_WEIGHT_G);
+    assert(safe.profiles[1].weight == USER_MAX_TARGET_WEIGHT_G);
+    assert(safe.profiles[1].time_seconds == USER_MIN_TARGET_TIME_S);
+    assert(safe.profiles[2].time_seconds == USER_CUSTOM_PROFILE_TIME_S);
+    assert(safe.mode == GrindMode::WEIGHT);
+    corrupt.integers["grind_mode"] = 7;
+    ProfileController unknown; unknown.init(&corrupt); assert(unknown.snapshot().mode == GrindMode::WEIGHT);
+    corrupt.integers["grind_mode"] = static_cast<int>(GrindMode::TIME);
+    ProfileController timed; timed.init(&corrupt); assert(timed.snapshot().mode == GrindMode::TIME);
 }
 '''
         with tempfile.TemporaryDirectory() as tmp:

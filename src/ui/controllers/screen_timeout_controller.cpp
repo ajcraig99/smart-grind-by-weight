@@ -188,7 +188,10 @@ bool ScreenTimeoutController::is_protected_state() const {
     }
 
     UIState state = ui_manager_->state_machine->get_current_state();
-    return state == UIState::GRINDING ||
+    // A paused time grind is left alone on screen; let it dim like any idle screen.
+    const bool grind_paused = ui_manager_->grind_controller &&
+                              ui_manager_->grind_controller->is_grind_paused();
+    return (state == UIState::GRINDING && !grind_paused) ||
            state == UIState::OTA_UPDATE ||
            state == UIState::OTA_UPDATE_FAILED;
 }

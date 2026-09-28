@@ -25,7 +25,9 @@ The system uses a **zero-shot learning algorithm** requiring no prior knowledge 
    - Saturates the grinder before main grind for accurate latency detection
    - Configurable amount: 0.1g-5.0g (default 1.0g)
    - **Prime mode**: Keeps coffee, continues immediately after settling
-   - **Purge mode**: Shows confirmation popup, waits for user to discard stale grinds
+   - **Purge mode**: Shows confirmation popup, waits for user to discard stale grinds,
+     then re-tares before the main grind
+   - A motor run that gains less than 0.2 g in 5 seconds stops as a dry run
    - Logging and chart updates disabled during purge confirmation
 
 3. **Predictive Phase**

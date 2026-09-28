@@ -167,6 +167,15 @@ private:
     // Detect actual cup/portafilter removal without reacting to isolated
     // negative load-cell spikes.
     NetWeightRemovalGuard net_weight_removal_guard_;
+    uint32_t last_guard_sample_ms_ = 0;   // Timestamp of the sample the guard last counted
+    float pre_final_settled_weight_ = 0;  // Settled weight that led to FINAL_SETTLING
+
+    // Dry-run detection: weight and time of the last GRIND_DRY_RUN_MIN_PROGRESS_G gain
+    float dry_run_reference_weight_ = 0;
+    unsigned long dry_run_reference_ms_ = 0;
+
+    // CONTINUE after a purge re-tares, then resumes in PREDICTIVE, not PRIME.
+    bool resume_after_purge_ = false;
 
     DiagnosticsController* diagnostics_controller_ = nullptr;
 
@@ -198,7 +207,10 @@ public:
     void user_tare_request();
     void return_to_idle(); // Called by UI to acknowledge completion/timeout
     void stop_grind();
-    void continue_from_purge(); // Called by UI to continue from PURGE_CONFIRM to PREDICTIVE
+    // Called by UI to continue from PURGE_CONFIRM: re-tares, then resumes in
+    // PREDICTIVE. Returns false, still waiting, when check_vessel is set and
+    // the scale reads as if the vessel were still off.
+    bool continue_from_purge(bool check_vessel = true);
     void update(); // Core 0 main control method - runs at fixed RTOS interval
     
     // Time mode pulse functionality
@@ -287,9 +299,12 @@ private:
     bool queue_terminal_session();
     void switch_phase(GrindPhase new_phase, const GrindLoopData& loop_data = {});
     void final_measurement(const GrindLoopData& loop_data);
+    void finish_weight_grind(float measured_weight, const GrindLoopData& loop_data);
     void monitor_mechanical_instability(const GrindLoopData& loop_data);
 
     bool check_timeout() const;
+    bool dry_run_detected(const GrindLoopData& loop_data);
+    void abort_session(GrindSessionResult result, const char* message, const GrindLoopData& loop_data);
     uint8_t get_current_phase_id() const;
     
     // UI event emission - thread-safe for Core 0

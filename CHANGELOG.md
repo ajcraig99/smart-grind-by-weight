@@ -51,6 +51,31 @@ line. Earlier release history remains available in the original project's
 - Build with `-O2` instead of `-Ofast`, which let the compiler delete the
   checks that reject corrupt (NaN or infinite) calibration and settings values.
 
+### Grind control
+
+- Stop a weight grind with "No beans?" when the motor runs for 5 seconds
+  without gaining 0.2 g, during priming or the main grind. An empty hopper or
+  blocked chute previously ran for up to 55 seconds.
+- Re-tare after **CONTINUE** on the purge prompt, so grounds left in the cup
+  or a different cup no longer change the dose. The grinder asks to confirm
+  when the scale reads as if the cup were still off.
+- Detect a lifted cup on grinds whose zero already included it (most grinds
+  after the first), using a fixed -10 g threshold. Count each scale sample
+  once: the 20 ms control loop saw each sample about five times, so one bad
+  reading could stop a grind as "Err: neg wt".
+- Lifting the cup during final settling finishes the grind with the settled
+  weight measured before the lift, instead of showing "Err: neg wt".
+- Stop waiting for a settled reading after 3 seconds around finishing pulses
+  and 5 seconds at the end, and decide on the smoothed weight. A noisy scale
+  previously ended the grind as a timeout with no weight.
+- End a paused time grind after 5 minutes, and let the display dim while
+  paused.
+- Reject corrupt stored latency, coast-ratio, profile and grind-mode values.
+- Keep flash writes and blocking logs out of motor phases: the filesystem check
+  no longer writes a test file and skips grinds, the uptime counter is saved
+  after the grind, and the flow-start log is queued.
+- Reboot on an internal display-library error instead of freezing the screen.
+
 ### Scale readings
 
 - Share the sample buffer safely between the sampling task and every reader.

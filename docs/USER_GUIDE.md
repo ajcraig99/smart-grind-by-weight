@@ -58,6 +58,9 @@ Access **Menu → Grind Settings** to configure:
   - **Purge mode** (default): Prompts you to discard stale grinds before continuing
   - **Amount slider**: Configure purge/prime amount (0.1g-5.0g, default 1.0g). Amount is a minimum target; actual output will be slightly higher.
   - **"Keep purge grinds from now on" checkbox**: Appears during purge confirmation - switches to Prime mode when checked
+  - **CONTINUE** re-tares before the main grind, so empty the cup (or swap it)
+    before pressing it. If the scale reads as if the cup were still off, the
+    grinder asks you to put it back; a lighter replacement cup can be confirmed
 
   *Explanation:* The time between motor start and grinds hitting the cup (grind latency) is used to predict the coast time (how long grinds will keep coming after the motor is disengaged). Purging clears stale coffee and saturates the grinder with fresh grounds, ensuring accurate latency detection. If you prefer to keep all coffee without manual intervention, select Prime mode.
 
@@ -69,6 +72,12 @@ These steps describe the default grind-by-weight workflow:
 4. Press the GRIND button – the scale will tare automatically
 5. The system grinds to the precise target weight using the predictive algorithm
 6. GRIND COMPLETE shows the final settled weight in grams (with statistics)
+
+If the motor runs for 5 seconds without adding 0.2 g, the grind stops with
+**No beans?**: refill the hopper or clear the chute. Lifting the cup while the
+last weight settles finishes the grind with the weight measured just before;
+lifting it earlier stops the motor with **Err: neg wt**. A paused time grind
+ends after 5 minutes.
 
 > Optional automation (Menu → Grind Settings): enable auto-start and set the cup threshold below the empty cup or portafilter weight. The system waits for the load cell to gather enough quiet samples before arming itself, then auto-return jumps back to Ready whenever that cup is lifted off again.
 

@@ -47,8 +47,11 @@ class ControllerSerializationTest(unittest.TestCase):
 #include <thread>
 #include <type_traits>
 #include "src/controllers/grind_session.h"
+#include "src/controllers/grind_session_result.h"
 #include "src/system/operation_interlock.h"
 #define LOG_BLE(...) ((void)0)
+constexpr float GRIND_DRY_RUN_MIN_PROGRESS_G = 0.2f;
+constexpr int GRIND_DRY_RUN_TIMEOUT_MS = 5000;
 constexpr int GRIND_PURGE_MODE_DEFAULT = 1;
 constexpr float GRIND_PURGE_AMOUNT_DEFAULT_G = 1;
 constexpr unsigned long GRIND_PRIME_MAX_DURATION_MS = 5000;
@@ -91,6 +94,8 @@ public:
     void queue_flash_operation(const FlashOpRequest&) {}
     template<class... Args> void queue_log_message(Args...) {}
     void switch_phase(GrindPhase next, const GrindLoopData& = {}) { phase = next; }
+    bool dry_run_detected(const GrindLoopData&) { return false; }
+    void abort_session(GrindSessionResult, const char*, const GrindLoopData&) {}
     void stop_grind();
     void return_to_idle() { phase = GrindPhase::IDLE; }
     bool is_active() const;
@@ -185,7 +190,7 @@ int main() {
         for signature in (
             "bool GrindController::start_grind(", "void GrindController::update()",
             "void GrindController::stop_grind()", "void GrindController::return_to_idle()",
-            "void GrindController::continue_from_purge()", "void GrindController::pause_grind()",
+            "bool GrindController::continue_from_purge(", "void GrindController::pause_grind()",
             "void GrindController::resume_grind()", "void GrindController::start_additional_pulse()",
             "void GrindController::process_queued_flash_operations()",
             "void GrindController::ui_acknowledge_phase_transition()",

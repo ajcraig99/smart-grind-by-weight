@@ -25,10 +25,20 @@ int main() {
     assert(!guard.update(-391.0f));
     assert(guard.update(-392.0f));
 
-    // With no meaningful vessel weight, the removal guard stays disabled.
+    // Without a vessel reference the fixed fallback threshold applies.
     guard.reset(0.0f);
     assert(!guard.has_reference());
+    assert(guard.removal_threshold_g() == NetWeightRemovalGuard::NO_REFERENCE_REMOVAL_THRESHOLD_G);
+    assert(!guard.update(-9.0f));
     assert(!guard.update(-100.0f));
+    assert(!guard.update(-100.0f));
+    assert(guard.update(-100.0f));
+    guard.reset(0.0f);
+    assert(!guard.update(-100.0f));
+    assert(!guard.update(-9.0f));  // a reading above the threshold restarts the count
+    assert(!guard.update(-100.0f));
+    assert(!guard.update(-100.0f));
+    assert(guard.update(-100.0f));
 
     return 0;
 }

@@ -151,8 +151,10 @@ void FileIOTask::task_impl() {
         grind_controller.process_queued_flash_operations();
         grind_controller.process_queued_log_messages();
         
-        // Periodic filesystem health check
-        if (cycle_start_time - last_filesystem_check_time >= 30000) { // Every 30 seconds
+        // Periodic filesystem health check, never while the motor may run:
+        // flash access stalls the cache on both cores.
+        if (cycle_start_time - last_filesystem_check_time >= 30000 && // Every 30 seconds
+            !grind_controller.is_active()) {
             check_filesystem_health();
             last_filesystem_check_time = cycle_start_time;
         }
@@ -297,15 +299,12 @@ void FileIOTask::check_filesystem_health() {
 }
 
 bool FileIOTask::validate_filesystem_access() {
-    // Try a simple filesystem operation to validate access
-    File test_file = LittleFS.open("/test_access", "w");
-    if (test_file) {
-        test_file.println("test");
-        test_file.close();
-        LittleFS.remove("/test_access");
-        return true;
-    }
-    return false;
+    // Read-only check: opening the root directory proves the filesystem is
+    // mounted without the flash erase and write of a test file.
+    File root = LittleFS.open("/");
+    const bool available = root && root.isDirectory();
+    if (root) root.close();
+    return available;
 }
 
 void FileIOTask::perform_filesystem_maintenance() {

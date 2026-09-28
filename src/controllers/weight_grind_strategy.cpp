@@ -91,14 +91,17 @@ void WeightGrindStrategy::run_predictive_phase(GrindController& controller,
         if (current_flow_rate >= GRIND_FLOW_DETECTION_THRESHOLD_GPS) {
             controller.grind_latency_ms = loop_data.now - controller.phase_start_time;
             controller.flow_start_confirmed = true;
-            LOG_BLE("[PREDICTIVE] Flow start CONFIRMED! Latency: %.1fms, Flow: %.2fg/s\n",
-                    controller.grind_latency_ms, current_flow_rate);
+            // Queued: a blocking serial write here would delay the stop decision.
+            controller.queue_log_message("[PREDICTIVE] Flow start CONFIRMED! Latency: %.1fms, Flow: %.2fg/s\n",
+                                         static_cast<float>(controller.grind_latency_ms), current_flow_rate);
         }
     }
 
     if (controller.flow_start_confirmed) {
         const uint32_t flow_rate_calc_window_ms = 1500;
-        if (loop_data.now > (controller.phase_start_time + controller.grind_latency_ms + flow_rate_calc_window_ms)) {
+        // Elapsed time in integer ms; adding millis() to a float loses resolution with uptime.
+        const uint32_t elapsed_ms = loop_data.now - controller.phase_start_time;
+        if (elapsed_ms > static_cast<uint32_t>(controller.grind_latency_ms) + flow_rate_calc_window_ms) {
             float current_flow_rate = controller.weight_sensor->get_flow_rate(flow_rate_calc_window_ms);
 
             if (current_flow_rate > GRIND_FLOW_DETECTION_THRESHOLD_GPS) {
@@ -126,7 +129,12 @@ void WeightGrindStrategy::run_pulse_decision_phase(GrindController& controller,
 
     float settled_weight;
     if (!controller.weight_sensor->check_settling_complete(GRIND_SCALE_PRECISION_SETTLING_TIME_MS, &settled_weight)) {
-        return;
+        if (loop_data.now - controller.phase_start_time < GRIND_PULSE_SETTLING_TIMEOUT_MS) {
+            return;
+        }
+        // A scale that never settles still gets a decision, on the smoothed weight.
+        settled_weight = controller.weight_sensor->get_weight_high_latency();
+        controller.queue_log_message("[PULSE] Settling timed out; deciding on %.2fg\n", settled_weight);
     }
 
     float conservative_target = controller.target_weight - GRIND_ACCURACY_TOLERANCE_G;
@@ -136,6 +144,7 @@ void WeightGrindStrategy::run_pulse_decision_phase(GrindController& controller,
 
     if (controller.target_weight - settled_weight < GRIND_ACCURACY_TOLERANCE_G ||
         controller.pulse_attempts >= GRIND_MAX_PULSE_ATTEMPTS) {
+        controller.pre_final_settled_weight_ = settled_weight;
         controller.switch_phase(GrindPhase::FINAL_SETTLING, loop_data);
         return;
     }
@@ -165,8 +174,12 @@ void WeightGrindStrategy::run_pulse_settling_phase(GrindController& controller,
         return;
     }
 
-    if (loop_data.now - controller.phase_start_time >= controller.grind_latency_ms + GRIND_MOTOR_SETTLING_TIME_MS) {
-        if (controller.weight_sensor->check_settling_complete(GRIND_MOTOR_SETTLING_TIME_MS)) {
+    const uint32_t elapsed_ms = loop_data.now - controller.phase_start_time;
+    if (elapsed_ms >= static_cast<uint32_t>(controller.grind_latency_ms) + GRIND_MOTOR_SETTLING_TIME_MS) {
+        // PULSE_DECISION applies its own settling check, so a scale that never
+        // settles here moves on after the timeout.
+        if (controller.weight_sensor->check_settling_complete(GRIND_MOTOR_SETTLING_TIME_MS) ||
+            elapsed_ms >= GRIND_PULSE_SETTLING_TIMEOUT_MS) {
             controller.switch_phase(GrindPhase::PULSE_DECISION, loop_data);
         }
     }
