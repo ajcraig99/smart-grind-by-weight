@@ -24,6 +24,7 @@ fork at `b4a0be6`. The review's file:line references are to upstream
 | `a13c928` | Dose limit of 40 g |
 | `e35bd56` | Touchscreen guard gaps; removal threshold after the purge re-tare |
 | `c40f5a2` | Follow-up review: purge prompt, settling, tare, motor safety stop |
+| `fba0c68` | Follow-up review: request admission, update confirmation, rollback reporting |
 
 Verification on this branch: host tests (`tools/tests`) and V1 and V2 firmware
 builds. **Nothing here has been tested on hardware.** The bench checks at the
@@ -137,18 +138,18 @@ G and W so they do not clash with the review's.
 | G10 | Motor Test and Tune Pulses ignore the safety stop | Fixed | `c40f5a2` | "Motor stopped" notice |
 | G11 | The purge prompt has no time limit | Fixed | `c40f5a2` | Ends after 5 minutes, like a paused time grind |
 | G12 | The settling rule is worded more strictly than the code | Fixed | `c40f5a2` | Comment corrected |
-| W1 | Bodies of refused requests are buffered before the check | Fixed | | Refused as soon as the headers end (403, 413, 415), body discarded unread |
-| W2 | Updates accepted while the new image awaits confirmation | Fixed | | Web and Bluetooth refuse; confirmation waits if another image is selected to boot |
-| W3 | The health check only confirms that tasks were created | Fixed | | Per-task loop heartbeats. Touch reads are not checked: the driver notes that the controller NACKs when idle. USB recovery documented |
+| W1 | Bodies of refused requests are buffered before the check | Fixed | `fba0c68` | Refused as soon as the headers end (403, 413, 415), body discarded unread |
+| W2 | Updates accepted while the new image awaits confirmation | Fixed | `fba0c68` | Web and Bluetooth refuse; confirmation waits if another image is selected to boot |
+| W3 | The health check only confirms that tasks were created | Fixed | `fba0c68` | Per-task loop heartbeats. Touch reads are not checked: the driver notes that the controller NACKs when idle. USB recovery documented |
 | W4 | The update permission is not tied to whoever granted it | Open | | Design decision: a code shown on the grinder would have to be sent by the web page and both Bluetooth tools |
-| W5 | A prepared Wi-Fi update briefly shows "Update Failed" | Fixed | | |
-| W6 | A rollback is silent | Fixed | | Record kept until confirmation; Wi-Fi updates record the image's hash |
-| W7 | The stall check can abort a healthy Bluetooth update | Fixed | | Wrap-safe signed comparison |
-| W8 | A refused step uses up the permission or the upload token | Fixed | | |
-| W9 | Setup-network exemptions cover the whole API | Fixed | | Any-host reads for pages and probes only; "null" origin for the setup API only |
-| W10 | A failed confirmation is never retried | Fixed | | Retried every 5 s |
-| W11 | The web flasher ignores refusal and error statuses | Fixed | | |
-| W12 | The screensaver upload accepts repeated file parts | Fixed | | One image per request |
+| W5 | A prepared Wi-Fi update briefly shows "Update Failed" | Fixed | `fba0c68` | |
+| W6 | A rollback is silent | Fixed | `fba0c68` | Record kept until confirmation; Wi-Fi updates record the image's hash |
+| W7 | The stall check can abort a healthy Bluetooth update | Fixed | `fba0c68` | Wrap-safe signed comparison |
+| W8 | A refused step uses up the permission or the upload token | Fixed | `fba0c68` | |
+| W9 | Setup-network exemptions cover the whole API | Fixed | `fba0c68` | Any-host reads for pages and probes only; "null" origin for the setup API only |
+| W10 | A failed confirmation is never retried | Fixed | `fba0c68` | Retried every 5 s |
+| W11 | The web flasher ignores refusal and error statuses | Fixed | `fba0c68` | |
+| W12 | The screensaver upload accepts repeated file parts | Fixed | `fba0c68` | One image per request |
 | W13 | The busy check for transfers is not atomic with the transfer flag | Open | | A grind started in the few milliseconds before a transfer sets its flag overlaps flash I/O; needs transfers to take the operation interlock |
 
 ## Bench checks before first use
