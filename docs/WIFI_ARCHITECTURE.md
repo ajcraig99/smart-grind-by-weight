@@ -92,7 +92,9 @@ releases.
   enable remote start or updates.
 - The update permission is not tied to whoever granted it: while it is open,
   the first client on the LAN (or in Bluetooth range) to start an update uses
-  it, and `/api/v1/status` shows that it is open.
+  it, and `/api/v1/status` shows that it is open. Accepted by the owner rather
+  than adding a code that every update tool would have to send; allow updates
+  only just before starting one, and cancel an unused permission.
 - An update that breaks the touchscreen, but keeps every task looping for
   20 seconds, is confirmed and cannot be replaced wirelessly, because
   **Allow Update** cannot be tapped. Reinstall over USB (see

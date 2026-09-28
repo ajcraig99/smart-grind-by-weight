@@ -243,7 +243,9 @@ Remote start and Wi-Fi can only be changed on the grinder itself.
 
 Firmware updates over Wi-Fi or Bluetooth need **Menu → Firmware Update → Allow
 Update** first. The permission covers one update started within 2 minutes; tap
-**Cancel** to withdraw it.
+**Cancel** to withdraw it. While it is open, any device on your network or in
+Bluetooth range can use it, so allow it only when you are about to start the
+update yourself.
 
 ## Bluetooth connectivity
 

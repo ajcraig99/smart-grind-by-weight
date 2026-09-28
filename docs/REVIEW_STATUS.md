@@ -10,6 +10,7 @@ fork at `b4a0be6`. The review's file:line references are to upstream
 - **Fixed:** fixed on this branch, in the commit listed.
 - **Partly:** the main risk is fixed; the note says what remains.
 - **Open:** not changed yet, with the reason.
+- **Accepted:** left as it is by the owner's decision, as a documented risk.
 
 **Commits on this branch:**
 
@@ -141,7 +142,7 @@ G and W so they do not clash with the review's.
 | W1 | Bodies of refused requests are buffered before the check | Fixed | `fba0c68` | Refused as soon as the headers end (403, 413, 415), body discarded unread |
 | W2 | Updates accepted while the new image awaits confirmation | Fixed | `fba0c68` | Web and Bluetooth refuse; confirmation waits if another image is selected to boot |
 | W3 | The health check only confirms that tasks were created | Fixed | `fba0c68` | Per-task loop heartbeats. Touch reads are not checked: the driver notes that the controller NACKs when idle. USB recovery documented |
-| W4 | The update permission is not tied to whoever granted it | Open | | Design decision: a code shown on the grinder would have to be sent by the web page and both Bluetooth tools |
+| W4 | The update permission is not tied to whoever granted it | Accepted | | Owner's decision (2026-09-28): no pairing code; listed under accepted residual risks in [WIFI_ARCHITECTURE.md](WIFI_ARCHITECTURE.md#security-model) |
 | W5 | A prepared Wi-Fi update briefly shows "Update Failed" | Fixed | `fba0c68` | |
 | W6 | A rollback is silent | Fixed | `fba0c68` | Record kept until confirmation; Wi-Fi updates record the image's hash |
 | W7 | The stall check can abort a healthy Bluetooth update | Fixed | `fba0c68` | Wrap-safe signed comparison |
