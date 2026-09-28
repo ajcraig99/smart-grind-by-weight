@@ -43,19 +43,23 @@ Before flashing, verify that the selected image matches the display generation. 
    - After installation, device is ready for wireless updates
 
 2. **Future Updates (Wi-Fi Recommended)**
-   - When the green refresh symbol appears, tap it and confirm **Install**; or
-     open **Menu → Wi-Fi** and choose **Install update**
-   - Alternatively, open `http://smartgrind.local` (or the IP shown on the
-     Wi-Fi page), choose **Settings → System & updates**, and install the latest
-     stable release there
-   - The grinder chooses the matching V1 or V2 image, validates it, installs it
-     and restarts; keep it powered until the update completes
-   - Manual `.bin` upload from the
-     [Community releases page](https://github.com/Clinteastman/smart-grind-by-weight/releases)
-     remains available as an advanced fallback
+   - Switch Wi-Fi on at **Menu → Wi-Fi** if it is off, and join your network
+   - On the grinder, open **Menu → Firmware Update** and tap **Allow Update**.
+     The permission covers one update started within 2 minutes; updates
+     without it are refused over both Wi-Fi and Bluetooth
+   - Open `http://smartgrind.local` (or the IP shown on the Wi-Fi page), choose
+     **Settings → System & updates**, and upload the matching V1 or V2
+     application `.bin`
+   - The grinder validates the image, installs it and restarts; keep it powered
+     until the update completes
+   - One-tap GitHub release installs (the green refresh symbol and
+     **Menu → Wi-Fi → Install update**) exist only in builds with
+     `NETWORK_RELEASE_UPDATES_ENABLED` set to 1 in `src/config/network.h`. It
+     is off by default because the configured release mirror belongs to the
+     upstream fork
 
    BLE updating remains available as a fallback when the grinder cannot join
-   the local Wi-Fi network.
+   the local Wi-Fi network; it needs the same **Allow Update** step.
 
 **Key Benefits:**
 - ✅ **No downloads needed** - firmware hosted automatically
@@ -74,8 +78,9 @@ flasher is unavailable, follow
 [Initial USB Flashing](DEVELOPMENT.md#initial-usb-flashing) to build and upload
 the matching V1 or V2 target with PlatformIO.
 
-For an existing Smart Grind installation, enable Bluetooth on the grinder and
-upload a matching release image with:
+For an existing Smart Grind installation, enable Bluetooth on the grinder, tap
+**Menu → Firmware Update → Allow Update**, and within 2 minutes upload a
+matching image with:
 
 ```bash
 python3 tools/grinder.py upload smart-grind-by-weight-vX.X.X.bin

@@ -27,6 +27,9 @@ class WebOtaInterlockTest(unittest.TestCase):
             "void DeviceWebServer::handle_ota_upload(",
             "bool DeviceWebServer::start_github_ota(",
             "void DeviceWebServer::update()",
+            "void DeviceWebServer::issue_upload_token()",
+            "void DeviceWebServer::clear_upload_token()",
+            "bool DeviceWebServer::take_upload_token(",
         ))
         state = re.search(r"struct OtaRequestState \{.*?\};", source, re.S).group()
         harness = r'''
@@ -41,7 +44,10 @@ class WebOtaInterlockTest(unittest.TestCase):
 #include <string>
 #include <thread>
 #include <algorithm>
+#include <cstdio>
+#include <cstring>
 #define SMART_GRIND_SIM 1
+#define NETWORK_RELEASE_UPDATES_ENABLED 1
 #define LOG_BLE(...) ((void)0)
 struct String : std::string {
     using std::string::string;
@@ -69,6 +75,7 @@ constexpr size_t OTA_MIN_INTERNAL_HEAP=65536, OTA_DOWNLOAD_TASK_STACK=12288, UPD
 constexpr int MALLOC_CAP_INTERNAL=1, MALLOC_CAP_8BIT=2, pdPASS=1, U_FLASH=0;
 constexpr size_t UPDATE_SIZE_UNKNOWN=0;
 size_t free_heap=100000;
+uint32_t esp_random() { static uint32_t x=0x12345678; x=x*1664525U+1013904223U; return x; }
 size_t heap_caps_get_free_size(int) { return free_heap; }
 struct { bool connected=true; bool is_connected() const { return connected; } } network_manager;
 enum class GrindMode { WEIGHT, TIME, MANUAL };
@@ -221,6 +228,20 @@ int main() {
     assert(recovery.reboot_pending_ && recovery.is_ota_active());
     assert(!operation_interlock().try_acquire() && !recovery.request_ota_preparation());
     operation_interlock().release(recovery.operation_token_);
+    // A prepared upload token is single-use and dies with the preparation.
+    DeviceWebServer tokens; setup(tokens);
+    assert(!tokens.take_upload_token(String()));
+    tokens.issue_upload_token();
+    const String upload_token(tokens.ota_upload_token_);
+    assert(upload_token.size()==32);
+    assert(!tokens.take_upload_token(String("0")) && !tokens.take_upload_token(String()));
+    String altered(upload_token); altered[5] = altered[5]=='0' ? '1' : '0';
+    assert(!tokens.take_upload_token(altered));
+    assert(tokens.take_upload_token(upload_token) && !tokens.take_upload_token(upload_token));
+    tokens.issue_upload_token(); tokens.recover_from_ota_failure();
+    assert(!tokens.take_upload_token(String(tokens.ota_upload_token_)) && tokens.ota_upload_token_[0]==0);
+    tokens.issue_upload_token(); tokens.finish_ota(false);
+    assert(tokens.ota_upload_token_[0]==0);
 }
 '''
         with tempfile.TemporaryDirectory() as tmp:

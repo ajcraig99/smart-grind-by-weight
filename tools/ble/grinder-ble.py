@@ -138,6 +138,9 @@ BLE_OTA_READY = 0x01
 BLE_OTA_RECEIVING = 0x02
 BLE_OTA_SUCCESS = 0x03
 BLE_OTA_ERROR = 0x04
+BLE_OTA_VALIDATION_ERROR = 0x05
+BLE_OTA_NOT_AUTHORIZED = 0x06
+BLE_OTA_FAILURE_STATUSES = (BLE_OTA_ERROR, BLE_OTA_VALIDATION_ERROR, BLE_OTA_NOT_AUTHORIZED)
 
 BLE_DATA_IDLE = 0x20
 BLE_DATA_EXPORTING = 0x21
@@ -367,7 +370,9 @@ class GrinderBLETool:
         while time.time() - start_time < timeout:
             if self.current_ota_status == expected_status:
                 return True
-        
+            if self.current_ota_status in BLE_OTA_FAILURE_STATUSES:
+                return False
+
             self.status_updated.clear()
             try:
                 await asyncio.wait_for(self.status_updated.wait(), timeout=1)
@@ -563,9 +568,18 @@ class GrinderBLETool:
             start_data += struct.pack('<B', 0)
             
         self.safe_print(f"[INFO] Sending {'full' if is_full_update else 'delta'} update flag")
+        self.current_ota_status = BLE_OTA_IDLE  # Ignore a failure left over from an earlier attempt
         await self.client.write_gatt_char(BLE_OTA_CONTROL_CHAR_UUID, bytes([BLE_OTA_CMD_START]) + start_data)
         
-        if not await self.wait_for_ota_status(BLE_OTA_RECEIVING, timeout=15): return False
+        if not await self.wait_for_ota_status(BLE_OTA_RECEIVING, timeout=15):
+            if self.current_ota_status == BLE_OTA_NOT_AUTHORIZED:
+                self.safe_print("[ERROR] The grinder refused the update. On the grinder open "
+                                "Menu > Firmware Update and tap Allow Update, then run the upload "
+                                "again within 2 minutes.")
+            else:
+                self.safe_print("[ERROR] The grinder did not accept the update start. Check that it is "
+                                "idle and not transferring data.")
+            return False
         
         start_time = time.time()
         try:

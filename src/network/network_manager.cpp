@@ -29,7 +29,9 @@ void SmartGrindNetworkManager::init(Preferences* preferences) {
 }
 
 void SmartGrindNetworkManager::update() {
-    if (!initialized_.load() || !enabled_.load()) return;
+    if (!initialized_.load()) return;
+    apply_pending_request();
+    if (!enabled_.load()) return;
 
     const wl_status_t wifi_status = WiFi.status();
     if (wifi_status == WL_CONNECTED) {
@@ -78,6 +80,47 @@ bool SmartGrindNetworkManager::set_enabled(bool enabled) {
     return true;
 }
 
+void SmartGrindNetworkManager::request_enabled(bool enabled) {
+    pending_request_.store(enabled ? PendingRequest::ENABLE : PendingRequest::DISABLE);
+}
+
+void SmartGrindNetworkManager::request_forget_network() {
+    pending_request_.store(PendingRequest::FORGET);
+}
+
+bool SmartGrindNetworkManager::desired_enabled() const {
+    switch (pending_request_.load()) {
+        case PendingRequest::ENABLE: return true;
+        case PendingRequest::DISABLE: return false;
+        case PendingRequest::FORGET:
+        case PendingRequest::NONE: break;
+    }
+    return enabled_.load();
+}
+
+void SmartGrindNetworkManager::apply_pending_request() {
+    switch (pending_request_.exchange(PendingRequest::NONE)) {
+        case PendingRequest::ENABLE:
+            if (!enabled_.load()) {
+                LOG_BLE("[WIFI] Wi-Fi switched on at the grinder\n");
+                set_enabled(true);
+            }
+            break;
+        case PendingRequest::DISABLE:
+            if (enabled_.load()) {
+                LOG_BLE("[WIFI] Wi-Fi switched off at the grinder\n");
+                set_enabled(false);
+            }
+            break;
+        case PendingRequest::FORGET:
+            LOG_BLE("[WIFI] Saved network forgotten at the grinder\n");
+            clear_credentials();
+            break;
+        case PendingRequest::NONE:
+            break;
+    }
+}
+
 bool SmartGrindNetworkManager::set_credentials(const String& ssid, const String& password) {
     if (!preferences_ || ssid.isEmpty() || ssid.length() > 32 || password.length() > 63) {
         return false;
@@ -121,6 +164,9 @@ void SmartGrindNetworkManager::clear_credentials() {
     ssid_.clear();
     password_.clear();
     if (settings_mutex_) xSemaphoreGive(settings_mutex_);
+    // The next network has not connected yet: a failed first attempt should
+    // reopen setup rather than retry forever.
+    ever_connected_ = false;
     stop_network();
     set_state(enabled_.load() ? NetworkState::WIFI_NO_CREDENTIALS : NetworkState::WIFI_DISABLED);
 }
@@ -158,11 +204,15 @@ String SmartGrindNetworkManager::ip_address() const {
 }
 
 void SmartGrindNetworkManager::load_settings() {
-    enabled_.store(preferences_ && preferences_->getBool("wifi_on", true));
     ssid_ = preferences_ ? preferences_->getString("wifi_ssid", "") : String();
     password_ = preferences_ ? preferences_->getString("wifi_pass", "") : String();
     hostname_ = preferences_ ? sanitize_hostname(preferences_->getString("wifi_host", "")) : String();
     if (hostname_.isEmpty()) hostname_ = default_hostname();
+    // A new grinder keeps its radio off (no setup network, no web API) until
+    // Wi-Fi is switched on at the grinder or provisioned over USB. A grinder
+    // upgraded with saved credentials keeps its existing connection.
+    const bool enabled_by_default = !ssid_.isEmpty();
+    enabled_.store(preferences_ && preferences_->getBool("wifi_on", enabled_by_default));
 }
 
 void SmartGrindNetworkManager::begin_connection() {

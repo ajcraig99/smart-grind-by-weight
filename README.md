@@ -13,6 +13,14 @@
 > grinder controls and firmware-update reporting with the companion
 > **[Smart Grind by Weight Home Assistant integration →](https://github.com/Clinteastman/smart-grind-home-assistant)**
 
+> [!IMPORTANT]
+> **Personal fork with hardened network features.** Wi-Fi stays off until it is
+> switched on at the grinder. Remote grind starts and firmware updates over
+> Wi-Fi or Bluetooth need permission on the touchscreen. One-tap release updates
+> are compiled out, because they would install the upstream fork's releases over
+> this firmware. See the [security model](docs/WIFI_ARCHITECTURE.md#security-model)
+> and the [code review](docs/CODE_REVIEW.md).
+
 Turn a compatible coffee grinder into a precise, touch-controlled
 grind-by-weight system using a Waveshare ESP32-S3 AMOLED board and load cell.
 Smart Grind learns the grinder's live flow and stopping delay, switches the
@@ -86,10 +94,12 @@ https://github.com/user-attachments/assets/e20ce3e2-417e-4a3b-bb48-05591fce9418
   dose selection, round start/stop control, settings, grind history, analytics
   and data downloads.
 - **Wi-Fi setup on the device** with network scanning, a secured captive portal,
-  QR access, Improv Serial provisioning and `smartgrind.local` discovery.
-- **One-click firmware updates from GitHub**, with automatic stable-release
-  checks, a touchscreen update indicator and on-device installer, strict V1/V2
-  image selection, plus manual Wi-Fi/Bluetooth upload and USB recovery.
+  QR access, Improv Serial provisioning and `smartgrind.local` discovery. Wi-Fi
+  is off until switched on at **Menu → Wi-Fi**, which can also forget the
+  network.
+- **Firmware updates over Wi-Fi or Bluetooth**, each allowed first at
+  **Menu → Firmware Update**, plus USB recovery. One-click GitHub release
+  updates are available as a build option (`NETWORK_RELEASE_UPDATES_ENABLED`).
 - **On-device diagnostics** with downloadable retained startup/runtime logs.
 - **Checked settings saves and stronger fault handling**, including runtime
   save confirmation, stale-scale stops and coordinated motor/update operations.
@@ -97,9 +107,10 @@ https://github.com/user-attachments/assets/e20ce3e2-417e-4a3b-bb48-05591fce9418
   and a deterministic Windows desktop simulator for development.
 
 Network clients request a selected-profile start or stop through the same grind
-controller used by the touchscreen; they never drive the relay directly. The
-firmware remains responsible for load-cell checks, state transitions and motor
-safety.
+controller used by the touchscreen; they never drive the relay directly. Remote
+starts are off until **Menu → Wi-Fi → Remote start** is confirmed on the
+grinder; stop always works. The firmware remains responsible for load-cell
+checks, state transitions and motor safety.
 
 ## Web interface
 
@@ -107,14 +118,12 @@ The responsive web interface is served directly by the grinder at
 `http://smartgrind.local`; no cloud account or separate application is needed.
 Choose a saved dose, start or stop it with the round grind control, follow the
 current grind, review its full recorded trace, change grinder/display settings
-and install the latest stable firmware from a browser on the same network. The
-System & updates page checks this project's GitHub releases and selects the
-matching V1 or V2 application image automatically; manual upload remains
-available as an advanced fallback. The grinder also checks in the background
-while idle: a green refresh symbol appears when an update is ready, and either
-that symbol or **Menu → Wi-Fi → Install update** starts the same guarded update
-flow. If mDNS is unavailable, use the IP address shown on the grinder's Wi-Fi
-screen.
+and install firmware from a browser on the same network. To install, tap
+**Menu → Firmware Update → Allow Update** on the grinder, then upload the V1 or
+V2 application image from **System & updates** within 2 minutes. With the
+release channel compiled in, the page and the grinder also check GitHub
+releases and offer a one-tap install. If mDNS is unavailable, use the IP
+address shown on the grinder's Wi-Fi screen; other host names are refused.
 
 <table>
 <tr>

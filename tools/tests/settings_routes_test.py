@@ -33,7 +33,6 @@ struct AsyncWebServerResponse {
 struct AsyncWebServerRequest {
  std::map<std::string,Param> params;
  AsyncWebServerResponse response{};
- bool origin=true;
  bool hasParam(const char* k) const{return params.count(k);}
  Param* getParam(const char* k){return &params.at(k);}
  AsyncWebServerResponse* beginResponse(int code,const char* type,const char* body){
@@ -55,7 +54,6 @@ struct DeviceApi {
  std::map<uint32_t,const char*> results;
  int settings_queued=0,profiles_queued=0;
  const char* settings_result(uint32_t id){return results.count(id)?results.at(id):"unknown";}
- bool websocket_origin_allowed(AsyncWebServerRequest* r){return r->origin;}
  void queue_profile_selection(AsyncWebServerRequest*){profiles_queued++;}
  void queue_settings_update(AsyncWebServerRequest*){settings_queued++;}
  const char* settings_json(){return "{\"current_profile\":1}";}
@@ -85,10 +83,8 @@ int main(){
  assert(expired.response.body=="{\"request_id\":7,\"status\":\"unknown\"}");
  AsyncWebServerRequest get;server.call("/api/v1/settings",HTTP_GET,get);
  assert(get.response.code==200 && get.response.headers.at("Cache-Control")=="no-store");
- for(const char* path:{"/api/v1/settings","/api/v1/profile"}){
-  AsyncWebServerRequest denied;denied.origin=false;server.call(path,HTTP_POST,denied);
-  assert(denied.response.code==403 && !api.settings_queued && !api.profiles_queued);
- }
+ // Host/origin admission runs in RequestGuard middleware before any route
+ // (network_security_test); admitted posts are queued by the routes.
  AsyncWebServerRequest accepted;server.call("/api/v1/settings",HTTP_POST,accepted);
  assert(api.settings_queued==1);
  server.call("/api/v1/profile",HTTP_POST,accepted);assert(api.profiles_queued==1);

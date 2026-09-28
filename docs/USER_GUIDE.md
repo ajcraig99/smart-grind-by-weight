@@ -122,7 +122,8 @@ Main Screen (swipe left/right between tabs, up/down to toggle weight/time mode i
     |   |-- Scale (live weight view with Tare action)
     |   |-- Calibrate (launch calibration workflow)
     |   |-- Tune Pulses (auto-tune motor latency)
-    |   \-- Motor Test (1s safety pulse)
+    |   |-- Motor Test (1s safety pulse)
+    |   \-- Firmware Update (Allow Update: one Wi-Fi or Bluetooth update within 2 min)
     |
     +-- Settings
     |   +-- Bluetooth
@@ -130,6 +131,12 @@ Main Screen (swipe left/right between tabs, up/down to toggle weight/time mode i
     |   |   |-- Bluetooth startup toggle (configurable auto-enable)
     |   |   |-- Connection status display
     |   |   \-- Auto-disable timer display
+    |   |
+    |   +-- Wi-Fi
+    |   |   |-- Wi-Fi toggle (off on a new grinder)
+    |   |   |-- Connection status, address, setup QR code
+    |   |   |-- Remote start toggle (web/Home Assistant starts; confirmation required)
+    |   |   \-- Forget Network button (reopens the setup network while Wi-Fi is on)
     |   |
 	    |   +-- Display
 	    |   |   |-- Normal brightness slider
@@ -195,6 +202,25 @@ Want the scale to run itself? Enable the automation toggles in **Menu → Grind 
 Both automation settings rely on the same smoothed weight deltas used for flow detection, so no extra calibration is required. Leave them disabled if you prefer manual control or experience false triggers with lighter accessories.
 
 ---
+
+## Wi-Fi and remote control
+
+Wi-Fi is off on a new grinder. Switch it on at **Menu → Wi-Fi**: with no saved
+network the grinder opens its secured setup network and shows its name,
+password and a QR code; join it with your phone and pick your home network.
+Afterwards the grinder is at `http://smartgrind.local` (or the IP shown on the
+Wi-Fi page). **Forget Network** removes the saved network and, with Wi-Fi on,
+reopens the setup network.
+
+The web page and Home Assistant can always stop a grind, dismiss a result or
+tare. Starting grinds from them needs **Remote start** switched on at
+**Menu → Wi-Fi**, which asks for confirmation. Remote starts are accepted only
+while the grinder shows its main screen and no more than once every 3 seconds.
+Remote start and Wi-Fi can only be changed on the grinder itself.
+
+Firmware updates over Wi-Fi or Bluetooth need **Menu → Firmware Update → Allow
+Update** first. The permission covers one update started within 2 minutes; tap
+**Cancel** to withdraw it.
 
 ## Bluetooth connectivity
 

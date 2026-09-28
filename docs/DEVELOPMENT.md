@@ -217,7 +217,9 @@ old factory application.
 
 ### BLE OTA Updates (After Initial Setup)
 
-Once the device is running and connected to Bluetooth:
+Once the device is running and connected to Bluetooth, tap **Menu → Firmware
+Update → Allow Update** on the grinder; the upload must start within 2 minutes
+(the tool reports a refusal otherwise):
 
 ```bash
 # Build and upload wirelessly (production)

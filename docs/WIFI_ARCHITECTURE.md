@@ -8,16 +8,85 @@ the grinder's smaller feature set.
 
 ## User journey
 
-1. Try saved station credentials without blocking weight sampling, motor control,
+1. Wi-Fi is off on a new grinder: no setup network and no web API until it is
+   switched on at Menu > Wi-Fi (or provisioned over USB with Improv). A grinder
+   upgraded with saved credentials keeps its existing connection.
+2. Try saved station credentials without blocking weight sampling, motor control,
    touch, or rendering.
-2. If credentials are absent or cannot connect, start a secured setup access
+3. If credentials are absent or cannot connect, start a secured setup access
    point with a generated, persisted password.
-3. Show the setup SSID, password and Wi-Fi QR code on the grinder display.
-4. Serve a captive setup page and support Improv Wi-Fi provisioning over USB
+4. Show the setup SSID, password and Wi-Fi QR code on the grinder display.
+5. Serve a captive setup page and support Improv Wi-Fi provisioning over USB
    serial as an alternative.
-5. Reboot or transition cleanly into station mode after credentials are saved.
-6. Resolve the grinder at its `.local` hostname and advertise versioned HTTP and
+6. Reboot or transition cleanly into station mode after credentials are saved.
+7. Resolve the grinder at its `.local` hostname and advertise versioned HTTP and
    Smart Grind services over mDNS.
+8. Menu > Wi-Fi switches Wi-Fi off, or forgets the saved network; with Wi-Fi
+   on, forgetting it reopens the setup network.
+
+## Security model
+
+The grinder drives a mains motor and accepts firmware over the network, so the
+local API assumes the home network is not fully trusted. Three layers apply.
+
+**Browser admission (every HTTP route and the WebSocket handshake).**
+`RequestGuard` middleware applies `RequestPolicy`:
+
+- `Host` must name this grinder: its hostname bare or with `.local`, `.lan`,
+  `.home`, `.home.arpa`, `.localdomain` or `.internal`; its station IP; or,
+  while the setup network runs, the setup AP address. Other ports than 80 and
+  IPv6 literals are refused. This stops DNS rebinding, where a site on the
+  internet points its own name at the grinder. Access through any other DNS
+  name (for example a router-specific domain) is refused; use `.local` or the
+  IP address.
+- An `Origin` header, when present, must be `http://` plus that same host. This
+  stops cross-site form posts and WebSocket handshakes. `Origin: null` is
+  tolerated only on the setup network.
+- Clients that send no `Origin` (Home Assistant, scripts) are admitted.
+- Captive-portal reads on the setup network may use any host name so phones
+  open the setup page; setup writes must address the setup AP itself, and the
+  setup page is always served from the AP address.
+- Upload callbacks run before middleware, so the firmware and screensaver
+  upload routes admit the request when the first chunk arrives.
+- Request bodies above a per-route limit are discarded unparsed with `413`
+  (forms 2 KiB, screensaver image plus 4 KiB, firmware slot plus 8 KiB).
+
+**On-device permissions.** Admission does not authenticate a client on the
+LAN. Anything that can run the motor or replace the firmware therefore needs a
+decision made at the grinder:
+
+- Firmware updates over Wi-Fi or Bluetooth need Menu > Firmware Update > Allow
+  Update. The permission covers one update and lapses after 2 minutes. The web
+  prepare step consumes it and returns a single-use token that the following
+  upload or release install must present, so another LAN client cannot slip its
+  own image in behind the user's.
+- Remote grind starts (`start`, `start_manual`) are off until Menu > Wi-Fi >
+  Remote start is confirmed. Even then they are accepted only while the
+  grinder shows its main screen (never during calibration, menus, editing or
+  dialogs) and at most once every 3 seconds. Stop, dismiss and tare always
+  work. Neither permission can be changed over the network.
+
+**Release channel.** Background update checks and one-tap release installs are
+compiled out by default (`NETWORK_RELEASE_UPDATES_ENABLED 0` in
+`src/config/network.h`): release images from another fork would replace this
+firmware, and release images are not signed. Enable it only after pointing
+`NETWORK_RELEASE_REPOSITORY` and `NETWORK_RELEASE_MIRROR_BASE_URL` at your own
+releases.
+
+**Accepted residual risks.**
+
+- Firmware images are checked for integrity (`Update.end(true)` verifies the
+  image's own SHA-256), not signed. The on-device permission bounds when an
+  image can arrive but not who built it.
+- Wi-Fi and setup-network passwords are stored in plaintext NVS; flash
+  encryption would protect them against someone with physical access to the
+  board, but it is an irreversible eFuse change and is not enabled.
+- Settings, history and the diagnostic log remain readable and writable by any
+  LAN client that sends no `Origin`. Settings are range-checked and cannot
+  enable remote start or updates.
+- The web server library buffers header lines without a size limit, so a LAN
+  client can still exhaust memory with oversized headers.
+- Traffic is plain HTTP on the local network.
 
 ## Reliability rules learned from mature ESP32 deployments
 
@@ -36,12 +105,12 @@ the grinder's smaller feature set.
   enough internal RAM to accept TCP connections under a fully constructed UI.
 - Captive portal probes used by Android, Apple, Windows and Firefox need explicit
   responses so setup opens reliably on common phones and laptops.
-- OTA must be a controlled appliance state: require an explicit browser
-  confirmation, refuse updates while grinding, stop the motor, validate
-  size/image metadata and internal-heap headroom, incrementally write only the
-  inactive application partition, reboot, and verify the expected version
-  after boot. Update authentication and signed images are deliberately deferred
-  until the end-to-end update experience is complete.
+- OTA must be a controlled appliance state: require permission on the grinder
+  and an explicit browser confirmation, refuse updates while grinding, stop the
+  motor, validate size/image metadata and internal-heap headroom, incrementally
+  write only the inactive application partition, reboot, and verify the
+  expected version after boot. Signed images remain deferred (see Security
+  model).
 - Wi-Fi and Bluetooth may coexist during normal use. Before a web OTA upload,
   the main application loop temporarily shuts down idle Bluetooth and waits for
   internal memory to recover; active BLE transfers are never interrupted. If
@@ -94,8 +163,9 @@ optional Improv extensions and currently return `Unknown RPC command`.
 
 The device serves `/ws` and publishes at most one state message every 100 ms.
 It accepts no more than four clients and disconnects a client whose outbound
-queue cannot keep up. Browser handshakes must have the same HTTP origin as the
-device page; native clients without an `Origin` header remain supported.
+queue cannot keep up. Handshakes pass the same host and origin admission as
+HTTP requests (see Security model); native clients without an `Origin` header
+remain supported.
 
 State messages have this shape:
 
@@ -116,9 +186,14 @@ State messages have this shape:
   },
   "scale": { "weight": 11.34, "flow": 2.17 },
   "motor": { "running": true },
+  "control": { "remote_start": false },
   "system": { "free_heap": 118240 }
 }
 ```
+
+`control.remote_start` reports whether remote starts are enabled on the
+grinder; the web dashboard disables its start button and shows how to enable
+it when this is `false`.
 
 The public `phase` value is deliberately independent of internal controller
 state names. API v1 publishes one of `IDLE`, `PREPARING`, `PRIMING`,
@@ -151,8 +226,12 @@ No network action drives the relay or a GPIO directly.
 
 `start` runs the selected Single, Double or Custom profile in its configured
 weight/time mode. `start_manual` uses the firmware's target-free manual mode and
-its independent 30-second cutoff. Tare, profile and mode changes are refused
-while the grinder is not idle.
+its independent 30-second cutoff. Both are refused unless remote start is
+enabled on the grinder, the grinder is on its main screen, and at least 3
+seconds have passed since the last accepted remote start; the acknowledgement
+`reason` says which. Tare, profile and mode changes are refused while the
+grinder is not idle. Acknowledgements are sent after the controller lock is
+released, so a slow client cannot delay the control loop.
 
 The browser applies a display-only exponential filter and near-zero deadband to
 the 10 Hz flow value. Grinder control and saved session samples retain their
@@ -162,6 +241,17 @@ original precision; completed graphs are replaced with the full recorded trace.
 
 - `GET /api/v1/status`: device, build, network, memory and OTA progress state,
   plus the WebSocket path, protocol level and advertised command capabilities.
+  `capabilities.remote_start` mirrors the on-device setting; `ota.authorized`
+  and `ota.authorization_remaining_ms` report the update permission;
+  `ota.release_updates` and `ota.release_repository` describe the compiled-in
+  release channel.
+- `POST /api/v1/ota/prepare`: needs the on-device update permission (`403`
+  otherwise) and consumes it. Stops idle Bluetooth to free memory and returns
+  `{"preparing":true,"token":"..."}`; poll `ota.ready` in the status.
+- `POST /api/v1/ota?token=...`: multipart firmware upload; the token from
+  prepare is required and single-use.
+- `POST /api/v1/ota/github?token=...`: installs a release by `tag` from the
+  mirror; `404` when the release channel is compiled out.
 - `GET /api/v1/settings`: the three grinder profiles and the matching on-device
   automation, purge, display, screensaver, optional GaggiMate host, logging,
   swipe and Bluetooth values.
@@ -177,13 +267,11 @@ original precision; completed graphs are replaced with the full recorded trace.
 - `GET`, `POST` and `DELETE /api/v1/screensaver/image`: read, transactionally
   replace or remove the fixed-size RGB565 custom image while idle.
 
-Settings and screensaver mutations enforce same-origin checks. Local API and
-motor commands are currently unauthenticated, so the grinder should be kept on
-a trusted home network. Web OTA is
-deliberately unauthenticated at this stage; browser confirmation plus the
-motor, transfer, image and partition guards protect the update operation while
-authentication and signed images remain roadmap work. History and image access
-are refused while grind logging, OTA or another transfer could contend for the
+Every route passes host and origin admission. Firmware updates need the
+on-device permission and the prepare token; remote starts need the on-device
+opt-in (see Security model). Other settings remain writable by LAN clients, so
+keep the grinder on a network you control. History and image access are
+refused while grind logging, OTA or another transfer could contend for the
 filesystem. HTTP endpoints do not start the motor; starts use the bounded
 WebSocket command queue and controller path described above.
 

@@ -4,6 +4,39 @@ This file records the user-visible changes in the community-maintained release
 line. Earlier release history remains available in the original project's
 [GitHub releases](https://github.com/jaapp/smart-grind-by-weight/releases).
 
+## [Unreleased] - personal fork
+
+### Network and Bluetooth security
+
+- Refuse web requests and WebSocket handshakes that address the grinder by any
+  name other than its own hostname (bare, `.local` or a common home-router
+  suffix) or IP address, and browser requests from another site. This blocks
+  DNS rebinding and cross-site form posts, including the previously unchecked
+  firmware prepare and upload routes.
+- Require **Menu → Firmware Update → Allow Update** on the grinder before any
+  firmware update over Wi-Fi or Bluetooth. The permission covers one update
+  within 2 minutes. The web upload must also carry a single-use token issued
+  by its own prepare request. `grinder.py upload` explains the refusal.
+- Remote grind starts from the web page or Home Assistant are off until
+  **Menu → Wi-Fi → Remote start** is confirmed. They are then accepted only
+  while the grinder shows its main screen, and at most once every 3 seconds.
+  Stop, dismiss and tare always work. The web dashboard shows when remote
+  start is off.
+- Wi-Fi is off on a new grinder. **Menu → Wi-Fi** now switches Wi-Fi on and
+  off and forgets the saved network. Improv provisioning over USB switches
+  Wi-Fi on. Grinders with saved credentials keep their connection.
+- Compile out the release update channel by default: its mirror serves the
+  upstream fork's images, which would replace this firmware.
+- Stop the Bluetooth diagnostic report from printing stored Wi-Fi and
+  setup-network passwords or the network name.
+- Refuse Bluetooth exports, image uploads and settings writes while the grinder
+  is active, and data commands during a Bluetooth update. A grind can no longer
+  start during a Bluetooth or screensaver transfer.
+- Run the web server task on core 1 at priority 3 instead of any core at
+  priority 10, so HTTP handlers cannot preempt grind control or weight
+  sampling. Discard oversized request bodies without buffering them.
+- Send WebSocket acknowledgements after releasing the grind controller lock.
+
 ## [1.5.9] - 2026-09-06
 
 ### Firmware update hotfix

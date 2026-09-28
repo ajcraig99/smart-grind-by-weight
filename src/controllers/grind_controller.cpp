@@ -11,6 +11,7 @@
 #include <algorithm>
 
 #ifndef SMART_GRIND_SIM
+#include "../bluetooth/manager.h"
 #include "../network/device_web_server.h"
 #endif
 
@@ -119,6 +120,12 @@ bool GrindController::start_grind(float target, uint32_t time_ms, GrindMode grin
 #ifndef SMART_GRIND_SIM
     if (device_web_server.is_ota_active() || device_web_server.is_ota_preparing()) {
         LOG_BLE("[CONTROLLER] Grind blocked while firmware update is active\n");
+        return false;
+    }
+    // Exports and image uploads write flash from the BLE and web tasks; that
+    // work must not overlap a running motor.
+    if (g_bluetooth_manager.is_transfer_active()) {
+        LOG_BLE("[CONTROLLER] Grind blocked while a Bluetooth or image transfer is active\n");
         return false;
     }
 #endif

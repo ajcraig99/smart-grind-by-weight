@@ -70,8 +70,14 @@ private:
     HardwareManager* hardware_manager_ = nullptr;
     GrindController* grind_controller_ = nullptr;
     BluetoothManager* bluetooth_manager_ = nullptr;
+    // Single-use proof that an upload belongs to the client whose prepare
+    // request consumed the on-device authorisation. Guarded by ota_mutex_.
+    char ota_upload_token_[33] = {};
 
     void configure_routes();
+    void issue_upload_token();
+    void clear_upload_token();
+    bool take_upload_token(const String& presented);
     void handle_ota_upload(AsyncWebServerRequest* request, const String& filename,
                            size_t index, uint8_t* data, size_t len, bool final);
     bool start_github_ota(const String& tag);

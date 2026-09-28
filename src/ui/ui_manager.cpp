@@ -139,8 +139,9 @@ void UIManager::update() {
 
 #ifndef SMART_GRIND_SIM
     // Execute network commands on the UI/application task, never in the
-    // asynchronous TCP callback that parsed them.
-    if (device_api.process_commands()) {
+    // asynchronous TCP callback that parsed them. Remote starts are accepted
+    // only from the main screen, never mid-calibration, menu or dialog.
+    if (device_api.process_commands(state_machine->is_state(UIState::READY))) {
         current_tab = ReadyScreen::tab_for_profile_index(profile_controller->get_current_profile());
         current_mode = profile_controller->get_grind_mode();
         edit_target = get_current_profile_target(*profile_controller, current_mode);

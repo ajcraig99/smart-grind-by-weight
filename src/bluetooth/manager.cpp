@@ -1,4 +1,5 @@
 #include "manager.h"
+#include "diagnostic_report_policy.h"
 #include "../config/build_info.h"
 #include <algorithm>
 #include <cstdarg>
@@ -20,6 +21,7 @@
 #include "../hardware/WeightSensor.h"
 #include "../controllers/grind_controller.h"
 #include "../network/device_web_server.h"
+#include "../system/update_authorization.h"
 
 extern HardwareManager hardware_manager;
 extern GrindController grind_controller;
@@ -709,9 +711,17 @@ void BluetoothManager::handle_ota_control_command(BLECharacteristic* characteris
                 set_ota_status(BLE_OTA_ERROR);
                 break;
             }
+            // Anyone in radio range can write this characteristic, so the
+            // update must first be allowed on the touchscreen.
+            if (!update_authorization().is_granted(millis())) {
+                log("Bluetooth OTA: Rejected; allow the update on the grinder (Menu > Firmware Update)\n");
+                set_ota_status(BLE_OTA_NOT_AUTHORIZED);
+                break;
+            }
             // New protocol: [CMD][patch_size:4][is_full_update:1][build_number_length:1][build_number:N]
             if (data.length() >= 6) {  // 1 + 4 + 1 bytes minimum (cmd + patch_size + full_update_flag)
-                uint32_t patch_size = *(uint32_t*)(data.c_str() + 1);
+                uint32_t patch_size = 0;  // Little-endian on the wire and on the ESP32
+                memcpy(&patch_size, data.c_str() + 1, sizeof(patch_size));
                 bool is_full_update = data[5] != 0;
                 
                 log("Bluetooth OTA: Starting %s update (%lu KB)\n", 
@@ -743,6 +753,8 @@ void BluetoothManager::handle_ota_control_command(BLECharacteristic* characteris
                 }
                 
                 if (ota_handler.start_ota(patch_size, expected_build, is_full_update, expected_firmware_version)) {
+                    // One permission, one update: a later START needs a new one.
+                    update_authorization().consume(millis());
                     set_ota_status(BLE_OTA_RECEIVING);
                 } else {
                     set_ota_status(BLE_OTA_ERROR);
@@ -849,7 +861,24 @@ void BluetoothManager::handle_data_control_command(BLECharacteristic* characteri
         set_data_status(BLE_DATA_ERROR);
         return;
     }
-    
+
+    // A Bluetooth firmware update owns flash and the radio until it ends.
+    if (ota_handler.is_ota_active() && !is_transfer_stop) {
+        log("Bluetooth Data: Rejected command 0x%02X during Bluetooth OTA\n", command);
+        set_data_status(BLE_DATA_ERROR);
+        return;
+    }
+
+    // Exports, image writes and settings saves stall flash on both cores and
+    // switch the screen away from the grind controls; keep them for idle.
+    const bool allowed_while_grinding = is_transfer_stop ||
+                                        command == BLE_SETTINGS_CMD_GET_SCREENSAVER;
+    if (grind_controller.is_active() && !allowed_while_grinding) {
+        log("Bluetooth Data: Rejected command 0x%02X while the grinder is active\n", command);
+        set_data_status(BLE_DATA_ERROR);
+        return;
+    }
+
     switch (command) {
         case BLE_DATA_CMD_STOP_EXPORT:
             log("Bluetooth Data: Stopping measurement data export\n");
@@ -1765,7 +1794,12 @@ void BluetoothManager::generate_diagnostic_report() {
                     }
                     case NVS_TYPE_STR: {
                         String val = pref.getString(info.key, "");
-                        snprintf(buf, sizeof(buf), "    %s: \"%s\" (string)\n", info.key, val.c_str());
+                        if (nvs_string_value_is_reportable(info.key)) {
+                            snprintf(buf, sizeof(buf), "    %s: \"%s\" (string)\n", info.key, val.c_str());
+                        } else {
+                            snprintf(buf, sizeof(buf), "    %s: <hidden, %u chars> (string)\n",
+                                     info.key, static_cast<unsigned int>(val.length()));
+                        }
                         break;
                     }
                     case NVS_TYPE_BLOB: {

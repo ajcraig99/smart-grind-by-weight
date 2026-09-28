@@ -21,6 +21,7 @@ private:
     lv_obj_t* stats_page;
     lv_obj_t* diagnostics_page;
     lv_obj_t* scale_page;
+    lv_obj_t* firmware_page;
 
     // Info tab elements
     lv_obj_t* info_label;
@@ -49,16 +50,28 @@ private:
     lv_obj_t* ble_startup_toggle;
     lv_obj_t* ble_status_label;
     lv_obj_t* ble_timer_label;
+    lv_obj_t* wifi_toggle;
+    lv_obj_t* remote_start_toggle;
     lv_obj_t* network_status_label;
     lv_obj_t* network_detail_label;
     lv_obj_t* network_qr;
+    lv_obj_t* network_forget_button;
     lv_obj_t* network_update_label;
     lv_obj_t* network_update_button;
     String network_status_text;
     String network_detail_text;
     String network_qr_payload;
     String network_update_text;
+    bool network_forget_button_visible;
     bool network_update_button_visible;
+
+    // Firmware update permission page
+    lv_obj_t* firmware_item;
+    lv_obj_t* firmware_status_label;
+    lv_obj_t* firmware_allow_button;
+    lv_obj_t* firmware_allow_label;
+    String firmware_status_text;
+    int8_t firmware_allow_state;
     lv_obj_t* logging_toggle;
     lv_obj_t* brightness_normal_slider;
     lv_obj_t* brightness_screensaver_slider;
@@ -129,6 +142,8 @@ public:
     void update_diagnostics(WeightSensor* weight_sensor);
     void update_ble_status();
     void update_network_status();
+    void update_network_toggles();
+    void update_firmware_update_page();
     void refresh_statistics(bool show_overlay = true);
     void update_brightness_labels(int normal_percent = -1, int screensaver_percent = -1); // Use negative value to leave unchanged
     void update_brightness_sliders();
@@ -155,6 +170,8 @@ public:
     bool is_scale_page_active() const { return scale_active; }
     lv_obj_t* get_ble_toggle() const { return ble_toggle; }
     lv_obj_t* get_ble_startup_toggle() const { return ble_startup_toggle; }
+    lv_obj_t* get_wifi_toggle() const { return wifi_toggle; }
+    lv_obj_t* get_remote_start_toggle() const { return remote_start_toggle; }
     lv_obj_t* get_logging_toggle() const { return logging_toggle; }
     lv_obj_t* get_refresh_stats_button() const { return refresh_stats_button; }
     lv_obj_t* get_network_update_button() const { return network_update_button; }
@@ -181,6 +198,7 @@ private:
     void create_info_page(lv_obj_t* parent);
     void create_bluetooth_page(lv_obj_t* parent);
     void create_network_page(lv_obj_t* parent);
+    void create_firmware_page(lv_obj_t* parent);
     void create_display_page(lv_obj_t* parent);
     void create_grind_mode_page(lv_obj_t* parent);
     void create_scale_page(lv_obj_t* parent);

@@ -12,9 +12,12 @@
 #include "../../controllers/grind_controller.h"
 #include "../../controllers/grind_mode_traits.h"
 #include "../../logging/grind_logging.h"
+#include "../../network/device_api.h"
+#include "../../network/network_manager.h"
 #include "../../system/diagnostics_controller.h"
 #include "../../system/screensaver_settings.h"
 #include "../../system/statistics_manager.h"
+#include "../../system/update_authorization.h"
 #include "../components/blocking_overlay.h"
 #include "../components/ui_operations.h"
 #include "../event_bridge_lvgl.h"
@@ -43,6 +46,10 @@ void MenuUIController::register_events() {
     EventBridgeLVGL::register_handler(ET::MENU_BACK, [this](lv_event_t*) { handle_back(); });
     EventBridgeLVGL::register_handler(ET::MENU_REFRESH_STATS, [this](lv_event_t*) { handle_refresh_stats(); });
     EventBridgeLVGL::register_handler(ET::MENU_INSTALL_UPDATE, [this](lv_event_t*) { handle_install_update(); });
+    EventBridgeLVGL::register_handler(ET::MENU_ALLOW_UPDATE, [this](lv_event_t*) { handle_allow_update(); });
+    EventBridgeLVGL::register_handler(ET::WIFI_TOGGLE, [this](lv_event_t*) { handle_wifi_toggle(); });
+    EventBridgeLVGL::register_handler(ET::WIFI_FORGET, [this](lv_event_t*) { handle_wifi_forget(); });
+    EventBridgeLVGL::register_handler(ET::REMOTE_START_TOGGLE, [this](lv_event_t*) { handle_remote_start_toggle(); });
 
     EventBridgeLVGL::register_handler(ET::BLE_TOGGLE, [this](lv_event_t*) { handle_ble_toggle(); });
     EventBridgeLVGL::register_handler(ET::BLE_STARTUP_TOGGLE, [this](lv_event_t*) { handle_ble_startup_toggle(); });
@@ -84,6 +91,59 @@ void MenuUIController::handle_install_update() {
     }
 }
 
+void MenuUIController::handle_allow_update() {
+    if (!ui_manager_) return;
+    auto& authorization = update_authorization();
+    const uint32_t now = millis();
+    if (authorization.is_granted(now)) {
+        authorization.revoke();
+        LOG_BLE("[UPDATE] Firmware update permission withdrawn at the grinder\n");
+    } else if (!ui_manager_->grind_controller || !ui_manager_->grind_controller->is_active()) {
+        authorization.grant(now, NETWORK_UPDATE_AUTHORIZATION_WINDOW_MS);
+        LOG_BLE("[UPDATE] One firmware update allowed at the grinder for %lus\n",
+                static_cast<unsigned long>(NETWORK_UPDATE_AUTHORIZATION_WINDOW_MS / 1000UL));
+    }
+    ui_manager_->menu_screen.update_firmware_update_page();
+}
+
+void MenuUIController::handle_wifi_toggle() {
+    if (!ui_manager_) return;
+    auto* toggle = ui_manager_->menu_screen.get_wifi_toggle();
+    if (!toggle) return;
+    network_manager.request_enabled(lv_obj_has_state(toggle, LV_STATE_CHECKED));
+}
+
+void MenuUIController::handle_wifi_forget() {
+    if (!ui_manager_) return;
+    const String network = network_manager.network_name();
+    String message = network.isEmpty() ? String("Remove the saved network?")
+                                       : String("Remove " + network + "?");
+    message += "\n\nWith Wi-Fi on, the grinder then opens its setup network so you can join another one.";
+    ui_manager_->show_confirmation(
+        "FORGET NETWORK", message.c_str(), "FORGET", lv_color_hex(THEME_COLOR_WARNING),
+        []() { network_manager.request_forget_network(); });
+}
+
+void MenuUIController::handle_remote_start_toggle() {
+    if (!ui_manager_) return;
+    auto* toggle = ui_manager_->menu_screen.get_remote_start_toggle();
+    if (!toggle) return;
+    if (!lv_obj_has_state(toggle, LV_STATE_CHECKED)) {
+        if (!device_api.set_remote_start_enabled(false)) {
+            ui_manager_->menu_screen.update_network_toggles();
+        }
+        return;
+    }
+    // Enabling hands motor starts to the network, so confirm it. Cancelling
+    // returns to the menu, which re-reads the stored (off) state.
+    ui_manager_->show_confirmation(
+        "REMOTE START",
+        "The web page and Home Assistant will be able to start the motor.\n\n"
+        "Turn this on only on a trusted network, with the grinder always ready to run.",
+        "TURN ON", lv_color_hex(THEME_COLOR_WARNING),
+        []() { device_api.set_remote_start_enabled(true); });
+}
+
 void MenuUIController::update() {
     if (!ui_manager_) {
         return;
@@ -102,6 +162,8 @@ void MenuUIController::update() {
         ui_manager_->menu_screen.update_diagnostics(sensor);
         ui_manager_->menu_screen.update_ble_status();
         ui_manager_->menu_screen.update_network_status();
+        ui_manager_->menu_screen.update_network_toggles();
+        ui_manager_->menu_screen.update_firmware_update_page();
     }
 
     if (ui_manager_->menu_screen.is_scale_page_active()) {

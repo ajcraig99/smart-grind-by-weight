@@ -17,10 +17,14 @@
 #include "../system/operation_interlock.h"
 #include "device_web_server.h"
 #include "gaggimate_status_client.h"
+#include "remote_start_policy.h"
 
 DeviceApi device_api;
 
 namespace {
+constexpr char REMOTE_START_NAMESPACE[] = "network";
+constexpr char REMOTE_START_KEY[] = "remote_start";
+
 bool contains_json_string(const char* json, const char* key, const char* value) {
     if (!json || !key || !value) return false;
     const String needle = "\"" + String(key) + "\"";
@@ -56,13 +60,6 @@ bool extract_json_uint(const char* json, const char* key, uint32_t& value) {
     if (*cursor != ',' && *cursor != '}') return false;
     value = static_cast<uint32_t>(parsed);
     return true;
-}
-
-bool websocket_origin_allowed(AsyncWebServerRequest* request) {
-    if (!request || !request->hasHeader("Origin")) return true;
-    const AsyncWebHeader* origin_header = request->getHeader("Origin");
-    if (!origin_header) return false;
-    return origin_header->value() == ("http://" + request->host());
 }
 
 bool valid_local_host(const String& host) {
@@ -125,11 +122,20 @@ void DeviceApi::init(AsyncWebServer* server, HardwareManager* hardware,
         profile_controller_ = nullptr;
         return;
     }
+    Preferences remote_preferences;
+    if (remote_preferences.begin(REMOTE_START_NAMESPACE, true)) {
+        remote_start_enabled_.store(
+            remote_preferences.getBool(REMOTE_START_KEY, NETWORK_REMOTE_START_DEFAULT_ENABLED));
+        remote_preferences.end();
+    } else {
+        remote_start_enabled_.store(NETWORK_REMOTE_START_DEFAULT_ENABLED);
+    }
     websocket_.onEvent([this](AsyncWebSocket* ws, AsyncWebSocketClient* client,
                               AwsEventType type, void* arg, uint8_t* data, size_t len) {
         handle_event(ws, client, type, arg, data, len);
     });
-    websocket_.handleHandshake(websocket_origin_allowed);
+    // The handshake, like every HTTP route, is admitted by RequestGuard
+    // middleware (host and origin) before it reaches the socket handler.
     server->addHandler(&websocket_);
     configure_settings_routes(server);
     // Avoid mistaking a previous boot's result for a newly queued request.
@@ -181,122 +187,150 @@ void DeviceApi::update() {
     }
 }
 
-bool DeviceApi::process_commands() {
+bool DeviceApi::process_commands(bool main_screen_ready) {
     if (!initialized_) return false;
     if (applying_settings_id_) return true;
     bool settings_changed = false;
     Command command{};
     while (xQueueReceive(command_queue_, &command, 0) == pdTRUE) {
-        // Keep the idle check and its action together with controller updates.
-        const auto control_lock = grind_controller_->lock_control();
-        switch (command.action) {
-            case CommandAction::START: {
-                if (device_web_server.is_ota_active() || device_web_server.is_ota_preparing()) {
-                    send_ack(command, "start", false, "firmware update is active");
+        Reply reply{};
+        bool profile_selected = false;
+        {
+            // Keep the idle check and its action together with controller updates.
+            const auto control_lock = grind_controller_->lock_control();
+            switch (command.action) {
+                case CommandAction::START:
+                case CommandAction::START_MANUAL:
+                    reply = start_remote_grind(command, main_screen_ready);
+                    break;
+                case CommandAction::STOP:
+                    if (!grind_controller_->is_active()) {
+                        reply = {"stop", false, "grinder is not active"};
+                    } else {
+                        grind_controller_->stop_grind();
+                        reply = {"stop", true, "grind stopped"};
+                    }
+                    break;
+                case CommandAction::DISMISS:
+                    if (grind_controller_->get_phase() != GrindPhase::COMPLETED &&
+                        grind_controller_->get_phase() != GrindPhase::TIMEOUT) {
+                        reply = {"dismiss", false, "nothing to dismiss"};
+                    } else {
+                        grind_controller_->return_to_idle();
+                        const bool dismissed = grind_controller_->get_phase() == GrindPhase::IDLE;
+                        reply = {"dismiss", dismissed,
+                                 dismissed ? "result dismissed" : "history completion is pending"};
+                    }
+                    break;
+                case CommandAction::TARE: {
+                    WeightSensor* sensor = hardware_->get_weight_sensor();
+                    if (grind_controller_->get_phase() != GrindPhase::IDLE) {
+                        reply = {"tare", false, "grinder is not idle"};
+                    } else if (!sensor || sensor->has_hardware_fault() || sensor->get_sample_count() <= 0) {
+                        reply = {"tare", false, "load cell is not ready"};
+                    } else if (sensor->is_tare_in_progress()) {
+                        reply = {"tare", false, "tare is already in progress"};
+                    } else {
+                        sensor->tareNoDelay();
+                        reply = {"tare", true, "tare started"};
+                    }
                     break;
                 }
-                if (grind_controller_->get_phase() != GrindPhase::IDLE) {
-                    send_ack(command, "start", false, "grinder is not idle");
+                case CommandAction::SELECT_PROFILE:
+                    if (grind_controller_->get_phase() != GrindPhase::IDLE) {
+                        reply = {"select_profile", false, "grinder is not idle"};
+                        break;
+                    }
+                    profile_controller_->set_current_profile(command.profile_index);
+                    settings_changed = true;
+                    profile_selected = true;
+                    reply = {"select_profile", true, "profile selected"};
                     break;
-                }
-                const auto profile = profile_controller_->snapshot();
-                const GrindMode mode = profile.mode;
-                WeightSensor* sensor = hardware_->get_weight_sensor();
-                if (mode == GrindMode::WEIGHT &&
-                    (!sensor || sensor->has_hardware_fault())) {
-                    send_ack(command, "start", false, "load cell is not ready");
+                case CommandAction::SET_MODE:
+                    if (grind_controller_->get_phase() != GrindPhase::IDLE) {
+                        reply = {"set_mode", false, "grinder is not idle"};
+                        break;
+                    }
+                    profile_controller_->set_grind_mode(
+                        command.grind_mode == 1 ? GrindMode::TIME : GrindMode::WEIGHT);
+                    settings_changed = true;
+                    reply = {"set_mode", true, "grind mode selected"};
                     break;
+                case CommandAction::APPLY_SETTINGS: {
+                    settings_operation_token_ = operation_interlock().try_acquire();
+                    if (!settings_operation_token_) {
+                        set_settings_result(command.request_id, "busy");
+                        break;
+                    }
+                    applying_settings_id_ = command.request_id;
+                    settings_persisted_ = apply_settings(command.settings);
+                    // Even a failed multi-key save can change stored values. Return
+                    // now so UI runtime refresh finishes before any later command.
+                    refresh_settings_cache();
+                    return true;
                 }
-                grind_controller_->set_grind_profile_id(profile.current_profile);
-                const float target_weight = profile.profiles[profile.current_profile].weight;
-                const uint32_t target_time_ms = static_cast<uint32_t>(
-                    profile.profiles[profile.current_profile].time_seconds * 1000.0f + 0.5f);
-                const bool started = grind_controller_->start_grind(target_weight, target_time_ms, mode);
-                send_ack(command, "start", started, started ? "grind started" : "grind could not start");
-                break;
-            }
-            case CommandAction::START_MANUAL:
-                if (device_web_server.is_ota_active() || device_web_server.is_ota_preparing()) {
-                    send_ack(command, "start_manual", false, "firmware update is active");
-                } else if (grind_controller_->get_phase() != GrindPhase::IDLE) {
-                    send_ack(command, "start_manual", false, "grinder is not idle");
-                } else {
-                    const bool started = grind_controller_->start_grind(0.0f, 0, GrindMode::MANUAL);
-                    send_ack(command, "start_manual", started,
-                             started ? "manual grind started" : "grind could not start");
-                }
-                break;
-            case CommandAction::STOP:
-                if (!grind_controller_->is_active()) {
-                    send_ack(command, "stop", false, "grinder is not active");
-                } else {
-                    grind_controller_->stop_grind();
-                    send_ack(command, "stop", true, "grind stopped");
-                }
-                break;
-            case CommandAction::DISMISS:
-                if (grind_controller_->get_phase() != GrindPhase::COMPLETED &&
-                    grind_controller_->get_phase() != GrindPhase::TIMEOUT) {
-                    send_ack(command, "dismiss", false, "nothing to dismiss");
-                } else {
-                    grind_controller_->return_to_idle();
-                    const bool dismissed = grind_controller_->get_phase() == GrindPhase::IDLE;
-                    send_ack(command, "dismiss", dismissed,
-                             dismissed ? "result dismissed" : "history completion is pending");
-                }
-                break;
-            case CommandAction::TARE: {
-                WeightSensor* sensor = hardware_->get_weight_sensor();
-                if (grind_controller_->get_phase() != GrindPhase::IDLE) {
-                    send_ack(command, "tare", false, "grinder is not idle");
-                } else if (!sensor || sensor->has_hardware_fault() || sensor->get_sample_count() <= 0) {
-                    send_ack(command, "tare", false, "load cell is not ready");
-                } else if (sensor->is_tare_in_progress()) {
-                    send_ack(command, "tare", false, "tare is already in progress");
-                } else {
-                    sensor->tareNoDelay();
-                    send_ack(command, "tare", true, "tare started");
-                }
-                break;
-            }
-            case CommandAction::SELECT_PROFILE:
-                if (grind_controller_->get_phase() != GrindPhase::IDLE) {
-                    send_ack(command, "select_profile", false, "grinder is not idle");
-                    break;
-                }
-                profile_controller_->set_current_profile(command.profile_index);
-                settings_changed = true;
-                LOG_BLE("[WEB] Active profile changed to %s\n",
-                        profile_controller_->get_current_name());
-                send_ack(command, "select_profile", true, "profile selected");
-                break;
-            case CommandAction::SET_MODE:
-                if (grind_controller_->get_phase() != GrindPhase::IDLE) {
-                    send_ack(command, "set_mode", false, "grinder is not idle");
-                    break;
-                }
-                profile_controller_->set_grind_mode(
-                    command.grind_mode == 1 ? GrindMode::TIME : GrindMode::WEIGHT);
-                settings_changed = true;
-                send_ack(command, "set_mode", true, "grind mode selected");
-                break;
-            case CommandAction::APPLY_SETTINGS: {
-                settings_operation_token_ = operation_interlock().try_acquire();
-                if (!settings_operation_token_) {
-                    set_settings_result(command.request_id, "busy");
-                    break;
-                }
-                applying_settings_id_ = command.request_id;
-                settings_persisted_ = apply_settings(command.settings);
-                // Even a failed multi-key save can change stored values. Return
-                // now so UI runtime refresh finishes before any later command.
-                refresh_settings_cache();
-                return true;
             }
         }
+        // Log and reply after releasing the controller: a slow console or
+        // WebSocket client must not hold up the motor control loop.
+        if (profile_selected) {
+            LOG_BLE("[WEB] Active profile changed to %s\n", profile_controller_->get_current_name());
+        }
+        if (reply.action) send_ack(command, reply.action, reply.accepted, reply.reason);
     }
     if (settings_changed) refresh_settings_cache();
     return settings_changed;
+}
+
+// Caller holds the controller lock.
+DeviceApi::Reply DeviceApi::start_remote_grind(const Command& command, bool main_screen_ready) {
+    const bool manual = command.action == CommandAction::START_MANUAL;
+    const char* action = manual ? "start_manual" : "start";
+    if (device_web_server.is_ota_active() || device_web_server.is_ota_preparing()) {
+        return {action, false, "firmware update is active"};
+    }
+    if (grind_controller_->get_phase() != GrindPhase::IDLE) {
+        return {action, false, "grinder is not idle"};
+    }
+    const uint32_t now = millis();
+    const RemoteStartPolicy::Decision decision = RemoteStartPolicy::evaluate(
+        remote_start_enabled_.load(), main_screen_ready, has_remote_start_,
+        last_remote_start_ms_, now, NETWORK_REMOTE_START_MIN_INTERVAL_MS);
+    if (decision != RemoteStartPolicy::Decision::ALLOW) {
+        return {action, false, RemoteStartPolicy::rejection_reason(decision)};
+    }
+
+    bool started = false;
+    if (manual) {
+        started = grind_controller_->start_grind(0.0f, 0, GrindMode::MANUAL);
+    } else {
+        const auto profile = profile_controller_->snapshot();
+        const GrindMode mode = profile.mode;
+        WeightSensor* sensor = hardware_->get_weight_sensor();
+        if (mode == GrindMode::WEIGHT && (!sensor || sensor->has_hardware_fault())) {
+            return {action, false, "load cell is not ready"};
+        }
+        grind_controller_->set_grind_profile_id(profile.current_profile);
+        const float target_weight = profile.profiles[profile.current_profile].weight;
+        const uint32_t target_time_ms = static_cast<uint32_t>(
+            profile.profiles[profile.current_profile].time_seconds * 1000.0f + 0.5f);
+        started = grind_controller_->start_grind(target_weight, target_time_ms, mode);
+    }
+    if (!started) return {action, false, "grind could not start"};
+    last_remote_start_ms_ = now;
+    has_remote_start_ = true;
+    return {action, true, manual ? "manual grind started" : "grind started"};
+}
+
+bool DeviceApi::set_remote_start_enabled(bool enabled) {
+    Preferences preferences;
+    if (!preferences.begin(REMOTE_START_NAMESPACE, false)) return false;
+    const bool stored = preferences.putBool(REMOTE_START_KEY, enabled) == sizeof(bool);
+    preferences.end();
+    if (!stored) return false;
+    remote_start_enabled_.store(enabled);
+    LOG_BLE("[WEB] Remote grind start %s on the grinder\n", enabled ? "enabled" : "disabled");
+    return true;
 }
 
 uint32_t DeviceApi::reserve_settings_result() {
@@ -476,11 +510,8 @@ void DeviceApi::configure_settings_routes(AsyncWebServer* server) {
         response->addHeader("Cache-Control", "no-store");
         request->send(response);
     });
+    // Host and origin are checked by RequestGuard middleware before these run.
     server->on(AsyncURIMatcher::exact("/api/v1/profile"), HTTP_POST, [this](AsyncWebServerRequest* request) {
-        if (!websocket_origin_allowed(request)) {
-            request->send(403, "application/json", "{\"error\":\"Request origin is not allowed\"}");
-            return;
-        }
         queue_profile_selection(request);
     });
     server->on(AsyncURIMatcher::exact("/api/v1/settings"), HTTP_GET, [this](AsyncWebServerRequest* request) {
@@ -489,10 +520,6 @@ void DeviceApi::configure_settings_routes(AsyncWebServer* server) {
         request->send(response);
     });
     server->on(AsyncURIMatcher::exact("/api/v1/settings"), HTTP_POST, [this](AsyncWebServerRequest* request) {
-        if (!websocket_origin_allowed(request)) {
-            request->send(403, "application/json", "{\"error\":\"Request origin is not allowed\"}");
-            return;
-        }
         queue_settings_update(request);
     });
 }
@@ -887,7 +914,8 @@ String DeviceApi::build_state_message() {
              "\"grind\":{\"active\":%s,\"phase\":\"%s\",\"mode\":\"%s\",\"profile\":%d,\"progress\":%d,"
              "\"target_weight\":%.2f,\"target_time_ms\":%lu},"
              "\"scale\":{\"weight\":%.2f,\"flow\":%.2f},"
-             "\"motor\":{\"running\":%s},\"system\":{\"free_heap\":%u}}",
+             "\"motor\":{\"running\":%s},\"control\":{\"remote_start\":%s},"
+             "\"system\":{\"free_heap\":%u}}",
              static_cast<unsigned long>(sequence_.fetch_add(1) + 1), static_cast<unsigned long>(millis()),
              grind_controller_->is_active() ? "true" : "false",
              api_phase_name(*grind_controller_),
@@ -897,6 +925,7 @@ String DeviceApi::build_state_message() {
              target_weight,
              static_cast<unsigned long>(target_time_ms),
              weight, flow, motor_running ? "true" : "false",
+             remote_start_enabled_.load() ? "true" : "false",
              static_cast<unsigned int>(ESP.getFreeHeap()));
     return String(message);
 }

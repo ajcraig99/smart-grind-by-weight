@@ -33,7 +33,8 @@ enum BLEOTAStatus {
     BLE_OTA_RECEIVING = 0x02,
     BLE_OTA_SUCCESS = 0x03,
     BLE_OTA_ERROR = 0x04,
-    BLE_OTA_VALIDATION_ERROR = 0x05
+    BLE_OTA_VALIDATION_ERROR = 0x05,
+    BLE_OTA_NOT_AUTHORIZED = 0x06   // Update not allowed on the grinder's touchscreen
 };
 
 // Power management states

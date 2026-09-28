@@ -85,8 +85,13 @@ void ProvisioningService::update() {
     update_improv_serial();
 
     const NetworkState state = network_manager.state();
-    if (!active_ && (state == NetworkState::WIFI_NO_CREDENTIALS ||
-                     state == NetworkState::WIFI_SETUP_REQUIRED)) {
+    // Wi-Fi was switched off, or the network forgotten, while the setup
+    // network ran: release it so the next setup request can start a new one.
+    if (active_ && !reboot_pending_ && state != NetworkState::WIFI_SETUP_AP) {
+        stop_dns();
+    }
+    if (!active_ && !reboot_pending_ &&
+        (state == NetworkState::WIFI_NO_CREDENTIALS || state == NetworkState::WIFI_SETUP_REQUIRED)) {
         start();
     }
 
@@ -101,9 +106,14 @@ void ProvisioningService::update() {
 
 void ProvisioningService::configure_routes() {
     server_->on("/", HTTP_GET, [](AsyncWebServerRequest* request) {
-        const char* page = network_manager.state() == NetworkState::WIFI_SETUP_AP
-                               ? SETUP_PAGE
-                               : SMART_GRIND_DEVICE_PAGE;
+        const bool setup = network_manager.state() == NetworkState::WIFI_SETUP_AP;
+        if (setup && request->host() != WiFi.softAPIP().toString()) {
+            // Serve the form from the setup address so its POST is same-origin;
+            // RequestGuard refuses setup writes addressed to any other host.
+            redirect_to_setup_page(request);
+            return;
+        }
+        const char* page = setup ? SETUP_PAGE : SMART_GRIND_DEVICE_PAGE;
         // The text overload copies the complete page into an internal-RAM String.
         // Keep the embedded page in flash and let the async response stream it.
         AsyncWebServerResponse* response = request->beginResponse(
@@ -301,8 +311,7 @@ void ProvisioningService::update_improv_serial() {
                millis() - improv_connect_started_ms_ >= CONNECT_TIMEOUT_MS) {
         improv_connect_pending_ = false;
         send_improv_error(improv::ERROR_UNABLE_TO_CONNECT);
-        send_improv_state(network_manager.is_enabled() ? improv::STATE_AUTHORIZED
-                                                       : improv::STATE_STOPPED);
+        send_improv_state(improv::STATE_AUTHORIZED);
     }
 }
 
@@ -310,7 +319,10 @@ bool ProvisioningService::handle_improv_command(const improv::ImprovCommand& com
     send_improv_error(improv::ERROR_NONE);
     switch (command.command) {
         case improv::WIFI_SETTINGS: {
-            if (improv_connect_pending_ || !network_manager.is_enabled()) {
+            // Improv runs over the USB cable, so a provisioning request from it
+            // is a local action and may switch Wi-Fi on.
+            if (improv_connect_pending_ ||
+                (!network_manager.is_enabled() && !network_manager.set_enabled(true))) {
                 send_improv_error(improv::ERROR_UNABLE_TO_CONNECT);
                 return true;
             }
@@ -332,13 +344,13 @@ bool ProvisioningService::handle_improv_command(const improv::ImprovCommand& com
             return true;
         }
         case improv::GET_CURRENT_STATE: {
-            const improv::State state = !network_manager.is_enabled()
-                                            ? improv::STATE_STOPPED
-                                            : network_manager.is_connected()
-                                                  ? improv::STATE_PROVISIONED
-                                                  : improv_connect_pending_
-                                                        ? improv::STATE_PROVISIONING
-                                                        : improv::STATE_AUTHORIZED;
+            // Credentials are accepted even while Wi-Fi is off: WIFI_SETTINGS
+            // switches it on, so the device is always ready to provision.
+            const improv::State state = network_manager.is_connected()
+                                            ? improv::STATE_PROVISIONED
+                                            : improv_connect_pending_
+                                                  ? improv::STATE_PROVISIONING
+                                                  : improv::STATE_AUTHORIZED;
             send_improv_state(state);
             if (state == improv::STATE_PROVISIONED) {
                 send_improv_response(command.command,

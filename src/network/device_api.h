@@ -46,11 +46,18 @@ public:
     void init(AsyncWebServer* server, HardwareManager* hardware,
               GrindController* grind_controller, ProfileController* profile_controller);
     void update();
-    bool process_commands();
+    // UI task only. main_screen_ready is true while the grinder shows its main
+    // (ready) screen; remote starts are refused in every other UI state.
+    bool process_commands(bool main_screen_ready);
     // UI task calls this only after reloading runtime settings.
     void complete_settings_application(bool runtime_applied);
     String settings_json();
     void mark_settings_dirty() { settings_cache_dirty_.store(true); }
+
+    // Remote grind starts are enabled only from the touchscreen, never over
+    // the network, so a LAN client cannot grant itself motor control.
+    bool remote_start_enabled() const { return remote_start_enabled_.load(); }
+    bool set_remote_start_enabled(bool enabled);
 
 private:
     enum class CommandAction : uint8_t {
@@ -71,6 +78,12 @@ private:
         int profile_index = 0;
         int grind_mode = 0;
         DeviceSettingsUpdate settings;
+    };
+    // Acknowledgement prepared under the controller lock and sent after it.
+    struct Reply {
+        const char* action = nullptr;  // nullptr: nothing to send
+        bool accepted = false;
+        const char* reason = "";       // Static literal
     };
 
     static constexpr size_t MAX_CLIENTS = 4;
@@ -99,7 +112,12 @@ private:
     uint32_t last_publish_ms_ = 0;
     std::atomic<uint32_t> sequence_{0};
     std::atomic<bool> settings_cache_dirty_{false};
+    std::atomic<bool> remote_start_enabled_{false};
+    uint32_t last_remote_start_ms_ = 0; // UI task only.
+    bool has_remote_start_ = false;     // UI task only.
     bool initialized_ = false;
+
+    Reply start_remote_grind(const Command& command, bool main_screen_ready);
 
     void handle_event(AsyncWebSocket* server, AsyncWebSocketClient* client,
                       AwsEventType type, void* arg, uint8_t* data, size_t len);

@@ -22,6 +22,10 @@ public:
     void handle_back();
     void handle_refresh_stats();
     void handle_install_update();
+    void handle_allow_update();
+    void handle_wifi_toggle();
+    void handle_wifi_forget();
+    void handle_remote_start_toggle();
     void handle_diagnostics_reset();
     void handle_ble_toggle();
     void handle_ble_startup_toggle();

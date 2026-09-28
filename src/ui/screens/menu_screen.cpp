@@ -12,7 +12,9 @@
 #include "../../hardware/hardware_manager.h"
 #include "../../network/network_manager.h"
 #include "../../network/provisioning_service.h"
+#include "../../network/device_api.h"
 #include "../../network/device_web_server.h"
+#include "../../system/update_authorization.h"
 #include "grinding_screen.h"
 #include "../event_bridge_lvgl.h"
 #include "../../config/logging.h"
@@ -50,16 +52,27 @@ void MenuScreen::create(BluetoothManager* bluetooth, GrindController* grind_ctrl
     scale_tare_button = nullptr;
     scale_item = nullptr;
     network_page = nullptr;
+    wifi_toggle = nullptr;
+    remote_start_toggle = nullptr;
     network_status_label = nullptr;
     network_detail_label = nullptr;
     network_qr = nullptr;
+    network_forget_button = nullptr;
     network_update_label = nullptr;
     network_update_button = nullptr;
     network_status_text.clear();
     network_detail_text.clear();
     network_qr_payload.clear();
     network_update_text.clear();
+    network_forget_button_visible = false;
     network_update_button_visible = false;
+    firmware_page = nullptr;
+    firmware_item = nullptr;
+    firmware_status_label = nullptr;
+    firmware_allow_button = nullptr;
+    firmware_allow_label = nullptr;
+    firmware_status_text.clear();
+    firmware_allow_state = -1;
     grinder_purge_mode_radio_group = nullptr;
     grinder_purge_amount_slider = nullptr;
     grinder_purge_amount_label = nullptr;
@@ -164,6 +177,9 @@ void MenuScreen::create_menu_ui() {
     scale_page = lv_menu_page_create(menu, "Scale");
     create_scale_page(scale_page);
 
+    firmware_page = lv_menu_page_create(menu, "Firmware");
+    create_firmware_page(firmware_page);
+
     data_page = lv_menu_page_create(menu, "Logs & Data");
     create_data_page(data_page);
 
@@ -179,8 +195,10 @@ void MenuScreen::create_menu_ui() {
     cal_button = create_menu_item(main_page, "Calibrate");
     autotune_button = create_menu_item(main_page, "Tune Pulses");
     motor_test_button = create_menu_item(main_page, "Motor Test");
+    firmware_item = create_menu_item(main_page, "Firmware Update");
 
     lv_menu_set_load_page_event(menu, scale_item, scale_page);
+    lv_menu_set_load_page_event(menu, firmware_item, firmware_page);
 
     lv_obj_add_flag(scale_item, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_flag(cal_button, LV_OBJ_FLAG_CLICKABLE);
@@ -345,6 +363,8 @@ void MenuScreen::create_network_page(lv_obj_t* parent) {
     lv_obj_set_scroll_dir(parent, LV_DIR_VER);
     lv_obj_set_scrollbar_mode(parent, LV_SCROLLBAR_MODE_AUTO);
 
+    create_toggle_row(parent, "Wi-Fi", &wifi_toggle);
+
     network_status_label = lv_label_create(parent);
     lv_obj_set_style_text_font(network_status_label, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(network_status_label, lv_color_hex(THEME_COLOR_TEXT_SECONDARY), 0);
@@ -363,6 +383,15 @@ void MenuScreen::create_network_page(lv_obj_t* parent) {
     lv_qrcode_set_quiet_zone(network_qr, true);
     lv_obj_add_flag(network_qr, LV_OBJ_FLAG_HIDDEN);
 
+    create_separator(parent, "Remote Control");
+    create_description_label(parent, "Let the web page and Home Assistant start grinds. Stop always works remotely.");
+    create_toggle_row(parent, "Remote start", &remote_start_toggle);
+
+    network_forget_button = create_button(parent, "FORGET NETWORK", lv_color_hex(THEME_COLOR_WARNING),
+                                          260, 72, &lv_font_montserrat_24);
+    lv_obj_set_style_margin_top(network_forget_button, 10, 0);
+    lv_obj_add_flag(network_forget_button, LV_OBJ_FLAG_HIDDEN);
+
     network_update_label = lv_label_create(parent);
     lv_label_set_text(network_update_label, "");
     lv_obj_set_width(network_update_label, LV_PCT(90));
@@ -380,7 +409,111 @@ void MenuScreen::create_network_page(lv_obj_t* parent) {
         reinterpret_cast<void*>(static_cast<intptr_t>(EventBridgeLVGL::EventType::MENU_INSTALL_UPDATE)));
     lv_obj_add_flag(network_update_button, LV_OBJ_FLAG_HIDDEN);
 
+    using ET = EventBridgeLVGL::EventType;
+    lv_obj_add_event_cb(wifi_toggle, EventBridgeLVGL::dispatch_event, LV_EVENT_VALUE_CHANGED,
+                        reinterpret_cast<void*>(static_cast<intptr_t>(ET::WIFI_TOGGLE)));
+    lv_obj_add_event_cb(remote_start_toggle, EventBridgeLVGL::dispatch_event, LV_EVENT_VALUE_CHANGED,
+                        reinterpret_cast<void*>(static_cast<intptr_t>(ET::REMOTE_START_TOGGLE)));
+    lv_obj_add_event_cb(network_forget_button, EventBridgeLVGL::dispatch_event, LV_EVENT_CLICKED,
+                        reinterpret_cast<void*>(static_cast<intptr_t>(ET::WIFI_FORGET)));
+
+    update_network_toggles();
     update_network_status();
+}
+
+void MenuScreen::update_network_toggles() {
+    if (wifi_toggle) {
+        if (network_manager.desired_enabled()) {
+            lv_obj_add_state(wifi_toggle, LV_STATE_CHECKED);
+        } else {
+            lv_obj_clear_state(wifi_toggle, LV_STATE_CHECKED);
+        }
+    }
+    if (remote_start_toggle) {
+        if (device_api.remote_start_enabled()) {
+            lv_obj_add_state(remote_start_toggle, LV_STATE_CHECKED);
+        } else {
+            lv_obj_clear_state(remote_start_toggle, LV_STATE_CHECKED);
+        }
+    }
+}
+
+void MenuScreen::create_firmware_page(lv_obj_t* parent) {
+    lv_obj_set_layout(parent, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(parent, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(parent, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_scroll_dir(parent, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(parent, LV_SCROLLBAR_MODE_AUTO);
+
+    char build_info[16];
+    snprintf(build_info, sizeof(build_info), "#%d", BUILD_NUMBER);
+    create_static_data_label(parent, "Firmware:", "v" BUILD_FIRMWARE_VERSION);
+    create_static_data_label(parent, "Build:", build_info);
+
+    char description[160];
+    snprintf(description, sizeof(description),
+             "Updates over Wi-Fi or Bluetooth need permission here. Allow one, then start it within %lu minutes.",
+             static_cast<unsigned long>(NETWORK_UPDATE_AUTHORIZATION_WINDOW_MS / 60000UL));
+    create_description_label(parent, description);
+
+    firmware_status_label = lv_label_create(parent);
+    lv_obj_set_width(firmware_status_label, LV_PCT(90));
+    lv_label_set_long_mode(firmware_status_label, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_align(firmware_status_label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(firmware_status_label, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(firmware_status_label, lv_color_hex(THEME_COLOR_TEXT_SECONDARY), 0);
+    lv_obj_set_style_margin_bottom(firmware_status_label, 12, 0);
+
+    firmware_allow_button = create_button(parent, "ALLOW UPDATE", lv_color_hex(THEME_COLOR_SUCCESS),
+                                          260, 80, &lv_font_montserrat_24);
+    firmware_allow_label = lv_obj_get_child(firmware_allow_button, 0);
+    lv_obj_add_event_cb(
+        firmware_allow_button, EventBridgeLVGL::dispatch_event, LV_EVENT_CLICKED,
+        reinterpret_cast<void*>(static_cast<intptr_t>(EventBridgeLVGL::EventType::MENU_ALLOW_UPDATE)));
+
+    update_firmware_update_page();
+}
+
+void MenuScreen::update_firmware_update_page() {
+    if (!firmware_status_label || !firmware_allow_button || !firmware_allow_label) return;
+
+    const uint32_t now = millis();
+    const bool updating = device_web_server.is_ota_active() ||
+                          (bluetooth_manager && bluetooth_manager->is_transfer_active());
+    const bool granted = update_authorization().is_granted(now);
+
+    String status;
+    if (updating) {
+        status = "Transfer in progress.";
+    } else if (granted) {
+        const uint32_t seconds = (update_authorization().remaining_ms(now) + 999U) / 1000U;
+        char text[64];
+        snprintf(text, sizeof(text), "Update allowed for %lu:%02lu",
+                 static_cast<unsigned long>(seconds / 60U), static_cast<unsigned long>(seconds % 60U));
+        status = text;
+    } else {
+        status = "Firmware updates are locked.";
+    }
+    if (status != firmware_status_text) {
+        lv_label_set_text(firmware_status_label, status.c_str());
+        firmware_status_text = status;
+    }
+
+    const int8_t allow_state = updating ? 2 : granted ? 1 : 0;
+    if (allow_state == firmware_allow_state) return;
+    firmware_allow_state = allow_state;
+    if (allow_state == 1) {
+        lv_label_set_text(firmware_allow_label, "CANCEL");
+        lv_obj_set_style_bg_color(firmware_allow_button, lv_color_hex(THEME_COLOR_WARNING), 0);
+    } else {
+        lv_label_set_text(firmware_allow_label, "ALLOW UPDATE");
+        lv_obj_set_style_bg_color(firmware_allow_button, lv_color_hex(THEME_COLOR_SUCCESS), 0);
+    }
+    if (allow_state == 2) {
+        lv_obj_add_state(firmware_allow_button, LV_STATE_DISABLED);
+    } else {
+        lv_obj_clear_state(firmware_allow_button, LV_STATE_DISABLED);
+    }
 }
 
 void MenuScreen::update_network_status() {
@@ -392,8 +525,10 @@ void MenuScreen::update_network_status() {
     String qr_payload;
     switch (network_manager.state()) {
         case NetworkState::WIFI_DISABLED:
-            status = "Wi-Fi disabled";
-            detail = "Wi-Fi can be enabled after setup support is complete.";
+            status = "Wi-Fi off";
+            detail = network_manager.has_credentials()
+                         ? String("Turn Wi-Fi on to rejoin " + network_manager.network_name() + ".")
+                         : String("Turn Wi-Fi on to start a setup network for your phone.");
             break;
         case NetworkState::WIFI_NO_CREDENTIALS:
         case NetworkState::WIFI_SETUP_REQUIRED:
@@ -450,9 +585,19 @@ void MenuScreen::update_network_status() {
         lv_obj_clear_flag(network_qr, LV_OBJ_FLAG_HIDDEN);
     }
 
+    const bool show_forget_button = network_manager.has_credentials();
+    if (show_forget_button != network_forget_button_visible) {
+        network_forget_button_visible = show_forget_button;
+        if (show_forget_button) {
+            lv_obj_clear_flag(network_forget_button, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(network_forget_button, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+
     String update_text;
     bool show_update_button = false;
-    if (network_manager.state() == NetworkState::WIFI_CONNECTED) {
+    if (NETWORK_RELEASE_UPDATES_ENABLED && network_manager.state() == NetworkState::WIFI_CONNECTED) {
         switch (device_web_server.firmware_update_state()) {
             case FirmwareUpdateState::UNKNOWN:
                 update_text = "Update check will run while idle.";
@@ -877,6 +1022,8 @@ void MenuScreen::show() {
     lv_obj_clear_flag(screen, LV_OBJ_FLAG_HIDDEN);
     visible = true;
     update_ble_status();
+    update_network_toggles();
+    update_firmware_update_page();
     update_brightness_sliders();
     update_bluetooth_startup_toggle();
     update_logging_toggle();
