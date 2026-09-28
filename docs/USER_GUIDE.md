@@ -44,10 +44,11 @@ Weight targets range from 5 g to 40 g and time targets from 0.5 s to
 - **Swipe up/down** on the ready screen to toggle between grind-by-weight and grind-by-time modes (when enabled in Menu → Grind Settings)
 - **Tap** to select profiles or buttons
 - **Long press** on profile targets to edit/customize them
-- A swipe that starts on the round button never presses it, and for 0.7 s
-  after the button changes (for example from STOP or OK to PLAY) a second tap
-  is ignored, so a double tap cannot start a new grind. STOP always acts at
-  once
+- A swipe that starts on the round button never presses it, and a press
+  that starts within 0.7 s of the button changing (for example from STOP or OK
+  to PLAY) is ignored, so a double tap cannot start a new grind. STOP and
+  PAUSE always act at once. Dialog buttons ignore swipes, and sliding off a
+  dialog button cancels the press
 - When the screen has dimmed, the first touch only wakes it
 
 > **Color cues:** The GRIND button background turns **red** in weight mode and **blue** in time mode, so you always know which behaviour is armed.
@@ -65,7 +66,7 @@ Access **Menu → Grind Settings** to configure:
   - **Prime mode**: Keeps the coffee used to saturate the grinder, continues immediately
   - **Purge mode** (default): Prompts you to discard stale grinds before continuing
   - **Amount slider**: Configure purge/prime amount (0.1g-2.5g, default 1.0g). Amount is a minimum target; actual output will be slightly higher.
-  - **"Keep purge grinds from now on" checkbox**: Appears during purge confirmation - switches to Prime mode when checked
+  - **"Always keep" checkbox**: Appears during purge confirmation - switches to Prime mode when checked and you continue
   - **CONTINUE** re-tares before the main grind, so empty the cup (or swap it)
     before pressing it. If the scale reads as if the cup were still off, the
     grinder asks you to put it back; a lighter replacement cup can be confirmed
@@ -199,13 +200,14 @@ Main Screen (swipe left/right between tabs, up/down to toggle weight/time mode i
 
 During Grinding:
 |-- Weight/elapsed display & progress
-|-- Tap anywhere: Arc ↔ Nerdy display modes
+|-- Press and hold: Arc ↔ Nerdy display modes
 |-- STOP button
 \-- Purge Confirmation (appears in Purge mode after grinder saturation)
     |-- "Grinder Purged" title
     |-- Instruction message
-    |-- "Keep purge grinds from now on" checkbox
-    \-- CONTINUE button
+    |-- "Always keep" checkbox
+    |-- STOP button (cancels the grind)
+    \-- CONTINUE button (re-tares, then grinds)
 ```
 
 ---

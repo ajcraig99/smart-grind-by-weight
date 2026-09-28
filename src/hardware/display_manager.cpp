@@ -513,6 +513,8 @@ bool DisplayManager::filter_touch_for_panel_wake(const TouchData& touch) {
     if (wake_touch_guard_expired(millis() - wake_touch_guard_started_ms)) {
         consume_wake_touch_until_release = false;
         wake_touch_guard_started_ms = 0;
+        // A finger still held after the guard must not click on release.
+        if (lvgl_input) lv_indev_wait_release(lvgl_input);
         LOG_BLE("[DISPLAY] Wake-touch guard recovered after missing release\n");
     }
     return true;

@@ -139,37 +139,57 @@ uint32_t millis() { return now; }
 enum class UIState { READY, GRINDING, PURGE_CONFIRM, GRIND_COMPLETE };
 struct State { UIState current = UIState::READY; bool is_state(UIState s) const { return current == s; } };
 struct UIManager { State* state_machine; };
+#define LV_SYMBOL_SETTINGS "SETTINGS"
+#define LV_SYMBOL_WIFI "WIFI"
+#define LV_SYMBOL_PAUSE "PAUSE"
 struct GrindingUIController {
     UIManager* ui_manager_;
     void* grind_icon_ = nullptr;
     void* pulse_icon_ = nullptr;
     lv_point_t press_point_{0, 0};
+    uint32_t press_ms_ = 0;
     const char* grind_symbol_ = nullptr;
     const char* pulse_symbol_ = nullptr;
     uint32_t grind_button_changed_ms_ = 0;
     uint32_t pulse_button_changed_ms_ = 0;
     void record_press(lv_event_t* e);
-    bool is_deliberate_tap(lv_event_t* e, uint32_t changed_ms) const;
+    bool is_deliberate_tap(lv_event_t* e, uint32_t changed_ms, bool rearm) const;
     bool grind_button_stops() const;
+    bool grind_button_needs_rearm() const;
+    bool pulse_button_stops() const;
     void set_grind_icon(const char* symbol);
 };
 ''' + "{methods}" + r'''
 int main() {
     State state; UIManager ui{&state}; GrindingUIController c{&ui};
     lv_indev_t touch{{140, 400}}; lv_event_t event{&touch};
-    // The button turns into PLAY (after STOP or OK): a tap within 700 ms is
-    // the second tap of a double tap and is ignored; later taps count.
+    // The button turns into PLAY (after STOP or OK): a press starting within
+    // 700 ms is the second tap of a double tap and is ignored; later ones count.
     c.set_grind_icon("PLAY");
-    assert(icon_sets == 1 && c.grind_button_changed_ms_ == now);
-    c.record_press(&event);
-    now += 699; assert(!c.is_deliberate_tap(&event, c.grind_button_changed_ms_));
-    now += 1;   assert(c.is_deliberate_tap(&event, c.grind_button_changed_ms_));
+    const uint32_t changed = c.grind_button_changed_ms_;
+    assert(icon_sets == 1 && changed == now && c.grind_button_needs_rearm());
+    now += 699; c.record_press(&event); now += 50;
+    assert(!c.is_deliberate_tap(&event, changed, true));
+    now = changed + 700; c.record_press(&event); now += 50;
+    assert(c.is_deliberate_tap(&event, changed, true));
+    // A press that began before the change was aimed at the old meaning, even
+    // when it is released long after (holding OK while the screen moves on).
+    c.record_press(&event); now += 10; c.set_grind_icon("OK"); now += 5000;
+    assert(!c.is_deliberate_tap(&event, c.grind_button_changed_ms_, true));
+    assert(!c.is_deliberate_tap(&event, c.grind_button_changed_ms_, false));
     // Re-setting the same icon is not a change of meaning.
-    c.set_grind_icon("PLAY"); assert(icon_sets == 1);
+    c.set_grind_icon("OK"); assert(icon_sets == 2);
+    // Opening the menu or Wi-Fi page needs no re-arm delay.
+    c.set_grind_icon(LV_SYMBOL_SETTINGS); assert(!c.grind_button_needs_rearm());
+    c.record_press(&event); assert(c.is_deliberate_tap(&event, c.grind_button_changed_ms_, false));
+    c.set_grind_icon(LV_SYMBOL_WIFI); assert(!c.grind_button_needs_rearm());
     // A press that travels more than 30 px is a swipe.
-    c.record_press(&event);
-    touch.point = {140 + 31, 400}; assert(!c.is_deliberate_tap(&event, 0));
-    touch.point = {140, 400 - 30}; assert(c.is_deliberate_tap(&event, 0));
+    now += 1000; c.record_press(&event);
+    touch.point = {140 + 31, 400}; assert(!c.is_deliberate_tap(&event, 0, true));
+    touch.point = {140, 400 - 30}; assert(c.is_deliberate_tap(&event, 0, true));
+    // PAUSE stops the motor, so it is exempt like STOP; RESUME is not.
+    c.pulse_symbol_ = LV_SYMBOL_PAUSE; assert(c.pulse_button_stops());
+    c.pulse_symbol_ = "PLAY"; assert(!c.pulse_button_stops());
     // STOP never waits: the button stops while grinding or at the purge prompt.
     for (UIState s : {UIState::GRINDING, UIState::PURGE_CONFIRM}) { state.current = s; assert(c.grind_button_stops()); }
     for (UIState s : {UIState::READY, UIState::GRIND_COMPLETE}) { state.current = s; assert(!c.grind_button_stops()); }
@@ -214,6 +234,8 @@ class TouchInputTest(unittest.TestCase):
             "void GrindingUIController::record_press(",
             "bool GrindingUIController::is_deliberate_tap(",
             "bool GrindingUIController::grind_button_stops()",
+            "bool GrindingUIController::grind_button_needs_rearm()",
+            "bool GrindingUIController::pulse_button_stops()",
             "void GrindingUIController::set_grind_icon(",
         ))
         code = "#include <initializer_list>\n" + TAP_CASES.replace("{methods}", methods)

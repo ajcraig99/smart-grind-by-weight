@@ -76,7 +76,8 @@ void GrindingUIController::register_events() {
             // STOP always acts at once; any other meaning needs a deliberate tap.
             if (controller &&
                 (controller->grind_button_stops() ||
-                 controller->is_deliberate_tap(e, controller->grind_button_changed_ms_))) {
+                 controller->is_deliberate_tap(e, controller->grind_button_changed_ms_,
+                                               controller->grind_button_needs_rearm()))) {
                 controller->handle_grind_button();
             }
         }, LV_EVENT_CLICKED, this);
@@ -89,7 +90,10 @@ void GrindingUIController::register_events() {
                 return;
             }
             auto* controller = static_cast<GrindingUIController*>(lv_event_get_user_data(e));
-            if (controller && controller->is_deliberate_tap(e, controller->pulse_button_changed_ms_)) {
+            // PAUSE stops the motor, so like STOP it acts at once.
+            if (controller &&
+                (controller->pulse_button_stops() ||
+                 controller->is_deliberate_tap(e, controller->pulse_button_changed_ms_, true))) {
                 controller->handle_pulse_button();
             }
         }, LV_EVENT_CLICKED, this);
@@ -150,6 +154,9 @@ void GrindingUIController::on_state_changed(UIState new_state) {
             break;
         case UIState::GRIND_TIMEOUT:
             enter_grind_timeout_state();
+            break;
+        case UIState::PURGE_CONFIRM:
+            enter_purge_confirm_state();
             break;
         case UIState::MENU:
         case UIState::CALIBRATION:
@@ -332,22 +339,6 @@ void GrindingUIController::handle_layout_toggle() {
 }
 
 void GrindingUIController::handle_purge_confirm_continue() {
-    if (!ui_manager_ || !ui_manager_->grind_controller) {
-        return;
-    }
-
-    // Check if "Keep purge grinds from now on" checkbox is checked
-    if (ui_manager_->purge_confirm_screen.is_checkbox_checked()) {
-        LOG_BLE("[%lums PURGE] User chose to keep grinds - switching to Prime mode\n", millis());
-
-        // Switch grinder purge mode from Purge to Prime in preferences
-        auto* hardware = ui_manager_->get_hardware_manager();
-        Preferences* prefs = hardware ? hardware->get_preferences() : nullptr;
-        if (prefs) {
-            prefs->putInt(GrindController::PREF_KEY_GRINDER_MODE, static_cast<int>(GrinderPurgeMode::PRIME));
-        }
-    }
-
     continue_after_purge(true);
 }
 
@@ -365,6 +356,19 @@ void GrindingUIController::continue_after_purge(bool check_vessel) {
             "CONTINUE", lv_color_hex(THEME_COLOR_WARNING),
             [this]() { continue_after_purge(false); }, "BACK");
         return;
+    }
+
+    // Save "Always keep" only once the grind really continues: BACK from the
+    // cup dialog shows the prompt again with the box cleared.
+    if (ui_manager_->purge_confirm_screen.is_checkbox_checked()) {
+        LOG_BLE("[%lums PURGE] User chose to keep grinds - switching to Prime mode\n", millis());
+
+        // Switch grinder purge mode from Purge to Prime in preferences
+        auto* hardware = ui_manager_->get_hardware_manager();
+        Preferences* prefs = hardware ? hardware->get_preferences() : nullptr;
+        if (prefs) {
+            prefs->putInt(GrindController::PREF_KEY_GRINDER_MODE, static_cast<int>(GrinderPurgeMode::PRIME));
+        }
     }
 
     // Hide the purge confirmation screen and continue grinding
@@ -763,6 +767,14 @@ void GrindingUIController::enter_grind_timeout_state() {
     ui_manager_->grinding_screen.update_progress(error_grind_progress_);
 }
 
+void GrindingUIController::enter_purge_confirm_state() {
+    // Also reached back from a dialog (for example "Cup missing?"), which hid
+    // the buttons; the prompt needs its STOP button.
+    if (grind_button_) {
+        lv_obj_clear_flag(grind_button_, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
 void GrindingUIController::enter_menu_state() {
     if (grind_button_) {
         lv_obj_add_flag(grind_button_, LV_OBJ_FLAG_HIDDEN);
@@ -773,16 +785,20 @@ void GrindingUIController::enter_menu_state() {
 }
 
 void GrindingUIController::record_press(lv_event_t* e) {
+    press_ms_ = millis();
     if (lv_indev_t* indev = lv_event_get_indev(e)) {
         lv_indev_get_point(indev, &press_point_);
     }
 }
 
 // A tap counts only if the finger stayed near where it went down (a swipe
-// that starts on a button is not a tap) and the button has not just changed
-// meaning under the finger (the second tap of a double tap).
-bool GrindingUIController::is_deliberate_tap(lv_event_t* e, uint32_t changed_ms) const {
-    if (millis() - changed_ms < USER_BUTTON_REARM_MS) {
+// that starts on a button is not a tap) and the press began after the button
+// took on its current meaning: at least USER_BUTTON_REARM_MS after it when
+// `rearm` is set, which rejects the second tap of a double tap.
+bool GrindingUIController::is_deliberate_tap(lv_event_t* e, uint32_t changed_ms, bool rearm) const {
+    const int32_t press_after_change_ms = static_cast<int32_t>(press_ms_ - changed_ms);
+    if (press_after_change_ms < 0 ||
+        (rearm && static_cast<uint32_t>(press_after_change_ms) < USER_BUTTON_REARM_MS)) {
         return false;
     }
     lv_indev_t* indev = lv_event_get_indev(e);
@@ -799,6 +815,16 @@ bool GrindingUIController::grind_button_stops() const {
     return ui_manager_ && ui_manager_->state_machine &&
            (ui_manager_->state_machine->is_state(UIState::GRINDING) ||
             ui_manager_->state_machine->is_state(UIState::PURGE_CONFIRM));
+}
+
+// Opening the menu or the Wi-Fi page needs no re-arm delay.
+bool GrindingUIController::grind_button_needs_rearm() const {
+    return !grind_symbol_ || (std::strcmp(grind_symbol_, LV_SYMBOL_SETTINGS) != 0 &&
+                              std::strcmp(grind_symbol_, LV_SYMBOL_WIFI) != 0);
+}
+
+bool GrindingUIController::pulse_button_stops() const {
+    return pulse_symbol_ && std::strcmp(pulse_symbol_, LV_SYMBOL_PAUSE) == 0;
 }
 
 void GrindingUIController::set_grind_icon(const char* symbol) {

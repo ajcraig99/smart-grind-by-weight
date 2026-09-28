@@ -13,7 +13,9 @@ void ConfirmUIController::register_events() {
         return;
     }
 
+    // Sliding off a dialog button cancels the press instead of confirming.
     if (auto* confirm_btn = ui_manager_->confirm_screen.get_confirm_button()) {
+        lv_obj_clear_flag(confirm_btn, LV_OBJ_FLAG_PRESS_LOCK);
         lv_obj_add_event_cb(confirm_btn, [](lv_event_t* e) {
             if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
                 return;
@@ -25,6 +27,7 @@ void ConfirmUIController::register_events() {
     }
 
     if (auto* cancel_btn = ui_manager_->confirm_screen.get_cancel_button()) {
+        lv_obj_clear_flag(cancel_btn, LV_OBJ_FLAG_PRESS_LOCK);
         lv_obj_add_event_cb(cancel_btn, [](lv_event_t* e) {
             if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
                 return;

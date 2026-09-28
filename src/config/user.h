@@ -38,7 +38,7 @@
 //------------------------------------------------------------------------------
 // TOUCH SAFETY
 //------------------------------------------------------------------------------
-#define USER_BUTTON_REARM_MS 700                                               // Taps ignored this long after a grind-screen button changes meaning (except STOP)
+#define USER_BUTTON_REARM_MS 700                                               // Presses starting this soon after a grind-screen button changes meaning are ignored (not STOP or PAUSE)
 #define USER_BUTTON_DRAG_CANCEL_PX 30                                          // A press that travels further than this is a swipe, not a tap
 
 // USER_JOG parameters moved to system.h to be near SYS_JOG parameters

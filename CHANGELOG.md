@@ -54,9 +54,13 @@ line. Earlier release history remains available in the original project's
 ### Touchscreen
 
 - A swipe that starts on the round grind button no longer presses it, and a
-  second tap within 0.7 s of the button changing meaning is ignored, so
-  STOP-STOP or OK-OK can no longer start a new grind. STOP still acts at once.
-- The first touch on a dimmed screen only wakes it.
+  press that starts within 0.7 s of the button changing meaning is ignored, so
+  STOP-STOP or OK-OK can no longer start a new grind. A press that began
+  before the change never counts. STOP and PAUSE still act at once.
+- Swiping across the bottom of the main screen now also selects the profile it
+  shows; before, the grind button kept the previous tab's profile.
+- Dialog buttons ignore swipes, and sliding off a dialog button cancels it.
+- The first touch on a dimmed screen only wakes it, even when held.
 - The touch driver holds a press through up to two failed reads instead of
   turning one bad read into a release and a click, and ignores implausible
   readings from failed transfers.
@@ -86,8 +90,9 @@ line. Earlier release history remains available in the original project's
   without gaining 0.2 g, during priming or the main grind. An empty hopper or
   blocked chute previously ran for up to 55 seconds.
 - Re-tare after **CONTINUE** on the purge prompt, so grounds left in the cup
-  or a different cup no longer change the dose. The grinder asks to confirm
-  when the scale reads as if the cup were still off.
+  or a different cup no longer change the dose, and lifting whichever cup is
+  in place still stops the grind. The grinder asks to confirm when the scale
+  reads as if the cup were still off.
 - Detect a lifted cup on grinds whose zero already included it (most grinds
   after the first), using a fixed -10 g threshold. Count each scale sample
   once: the 20 ms control loop saw each sample about five times, so one bad

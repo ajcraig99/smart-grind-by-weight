@@ -38,11 +38,14 @@ private:
     void enter_grind_complete_state();
     void enter_grind_timeout_state();
     void enter_menu_state();
+    void enter_purge_confirm_state();
 
     // Tap guards for the grind-screen buttons (U1, U2).
     void record_press(lv_event_t* e);
-    bool is_deliberate_tap(lv_event_t* e, uint32_t changed_ms) const;
+    bool is_deliberate_tap(lv_event_t* e, uint32_t changed_ms, bool rearm) const;
     bool grind_button_stops() const;
+    bool grind_button_needs_rearm() const;
+    bool pulse_button_stops() const;
     void set_grind_icon(const char* symbol);
     void set_pulse_icon(const char* symbol);
     void show_start_failure();
@@ -71,6 +74,7 @@ private:
     char error_message_[32] = {0};
 
     lv_point_t press_point_{0, 0};
+    uint32_t press_ms_ = 0;
     const char* grind_symbol_ = nullptr;
     const char* pulse_symbol_ = nullptr;
     uint32_t grind_button_changed_ms_ = 0;

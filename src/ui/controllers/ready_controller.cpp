@@ -170,7 +170,15 @@ void ReadyUIController::register_events() {
         lv_indev_t* input = lv_indev_get_act();
         lv_dir_t dir = lv_indev_get_gesture_dir(input);
         UIManager* ui = static_cast<UIManager*>(lv_event_get_user_data(e));
-        if (!ui || !ui->state_machine->is_state(UIState::READY)) {
+        if (!ui) {
+            return;
+        }
+        // A swipe never confirms a dialog either.
+        if (ui->state_machine->is_state(UIState::CONFIRM)) {
+            lv_indev_wait_release(input);
+            return;
+        }
+        if (!ui->state_machine->is_state(UIState::READY)) {
             return;
         }
 
@@ -184,6 +192,12 @@ void ReadyUIController::register_events() {
             target_tab += dir == LV_DIR_LEFT ? 1 : -1;
             if (target_tab >= 0 && target_tab < ReadyScreen::TAB_COUNT) {
                 lv_tabview_set_act(ready_tabs, static_cast<uint32_t>(target_tab), LV_ANIM_ON);
+                // lv_tabview_set_act() reports no change, so select the
+                // profile shown here too; otherwise the next PLAY would start
+                // the previous tab's grind.
+                if (ui->ready_controller_) {
+                    ui->ready_controller_->handle_tab_change(target_tab);
+                }
             }
             lv_event_stop_bubbling(e);
             return;

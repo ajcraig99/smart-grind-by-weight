@@ -369,6 +369,9 @@ bool GrindController::continue_from_purge(bool check_vessel) {
     // Zero again with the emptied (or different) cup in place, so purged
     // grounds left behind are not counted as dose. TARE_CONFIRM starts the
     // motor once the scale has settled and then resumes in PREDICTIVE.
+    // The new zero includes whichever cup is there, so its weight is unknown:
+    // use the fixed removal threshold rather than the first cup's.
+    net_weight_removal_guard_.reset(0.0f);
     resume_after_purge_ = true;
     switch_phase(GrindPhase::TARING);  // No loop_data needed for phase transition
     return true;

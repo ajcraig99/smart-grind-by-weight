@@ -128,8 +128,9 @@ button, and the purge checkbox size.
    "No beans?" about 5 s after priming starts.
 5. Settling and tare times on your load cell; the stricter checks may add a
    few hundred milliseconds per pulse on a noisy setup.
-6. Purge: press CONTINUE with the cup off (prompt expected) and with it back
-   (re-tare, then grind).
+6. Purge: press CONTINUE with the cup off (prompt expected), tap BACK (the
+   purge prompt returns with its STOP button), then CONTINUE with the cup back
+   (re-tare, then grind). Lift the cup after the re-tare: the grind should stop.
 7. Lift the cup mid-grind (stop with "Err: neg wt") and during final settling
    (completes with the result).
 8. Touch: swipe across the round button, double-tap STOP and OK, and tap a
