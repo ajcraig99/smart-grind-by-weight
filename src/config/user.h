@@ -24,7 +24,7 @@
 
 // Weight limits
 #define USER_MIN_TARGET_WEIGHT_G 5.0f                                          // Minimum allowed target weight
-#define USER_MAX_TARGET_WEIGHT_G 1000.0f                                        // Maximum allowed target weight
+#define USER_MAX_TARGET_WEIGHT_G 40.0f                                         // Largest dose: fits the 60 s grind timeout at 1 g/s, with time for tare, priming and corrections
 
 #define USER_MIN_TARGET_TIME_S 0.5f                                            // Minimum allowed target time
 #define USER_MAX_TARGET_TIME_S 25.0f                                           // Maximum allowed target time
@@ -47,6 +47,8 @@
 // SCALE CALIBRATION
 //------------------------------------------------------------------------------
 #define USER_CALIBRATION_REFERENCE_WEIGHT_G 100.0f                             // Default reference weight for calibration
+#define USER_CALIBRATION_MIN_WEIGHT_G 5.0f                                     // Lightest reference weight that can be entered
+#define USER_CALIBRATION_MAX_WEIGHT_G 1000.0f                                  // Heaviest reference weight (a mug of water is a few hundred grams)
 #define USER_DEFAULT_CALIBRATION_FACTOR -7050.0f                               // Default load cell calibration factor
 
 //------------------------------------------------------------------------------

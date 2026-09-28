@@ -3,6 +3,10 @@
 
 class UIManager;
 
+// Calibration reference weights have their own range; the dose limit would
+// not admit a 100 g reference or a mug of water.
+float clamp_calibration_weight(float weight);
+
 // Handles the calibration workflow (tare, weight setting, completion)
 
 class CalibrationUIController {

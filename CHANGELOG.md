@@ -76,6 +76,12 @@ line. Earlier release history remains available in the original project's
 
 ### Grind control
 
+- Limit weight targets to 40 g, so every dose fits inside the 60-second grind
+  limit at 1 g/s with time for tare, priming and corrections. Targets up to
+  1000 g could be set before and would always time out above about 60 g.
+  Stored larger targets load as 40 g. Calibration reference weights keep their
+  own 5-1000 g range.
+
 - Stop a weight grind with "No beans?" when the motor runs for 5 seconds
   without gaining 0.2 g, during priming or the main grind. An empty hopper or
   blocked chute previously ran for up to 55 seconds.

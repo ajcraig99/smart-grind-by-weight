@@ -7,6 +7,12 @@
 #include "../components/ui_operations.h"
 #include "../ui_manager.h"
 
+float clamp_calibration_weight(float weight) {
+    if (weight < USER_CALIBRATION_MIN_WEIGHT_G) return USER_CALIBRATION_MIN_WEIGHT_G;
+    if (weight > USER_CALIBRATION_MAX_WEIGHT_G) return USER_CALIBRATION_MAX_WEIGHT_G;
+    return weight;
+}
+
 CalibrationUIController::CalibrationUIController(UIManager* manager)
     : ui_manager_(manager) {}
 
@@ -161,7 +167,7 @@ void CalibrationUIController::handle_plus(lv_event_code_t code) {
 
     if (code == LV_EVENT_SHORT_CLICKED) {  // CLICKED also follows a long-press jog
         float cal_weight = ui_manager_->calibration_screen.get_calibration_weight();
-        cal_weight = ui_manager_->get_profile_controller()->clamp_weight(cal_weight + USER_FINE_WEIGHT_ADJUSTMENT_G);
+        cal_weight = clamp_calibration_weight(cal_weight + USER_FINE_WEIGHT_ADJUSTMENT_G);
         ui_manager_->calibration_screen.update_calibration_weight(cal_weight);
     } else if (code == LV_EVENT_LONG_PRESSED) {
         if (ui_manager_->jog_adjust_controller_) {
@@ -179,7 +185,7 @@ void CalibrationUIController::handle_minus(lv_event_code_t code) {
 
     if (code == LV_EVENT_SHORT_CLICKED) {  // CLICKED also follows a long-press jog
         float cal_weight = ui_manager_->calibration_screen.get_calibration_weight();
-        cal_weight = ui_manager_->get_profile_controller()->clamp_weight(cal_weight - USER_FINE_WEIGHT_ADJUSTMENT_G);
+        cal_weight = clamp_calibration_weight(cal_weight - USER_FINE_WEIGHT_ADJUSTMENT_G);
         ui_manager_->calibration_screen.update_calibration_weight(cal_weight);
     } else if (code == LV_EVENT_LONG_PRESSED) {
         if (ui_manager_->jog_adjust_controller_) {

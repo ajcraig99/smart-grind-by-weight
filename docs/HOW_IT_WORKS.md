@@ -23,7 +23,7 @@ The system uses a **zero-shot learning algorithm** requiring no prior knowledge 
 
 2. **Grinder Saturation Phase** (Weight mode only)
    - Saturates the grinder before main grind for accurate latency detection
-   - Configurable amount: 0.1g-5.0g (default 1.0g)
+   - Configurable amount: 0.1g-2.5g (default 1.0g)
    - **Prime mode**: Keeps coffee, continues immediately after settling
    - **Purge mode**: Shows confirmation popup, waits for user to discard stale grinds,
      then re-tares before the main grind

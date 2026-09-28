@@ -34,6 +34,9 @@ All profiles are fully customizable. Default grind-by-weight targets (fallback t
 - **Double**: 18 g (10 s)
 - **Custom**: 21.5 g (12 s)
 
+Weight targets range from 5 g to 40 g and time targets from 0.5 s to
+25 s, so every targeted grind can finish inside its 60-second limit.
+
 > 💡 **Tip** – the target label always shows the active unit (`g` or `s`). Long-press to edit in whichever mode you are currently using.
 
 ### Navigation
@@ -61,7 +64,7 @@ Access **Menu → Grind Settings** to configure:
 - **Purging** *(Advanced)*: Control how the grinder saturates itself before weight-mode grinding
   - **Prime mode**: Keeps the coffee used to saturate the grinder, continues immediately
   - **Purge mode** (default): Prompts you to discard stale grinds before continuing
-  - **Amount slider**: Configure purge/prime amount (0.1g-5.0g, default 1.0g). Amount is a minimum target; actual output will be slightly higher.
+  - **Amount slider**: Configure purge/prime amount (0.1g-2.5g, default 1.0g). Amount is a minimum target; actual output will be slightly higher.
   - **"Keep purge grinds from now on" checkbox**: Appears during purge confirmation - switches to Prime mode when checked
   - **CONTINUE** re-tares before the main grind, so empty the cup (or swap it)
     before pressing it. If the scale reads as if the cup were still off, the
@@ -165,7 +168,7 @@ Main Screen (swipe left/right between tabs, up/down to toggle weight/time mode i
     |       |-- Start on Cup toggle and configurable cup threshold
     |       |-- Return on Removal toggle (drop back to Ready when that weight leaves)
     |       |-- Purging (Prime/Purge radio buttons)
-    |       |-- Amount slider (0.1g-5.0g for purge/prime operation)
+    |       |-- Amount slider (0.1g-2.5g for purge/prime operation)
     |       |-- Motor latency slider (30-300ms manual Pulse Tune fallback)
     |       \-- Coast compensation slider
     |

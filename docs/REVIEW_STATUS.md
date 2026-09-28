@@ -65,7 +65,7 @@ end of this page are needed before first use.
 | F-34 | UI can freeze with no recovery | Partly | `1c3c6c7` | LVGL asserts reboot. The UI task is not on the watchdog, because tare and calibration still block it for up to about 12 s (F-35) |
 | F-35 | Blocking tare and calibration in the UI task | Open | | Needs those flows made asynchronous |
 | F-36 | Time arithmetic not wrap-safe | Fixed | `67dc45e`, `1c3c6c7` | |
-| F-37 | Timeout 60 s in code, 30 s in docs | Partly | `2ee7384` | Docs fixed. The limit is not scaled with the target: doses above about 60-180 g still time out (question below) |
+| F-37 | Timeout 60 s in code, 30 s in docs; large doses always time out | Fixed | `2ee7384`, dose-limit commit | Docs fixed. Largest dose lowered from 1000 g to 40 g, which fits in 60 s at 1 g/s |
 | F-38 | V1 display pipeline | Open | | Performance; needs profiling on the device |
 | F-39 | Host upload tool status handling | Partly (fork) | `f3df959` | Failure statuses now end the upload early with a hint. The device restarts before it can report success, so the tool still treats a disconnect after the last command as success; check the build number with `grinder.py info` |
 | F-40 | Bluetooth chunk size, checksum | Open | | Transfer speed and integrity, not safety |
@@ -113,14 +113,6 @@ were corrected instead of changing behaviour. Still open, all layout work that
 needs checking on the screen: over-wide titles, the auto-tune console under
 Cancel, the calibration noise text over its title, status icons over the close
 button, and the purge checkbox size.
-
-## Needs a decision
-
-- **Grind timeout for large doses (F-37).** Weight grinds stop at 60 s. At
-  1-3 g/s, doses above about 60-180 g always time out, although targets up to
-  1000 g can be set. A longer or target-scaled limit also lengthens the worst
-  unattended run. Should large doses be supported, or the maximum target be
-  lowered to what fits in 60 s?
 
 ## Bench checks before first use
 
