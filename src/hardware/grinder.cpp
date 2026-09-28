@@ -8,6 +8,25 @@
 #include "mock_hx711_driver.h"
 #endif
 
+namespace {
+// A finite pulse whose completion interrupt never arrives is treated as a
+// driver failure after its own length plus this margin.
+constexpr uint32_t kPulseCompletionMarginMs = 500;
+}
+
+// The level is latched before the output is enabled, avoiding the pulled-up,
+// undriven moment that gpio_reset_pin() creates. gpio_set_direction() also
+// routes the plain GPIO signal to the pin, which detaches the RMT peripheral
+// from it. Register writes only, so the dead-man timer may call this while
+// RMT is in use.
+void Grinder::hold_pin_low(int pin) {
+    const gpio_num_t gpio = static_cast<gpio_num_t>(pin);
+    gpio_set_level(gpio, 0);
+    gpio_pullup_dis(gpio);
+    gpio_pulldown_en(gpio);
+    gpio_set_direction(gpio, GPIO_MODE_OUTPUT);
+}
+
 void Grinder::init(int pin) {
     if (initialized) return;
     motor_pin = pin;
@@ -20,6 +39,8 @@ void Grinder::init(int pin) {
     // Initialize background indicator
     background_active = false;
     ui_event_callback = nullptr;
+
+    hold_pin_low(motor_pin);
 
 #if DEBUG_ENABLE_LOADCELL_MOCK
     initialized = true;
@@ -35,12 +56,12 @@ void Grinder::init(int pin) {
         .trans_queue_depth = 4,
     };
     
-    gpio_reset_pin(static_cast<gpio_num_t>(motor_pin));
-    gpio_set_direction(static_cast<gpio_num_t>(motor_pin), GPIO_MODE_OUTPUT);
-    gpio_set_level(static_cast<gpio_num_t>(motor_pin), 0);
     if (rmt_new_tx_channel(&tx_chan_config, &rmt_channel) != ESP_OK) return;
+    rmt_tx_event_callbacks_t callbacks{};
+    callbacks.on_trans_done = &Grinder::on_transmit_done;
     rmt_copy_encoder_config_t encoder_config{};
-    if (rmt_new_copy_encoder(&encoder_config, &current_encoder) != ESP_OK) {
+    if (rmt_tx_register_event_callbacks(rmt_channel, &callbacks, this) != ESP_OK ||
+        rmt_new_copy_encoder(&encoder_config, &current_encoder) != ESP_OK) {
         rmt_del_channel(rmt_channel);
         return;
     }
@@ -48,6 +69,30 @@ void Grinder::init(int pin) {
         rmt_del_encoder(current_encoder);
         current_encoder = nullptr;
         rmt_del_channel(rmt_channel);
+        return;
+    }
+
+    // Without the dead-man a hung control loop could leave the motor running,
+    // so refuse to drive the motor at all if it cannot be armed.
+    esp_timer_create_args_t timer_args{};
+    timer_args.callback = &Grinder::deadman_check;
+    timer_args.arg = this;
+    timer_args.dispatch_method = ESP_TIMER_TASK;
+    timer_args.name = "motor_deadman";
+    timer_args.skip_unhandled_events = true;
+    if (esp_timer_create(&timer_args, &deadman_timer_) != ESP_OK ||
+        esp_timer_start_periodic(deadman_timer_,
+                                 static_cast<uint64_t>(HW_MOTOR_DEADMAN_CHECK_INTERVAL_MS) * 1000ULL) != ESP_OK) {
+        LOG_BLE("[Grinder] Dead-man timer unavailable; motor disabled\n");
+        if (deadman_timer_) {
+            esp_timer_delete(deadman_timer_);
+            deadman_timer_ = nullptr;
+        }
+        rmt_disable(rmt_channel);
+        rmt_del_encoder(current_encoder);
+        current_encoder = nullptr;
+        rmt_del_channel(rmt_channel);
+        hold_pin_low(motor_pin);
         return;
     }
     rmt_initialized = true;
@@ -64,7 +109,7 @@ void Grinder::start() {
     emit_background_change(true);
     return;
 #endif
-    if (!initialized || !rmt_initialized) return;
+    if (!initialized || !rmt_initialized || safety_stop_.load()) return;
 
     // Stop the old transaction before modifying its payload or encoder state.
     stop();
@@ -81,7 +126,10 @@ void Grinder::start() {
     rmt_transmit_config_t tx_config = {
         .loop_count = -1, // Infinite loop
     };
-    
+
+    // Arm the dead-man before the output goes HIGH.
+    keepalive_ms_.store(millis());
+    continuous_active_.store(true);
     if (rmt_transmit(rmt_channel, current_encoder, symbols, sizeof(symbols[0]), &tx_config) != ESP_OK) {
         LOG_BLE("[Grinder] Failed to start continuous transmission\n");
         stop();
@@ -108,14 +156,13 @@ void Grinder::stop() {
         rmt_enable(rmt_channel) != ESP_OK) {
         // Disconnect RMT from the output and refuse further starts until reboot.
         // Keep its storage alive: a failed cancellation may still reference it.
-        gpio_reset_pin(static_cast<gpio_num_t>(motor_pin));
-        gpio_set_direction(static_cast<gpio_num_t>(motor_pin), GPIO_MODE_OUTPUT);
-        gpio_set_level(static_cast<gpio_num_t>(motor_pin), 0);
+        hold_pin_low(motor_pin);
         initialized = false;
         rmt_initialized = false;
         LOG_BLE("[Grinder] RMT reset failed; motor disabled until reboot\n");
     }
     
+    continuous_active_.store(false);
     grinding = false;
     pulse_active = false;
     emit_background_change(false);
@@ -131,7 +178,7 @@ void Grinder::start_pulse_rmt(uint32_t duration_ms) {
     emit_background_change(true);
     return;
 #endif
-    if (!initialized || !rmt_initialized) return;
+    if (!initialized || !rmt_initialized || safety_stop_.load()) return;
 
     stop();
     if (!initialized) return;
@@ -163,6 +210,7 @@ void Grinder::start_pulse_rmt(uint32_t duration_ms) {
     else symbols[halves / 2].duration1 = 1;
     ++halves;
     rmt_transmit_config_t tx_config{}; // no repeats, end output LOW
+    pulse_done_.store(false);
     if (rmt_transmit(rmt_channel, current_encoder, symbols,
                      ((halves + 1) / 2) * sizeof(symbols[0]), &tx_config) != ESP_OK) {
         LOG_BLE("[Grinder] Failed to start pulse transmission\n");
@@ -170,6 +218,7 @@ void Grinder::start_pulse_rmt(uint32_t duration_ms) {
         return;
     }
     motor_start_time = millis();
+    pulse_deadline_ms_ = motor_start_time + duration_ms + kPulseCompletionMarginMs;
     pulse_active = true;
     grinding = true;
     emit_background_change(true);
@@ -188,22 +237,42 @@ bool Grinder::is_pulse_complete() {
 #endif
     if (!pulse_active) return true;
     
-    // A queued transmission can still have a LOW GPIO before it starts.
-    // Poll the driver non-blockingly, not the pin level.
-    const esp_err_t result = rmt_tx_wait_all_done(rmt_channel, 0);
-    if (result == ESP_OK) {
+    // A queued transmission can still have a LOW GPIO before it starts, so
+    // completion comes from the driver's interrupt, not the pin level. (Polling
+    // rmt_tx_wait_all_done() with no timeout logs a driver error every call.)
+    if (pulse_done_.load()) {
         pulse_active = false;
         grinding = false;
         emit_background_change(false);
         return true;
     }
-    if (result != ESP_ERR_TIMEOUT) {
-        LOG_BLE("[Grinder] Pulse completion check failed; stopping motor\n");
+    if (static_cast<int32_t>(millis() - pulse_deadline_ms_) >= 0) {
+        LOG_BLE("[Grinder] Pulse completion was not reported; stopping motor\n");
         stop();
         return true;
     }
     
     return false;
+}
+
+void Grinder::keep_alive() {
+    keepalive_ms_.store(millis());
+}
+
+bool IRAM_ATTR Grinder::on_transmit_done(rmt_channel_handle_t, const rmt_tx_done_event_data_t*,
+                                         void* context) {
+    static_cast<Grinder*>(context)->pulse_done_.store(true);
+    return false;  // No task was woken.
+}
+
+void Grinder::deadman_check(void* context) {
+    auto* self = static_cast<Grinder*>(context);
+    if (!self->continuous_active_.load() || self->safety_stop_.load()) return;
+    if (static_cast<uint32_t>(millis() - self->keepalive_ms_.load()) < HW_MOTOR_DEADMAN_TIMEOUT_MS) return;
+    // The control loop that owns this run has stopped responding. Latch first
+    // so no new start can race the forced stop, then cut the output.
+    self->safety_stop_.store(true);
+    hold_pin_low(self->motor_pin);
 }
 
 bool Grinder::is_motor_settled() const {

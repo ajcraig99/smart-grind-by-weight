@@ -67,6 +67,8 @@ struct Grinder {
         if (gate.exchange(false)) { entered.set_value(); release.wait(); }
         return motor;
     }
+    std::atomic<int> keepalives{0};
+    void keep_alive() { ++keepalives; }
     void start() { motor = true; }
     void stop() { motor = false; }
 };
@@ -132,6 +134,7 @@ int main() {
     assert(stopper.wait_for(20ms) == std::future_status::timeout);
     release_update.set_value(); updater.get(); stopper.get();
     assert(!motor.motor && !controller.is_active());
+    assert(motor.keepalives == 1); // the active tick vouched for the motor
     auto other_operation = operation_interlock().try_acquire();
     assert(other_operation);
     motor.motor = true;
@@ -140,7 +143,7 @@ int main() {
     motor.motor = false;
     operation_interlock().release(other_operation);
     controller.update(); // a later tick must not resurrect the stopped motor
-    assert(!motor.motor);
+    assert(!motor.motor && motor.keepalives == 1); // nor vouch for it while idle
 
     // Snapshot is an owned copy, not a reference invalidated by the next start.
     static_assert(!std::is_reference_v<decltype(controller.get_session_descriptor())>);

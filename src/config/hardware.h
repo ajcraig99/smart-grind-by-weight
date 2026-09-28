@@ -58,6 +58,11 @@
 #define HW_MOTOR_RELAY_PIN 18                                                  // V1 grinder motor control relay
 #endif
 #define HW_GRINDER_SETTLING_TIME_MS 500                                        // Startup transient immunity (tune based on mechanical rigidity, 0 to disable)
+// Continuous motor runs need a keep-alive from the grind control loop. If none
+// arrives for this long (control task hung or starved), a high-priority timer
+// forces the output LOW and disables the motor until reboot.
+#define HW_MOTOR_DEADMAN_TIMEOUT_MS 1000                                       // Longest tolerated gap between control-loop keep-alives
+#define HW_MOTOR_DEADMAN_CHECK_INTERVAL_MS 50                                  // Dead-man timer period
 
 //------------------------------------------------------------------------------
 // LOAD CELL ADC SPECIFICATIONS

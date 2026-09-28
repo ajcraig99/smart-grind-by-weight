@@ -93,7 +93,8 @@ struct Preferences {
     int getInt(const char*,int value) { return value; }
     float getFloat(const char*,float value) { return value; }
 };
-struct GrindMotor { bool initialized=true; bool is_initialized() { return initialized; } } grind_motor;
+struct GrindMotor { bool initialized=true, safety_stop=false; bool is_initialized() { return initialized; }
+                    bool has_safety_stop() { return safety_stop; } } grind_motor;
 struct GrindController {
     std::recursive_mutex control_mutex;
     auto lock_control() { return std::unique_lock<std::recursive_mutex>(control_mutex); }
@@ -170,6 +171,11 @@ int main() {
         assert(operation_interlock().owns(controller.operation_token_));
         operation_interlock().release(controller.operation_token_);
     }
+    grind_motor.safety_stop=true; // latched until restart: no mode may start
+    for (auto mode : {GrindMode::WEIGHT, GrindMode::TIME, GrindMode::MANUAL}) {
+        assert(!controller.start_grind(18,5000,mode)); assert_available();
+    }
+    grind_motor.safety_stop=false;
     auto competitor=operation_interlock().try_acquire();
     assert(!web.request_ota_preparation());
     assert(web.ota_preparation_state_==OtaPreparationState::IDLE);

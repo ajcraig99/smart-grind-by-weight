@@ -9,6 +9,7 @@
 - [Unknown board ID 'esp32-s3-devkitc-1'](#unknown-board-id-esp32-s3-devkitc-1)
 - [PlatformIO Project Initialization Issues](#platformio-project-initialization-issues)
 - [Unexpected Net Weight Error](#unexpected-net-weight-error)
+- [Motor Safety Stop](#motor-safety-stop)
 - [Grind Timeout Screen](#grind-timeout-screen)
 - [Unreliable Pulse Corrections](#unreliable-pulse-corrections)
 - [Getting Diagnostic Reports](#getting-diagnostic-reports)
@@ -280,9 +281,26 @@ GitHub issue.
 
 ---
 
+## Motor Safety Stop
+
+**Applies to:** A grind ending with "Motor safety stop", or a start refused
+with "Motor stopped".
+
+The grind control loop must check in with the motor driver at least once a
+second while the motor runs continuously. If it does not, a separate timer
+switches the motor off and keeps it disabled until the grinder restarts,
+because a control loop that stalled once cannot be trusted to stop the motor.
+
+Restart the grinder to clear it. If it happens again, download the diagnostic
+log from the grinder web UI and include it in a GitHub issue; the log records
+the phase in which the loop stalled.
+
+---
+
 ## Grind Timeout Screen
 
-**Applies to:** Grinder timing out during operation, showing timeout screen after 30 seconds.
+**Applies to:** Grinder timing out during operation, showing timeout screen after 60 seconds
+(30 seconds for manual grinds).
 
 ### Symptoms
 - Grinder reaches timeout screen during grinding cycle
@@ -290,7 +308,7 @@ GitHub issue.
 - Unstable weight readings
 
 ### Root Cause
-Extended taring due to load cell noise prevents grinding from completing within 30-second limit.
+Extended taring due to load cell noise prevents grinding from completing within the 60-second limit.
 
 ### Diagnosis
 Check **Menu → Diagnostics → "Noise Floor"** (see

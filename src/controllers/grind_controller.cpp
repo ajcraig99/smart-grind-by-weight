@@ -130,6 +130,10 @@ bool GrindController::start_grind(float target, uint32_t time_ms, GrindMode grin
     }
 #endif
     if (!grinder || !grinder->is_initialized()) return false;
+    if (grinder->has_safety_stop()) {
+        LOG_BLE("[CONTROLLER] Grind blocked: motor safety stop is latched until restart\n");
+        return false;
+    }
     if (grind_mode == GrindMode::WEIGHT) {
         if (!weight_sensor) return false;
         if (!weight_sensor->has_recent_sample()) {
@@ -389,6 +393,8 @@ void GrindController::resume_grind() {
 void GrindController::update() {
     const auto control_lock = lock_control();
     if (!is_active()) return;
+    // Only an active session vouches for a continuous motor run.
+    if (grinder) grinder->keep_alive();
     
     unsigned long now = millis();
     
@@ -402,6 +408,22 @@ void GrindController::update() {
     loop_data.phase_id = get_current_phase_id();
     loop_data.flow_rate = weight_sensor ? weight_sensor->get_flow_rate() : 0.0f;
     loop_data.weight_delta = loop_data.current_weight - last_logged_weight;
+
+    // The dead-man has already forced the output LOW because this loop stalled
+    // during a continuous run. The motor stays disabled until restart, so end
+    // the session and show why.
+    if (grinder && grinder->has_safety_stop() && phase != GrindPhase::COMPLETED &&
+        phase != GrindPhase::TIMEOUT) {
+        timeout_phase = phase;
+        grinder->stop();
+        final_weight = loop_data.current_weight;
+        last_session_result_ = GrindSessionResult::ERROR;
+        set_error_message("Motor safety stop");
+        queue_log_message("[GRINDER] Dead-man stop: control loop stalled for %dms in phase %s\n",
+                          HW_MOTOR_DEADMAN_TIMEOUT_MS, get_phase_name(timeout_phase));
+        switch_phase(GrindPhase::TIMEOUT, loop_data);
+        return;
+    }
 
     // Check before any phase can start/restart the motor, including while
     // waiting for purge confirmation. Terminal results must remain visible.

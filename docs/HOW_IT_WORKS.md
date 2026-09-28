@@ -18,7 +18,7 @@ The system uses a **zero-shot learning algorithm** requiring no prior knowledge 
 
 1. **Initialization & Taring Phase**
    - Automatic tare on grind button press
-   - 30-second timeout from grind start to completion
+   - 60-second timeout from grind start to completion (30 seconds for manual grinds)
    - Noise-adaptive settling detection
 
 2. **Grinder Saturation Phase** (Weight mode only)
@@ -60,7 +60,9 @@ The latency value is automatically calibrated via **Auto-Tune Motor Response** (
 - Hardware-adaptive pulse control via runtime motor latency
 - Conservative approach: undershoots target, then corrects with bounded pulses
 - Mechanical instability detection with hysteresis and persistence
-- 30-second grind timeout protection with user acknowledgment requirement
+- 60-second grind timeout protection with user acknowledgment requirement
+- Motor dead-man: a continuous run is cut off if the control loop stops
+  checking in for 1 second, independently of the grind logic
 
 ---
 

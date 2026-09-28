@@ -316,7 +316,13 @@ DeviceApi::Reply DeviceApi::start_remote_grind(const Command& command, bool main
             profile.profiles[profile.current_profile].time_seconds * 1000.0f + 0.5f);
         started = grind_controller_->start_grind(target_weight, target_time_ms, mode);
     }
-    if (!started) return {action, false, "grind could not start"};
+    if (!started) {
+        Grinder* grinder = hardware_->get_grinder();
+        if (grinder && grinder->has_safety_stop()) {
+            return {action, false, "motor safety stop is latched; restart the grinder"};
+        }
+        return {action, false, "grind could not start"};
+    }
     last_remote_start_ms_ = now;
     has_remote_start_ = true;
     return {action, true, manual ? "manual grind started" : "grind started"};

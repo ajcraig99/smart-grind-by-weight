@@ -79,6 +79,9 @@ void draw_early_startup_splash_if_ready() {
 }  // namespace
 
 void setup() {
+    // The grinder driver only takes the motor pin over after the filesystem
+    // and display have started; hold it LOW until then.
+    Grinder::hold_pin_low(HW_MOTOR_RELAY_PIN);
     Serial.begin(HW_SERIAL_BAUD_RATE);
 #ifdef UI_DEBUG_SERIAL_DELAY_MS
     delay(UI_DEBUG_SERIAL_DELAY_MS);

@@ -221,9 +221,17 @@ void GrindingUIController::handle_grind_button() {
             started = ui_manager_->grind_controller->start_grind(target_weight, target_time_ms, ui_manager_->current_mode);
         }
         if (!started) {
-            ui_manager_->show_confirmation(
-                "Could not start", "Check scale and grinder.\nAn update may be active.",
-                "OK", lv_color_hex(THEME_COLOR_WARNING), nullptr, "BACK");
+            HardwareManager* hardware = ui_manager_->get_hardware_manager();
+            Grinder* grinder = hardware ? hardware->get_grinder() : nullptr;
+            if (grinder && grinder->has_safety_stop()) {
+                ui_manager_->show_confirmation(
+                    "Motor stopped", "The control loop stalled, so the\nmotor was stopped. Restart the\ngrinder to use it again.",
+                    "OK", lv_color_hex(THEME_COLOR_WARNING), nullptr, "BACK");
+            } else {
+                ui_manager_->show_confirmation(
+                    "Could not start", "Check scale and grinder.\nAn update may be active.",
+                    "OK", lv_color_hex(THEME_COLOR_WARNING), nullptr, "BACK");
+            }
         }
         LOG_BLE("[%lums GRIND_START] start_grind() returned\n", millis());
     } else if (ui_manager_->state_machine->is_state(UIState::GRINDING)) {

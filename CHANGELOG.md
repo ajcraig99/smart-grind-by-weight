@@ -37,6 +37,20 @@ line. Earlier release history remains available in the original project's
   sampling. Discard oversized request bodies without buffering them.
 - Send WebSocket acknowledgements after releasing the grind controller lock.
 
+### Motor safety
+
+- Stop a continuous motor run if the grind control loop stops sending its
+  keep-alive for 1 second. A high-priority timer forces the motor output LOW,
+  ends the grind with "Motor safety stop" and refuses further starts until the
+  grinder is restarted.
+- Hold the motor output LOW from the first line of startup instead of leaving
+  it undriven until the display and filesystem have started.
+- Detect the end of finishing pulses from the RMT driver's completion
+  interrupt. This removes an error log every 20 ms during pulses, and a pulse
+  whose completion is never reported is stopped 500 ms after its length.
+- Build with `-O2` instead of `-Ofast`, which let the compiler delete the
+  checks that reject corrupt (NaN or infinite) calibration and settings values.
+
 ### Firmware update robustness
 
 - Confirm a newly installed image only after 20 seconds of healthy running. A

@@ -35,16 +35,21 @@ struct Profile {
     float get_current_weight() { return 18; }
     float get_current_time() { return 5; }
 };
+struct Grinder { bool latched=false; bool has_safety_stop() const { return latched; } };
+struct HardwareManager { Grinder grinder; Grinder* get_grinder() { return &grinder; } };
 struct UIManager {
     State* state_machine;
     Controller* grind_controller;
     Profile* profile_controller;
+    HardwareManager* hardware=nullptr;
     int current_tab=1, notices=0;
+    const char* last_title=nullptr;
     GrindMode current_mode=GrindMode::WEIGHT;
+    HardwareManager* get_hardware_manager() { return hardware; }
     void switch_to_state(UIState s) { state_machine->current=s; }
     void show_confirmation(const char* title, const char*, const char*, int,
                            std::nullptr_t, const char*) {
-        assert(std::strcmp(title, "Could not start")==0); ++notices;
+        last_title=title; ++notices;
     }
 };
 struct GrindingUIController {
@@ -56,14 +61,24 @@ struct GrindingUIController {
 int main() {
     for (bool accepted : {false, true}) {
         for (int tab : {0, 1}) {
-            State state; Controller control; Profile profile;
-            control.accept=accepted;
-            UIManager ui{&state, &control, &profile}; ui.current_tab=tab;
-            GrindingUIController handler{&ui}; handler.handle_grind_button();
-            assert(control.calls==1 && control.stops==0);
-            assert(ui.notices==(accepted ? 0 : 1));
+            for (bool latched : {false, true}) {
+                State state; Controller control; Profile profile; HardwareManager hardware;
+                control.accept=accepted; hardware.grinder.latched=latched;
+                UIManager ui{&state, &control, &profile, &hardware}; ui.current_tab=tab;
+                GrindingUIController handler{&ui}; handler.handle_grind_button();
+                assert(control.calls==1 && control.stops==0);
+                assert(ui.notices==(accepted ? 0 : 1));
+                if (!accepted) {
+                    // A latched motor safety stop explains itself instead of the generic notice.
+                    assert(std::strcmp(ui.last_title, latched ? "Motor stopped" : "Could not start")==0);
+                }
+            }
         }
     }
+    State state; Controller control; Profile profile;
+    UIManager ui{&state, &control, &profile}; // no hardware manager: generic notice
+    GrindingUIController handler{&ui}; handler.handle_grind_button();
+    assert(ui.notices==1 && std::strcmp(ui.last_title, "Could not start")==0);
 }
 '''
         with tempfile.TemporaryDirectory() as directory:
