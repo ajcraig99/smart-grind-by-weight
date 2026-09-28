@@ -21,6 +21,7 @@ fork at `b4a0be6`. The review's file:line references are to upstream
 | `67dc45e` | Scale buffer thread safety, settling, tare, calibration |
 | `1c3c6c7` | Grind control: dry run, purge re-tare, removal guard, timeouts |
 | `09b9e57` | Touchscreen fixes |
+| `a13c928` | Dose limit of 40 g |
 
 Verification on this branch: host tests (`tools/tests`) and V1 and V2 firmware
 builds. **Nothing here has been tested on hardware.** The bench checks at the
@@ -65,7 +66,7 @@ end of this page are needed before first use.
 | F-34 | UI can freeze with no recovery | Partly | `1c3c6c7` | LVGL asserts reboot. The UI task is not on the watchdog, because tare and calibration still block it for up to about 12 s (F-35) |
 | F-35 | Blocking tare and calibration in the UI task | Open | | Needs those flows made asynchronous |
 | F-36 | Time arithmetic not wrap-safe | Fixed | `67dc45e`, `1c3c6c7` | |
-| F-37 | Timeout 60 s in code, 30 s in docs; large doses always time out | Fixed | `2ee7384`, dose-limit commit | Docs fixed. Largest dose lowered from 1000 g to 40 g, which fits in 60 s at 1 g/s |
+| F-37 | Timeout 60 s in code, 30 s in docs; large doses always time out | Fixed | `2ee7384`, `a13c928` | Docs fixed. Largest dose lowered from 1000 g to 40 g, which fits in 60 s at 1 g/s |
 | F-38 | V1 display pipeline | Open | | Performance; needs profiling on the device |
 | F-39 | Host upload tool status handling | Partly (fork) | `f3df959` | Failure statuses now end the upload early with a hint. The device restarts before it can report success, so the tool still treats a disconnect after the last command as success; check the build number with `grinder.py info` |
 | F-40 | Bluetooth chunk size, checksum | Open | | Transfer speed and integrity, not safety |
