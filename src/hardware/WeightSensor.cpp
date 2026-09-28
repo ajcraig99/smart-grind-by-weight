@@ -242,7 +242,7 @@ void WeightSensor::update_temperature_if_available() {
     }
 }
 
-void WeightSensor::tare() {
+bool WeightSensor::tare() {
     LOG_LOADCELL_DEBUG("[DEBUG %lums] BLOCKING_TARE_START: Beginning blocking tare operation using HX711_ADC exact implementation\n", millis());
 
     // Use exact HX711_ADC non-blocking implementation
@@ -258,7 +258,8 @@ void WeightSensor::tare() {
         delay(SYS_TASK_LOADCELL_INTERVAL_MS);
     }
 
-    if (doTare) {
+    const bool completed = !doTare;
+    if (!completed) {
         LOG_BLE("ERROR: Blocking tare operation failed or timed out\n");
     } else {
         // Clear buffer after tare completes for clean measurements
@@ -274,20 +275,25 @@ void WeightSensor::tare() {
     }
 
     LOG_LOADCELL_DEBUG("[DEBUG %lums] BLOCKING_TARE_COMPLETE: Tare operation completed\n", millis());
+    return completed;
 }
 
-void WeightSensor::calibrate(float known_weight) {
+bool WeightSensor::calibrate(float known_weight) {
 #if DEBUG_ENABLE_LOADCELL_MOCK
     LOG_BLE("Mock load cell: calibration skipped (fixed factor %.2f)\n", cal_factor);
-    return;
+    return true;
 #endif
-    if (known_weight <= 0) {
+    if (!(known_weight > 0.0f) || !isfinite(known_weight)) {
         LOG_BLE("ERROR: Invalid calibration weight\n");
-        return;
+        return false;
     }
     if (has_hardware_fault()) {
         LOG_BLE("ERROR: Cannot calibrate - HX711 hardware fault active\n");
-        return;
+        return false;
+    }
+    if (!tare_initialized_.load()) {
+        LOG_BLE("ERROR: Cannot calibrate - the empty-scale zero was not captured\n");
+        return false;
     }
     
     LOG_BLE("Starting calibration with %.3fg weight...\n", known_weight);
@@ -298,11 +304,12 @@ void WeightSensor::calibrate(float known_weight) {
     
     LOG_CALIBRATION_DEBUG("Weight settled, performing calibration...");
     
-    // Now perform calibration with high accuracy - CircularBufferMath handles all filtering
-    
-    unsigned long cal_start = millis();
-    while(!update_async() && millis() - cal_start < GRIND_CALIBRATION_TIMEOUT_MS) {
-        delay(10);
+    // The sampling task keeps the buffer current; reading the HX711 from this
+    // task as well could interleave clock pulses with it. Only require that
+    // its samples are still arriving.
+    if (!has_recent_sample()) {
+        LOG_BLE("ERROR: Calibration failed - no fresh scale reading\n");
+        return false;
     }
     
     // Calibration using raw ADC data - more precise than calibrated data
@@ -310,7 +317,17 @@ void WeightSensor::calibrate(float known_weight) {
     
     // Calculate new calibration factor: raw_change / weight_change
     // We know the weight change is known_weight (from 0 after taring)
-    float new_cal_factor = (float)(raw_reading - tare_offset) / known_weight;
+    const int32_t raw_change = raw_reading - tare_offset;
+    if (abs(raw_change) < HW_LOADCELL_CAL_MIN_ADC_VALUE) {
+        LOG_BLE("ERROR: Calibration failed - weight change of %ld counts is below %d\n",
+                (long)raw_change, HW_LOADCELL_CAL_MIN_ADC_VALUE);
+        return false;
+    }
+    float new_cal_factor = (float)raw_change / known_weight;
+    if (!isfinite(new_cal_factor)) {
+        LOG_BLE("ERROR: Calibration failed - invalid factor\n");
+        return false;
+    }
     cal_factor = new_cal_factor;
     
     save_calibration();
@@ -321,6 +338,7 @@ void WeightSensor::calibrate(float known_weight) {
     raw_filter.reset_display_filter();
     
     LOG_BLE("Calibration completed. New factor: %.2f\n", cal_factor);
+    return true;
 }
 
 void WeightSensor::set_calibration_factor(float factor) {
@@ -431,6 +449,15 @@ bool WeightSensor::is_adc_near_saturation() const {
 // Primary weight readings using CircularBufferMath with single conversion point
 float WeightSensor::get_instant_weight() const {
     return raw_to_weight(raw_filter.get_instant_raw());
+}
+
+bool WeightSensor::get_latest_sample(float* weight_out, uint32_t* timestamp_out) const {
+    int32_t raw = 0;
+    uint32_t timestamp = 0;
+    if (!raw_filter.get_latest_sample(&raw, &timestamp)) return false;
+    if (weight_out) *weight_out = raw_to_weight(raw);
+    if (timestamp_out) *timestamp_out = timestamp;
+    return true;
 }
 
 float WeightSensor::get_weight_low_latency() const {
@@ -763,13 +790,23 @@ bool WeightSensor::sample_and_feed_filter() {
                 if (tareTimes < DATA_SET) {
                     tareTimes++;
                 } else {
-                    // Use CircularBufferMath smoothed data instead of original smoothedData()
-                    int32_t smoothed_raw = raw_filter.get_smoothed_raw(250); // 250ms window for stability
-                    tare_offset = smoothed_raw;  // Set tare offset to smoothed raw ADC value
-                    tare_initialized_.store(true);
-                    tareTimes = 0;
-                    doTare = 0;
-                    tareStatus = 1;
+                    // Take the zero from a settled window. A scale that is
+                    // still moving gets a few more samples to settle before
+                    // the best available average is used.
+                    const bool settled = is_settled(GRIND_SCALE_PRECISION_SETTLING_TIME_MS);
+                    if (settled || tareTimes >= DATA_SET + TARE_MAX_EXTRA_SAMPLES) {
+                        if (!settled) {
+                            LOG_BLE("WeightSensor: Tare taken while the scale was still moving\n");
+                        }
+                        // Average the whole settling window, not its last 2-3 samples.
+                        tare_offset = raw_filter.get_smoothed_raw(GRIND_SCALE_PRECISION_SETTLING_TIME_MS);
+                        tare_initialized_.store(true);
+                        tareTimes = 0;
+                        doTare = 0;
+                        tareStatus = 1;
+                    } else {
+                        tareTimes++;
+                    }
                 }
             }
             

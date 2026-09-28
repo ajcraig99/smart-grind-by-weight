@@ -4,27 +4,39 @@
 #include <algorithm>
 
 CircularBufferMath::CircularBufferMath() {
-    write_index = 0;
-    samples_count = 0;
-    display_filtered_raw = 0;
-    display_filter_initialized = false;
     flow_stable_since_ms = 0;
     flow_stability_initialized = false;
+}
     
-    // Initialize buffer
-    for (uint16_t i = 0; i < MAX_BUFFER_SIZE; i++) {
-        circular_buffer[i].raw_value = 0;
-        circular_buffer[i].timestamp_ms = 0;
+CircularBufferMath::Snapshot CircularBufferMath::snapshot() const {
+    // A requested clear is visible at once, before the sampling task applies it.
+    const uint32_t requested = clear_requests_.load(std::memory_order_acquire);
+    if (clears_applied_.load(std::memory_order_acquire) != requested) {
+        return {0, 0};
     }
+    const uint32_t packed = published_indices_.load(std::memory_order_acquire);
+    return {static_cast<uint16_t>(packed & 0xFFFFu), static_cast<uint16_t>(packed >> 16)};
 }
 
 void CircularBufferMath::add_sample(int32_t raw_adc_value, uint32_t timestamp_ms) {
     // Raw ADC values should be valid 24-bit signed integers
     // We don't validate range here as different ADCs have different ranges
     
+    // Only the sampling task gets here, so it alone moves the indices.
+    const uint32_t requested = clear_requests_.load(std::memory_order_acquire);
+    const uint32_t packed = published_indices_.load(std::memory_order_relaxed);
+    uint16_t write_index = static_cast<uint16_t>(packed & 0xFFFFu);
+    uint16_t samples_count = static_cast<uint16_t>(packed >> 16);
+    if (requested != clears_applied_.load(std::memory_order_relaxed)) {
+        // Keep the write position: restarting at slot 0 would overwrite
+        // samples that a reader holding an older snapshot may be reading.
+        samples_count = 0;
+        flow_stability_initialized = false;
+    }
+
     // Add raw value directly to circular buffer (no IIR filtering)
-    circular_buffer[write_index].raw_value = raw_adc_value;
-    circular_buffer[write_index].timestamp_ms = timestamp_ms;
+    circular_buffer[write_index].raw_value.store(raw_adc_value, std::memory_order_relaxed);
+    circular_buffer[write_index].timestamp_ms.store(timestamp_ms, std::memory_order_relaxed);
     
     // Advance write index (circular)
     write_index = (write_index + 1) % MAX_BUFFER_SIZE;
@@ -33,29 +45,41 @@ void CircularBufferMath::add_sample(int32_t raw_adc_value, uint32_t timestamp_ms
     if (samples_count < MAX_BUFFER_SIZE) {
         samples_count++;
     }
+
+    // Publish the sample before the clear it replaces is marked applied, so a
+    // reader sees either an empty buffer or the new window, never the old one.
+    published_indices_.store((static_cast<uint32_t>(samples_count) << 16) | write_index,
+                             std::memory_order_release);
+    clears_applied_.store(requested, std::memory_order_release);
 }
 
 int32_t CircularBufferMath::get_instant_raw() const {
-    if (samples_count == 0) return 0;
-    
     // Return most recent sample
     return get_latest_sample();
 }
 
 int32_t CircularBufferMath::get_latest_sample() const {
-    if (samples_count == 0) return 0;
+    int32_t raw = 0;
+    uint32_t timestamp = 0;
+    return get_latest_sample(&raw, &timestamp) ? raw : 0;
+}
+
+bool CircularBufferMath::get_latest_sample(int32_t* raw_out, uint32_t* timestamp_out) const {
+    const Snapshot at = snapshot();
+    if (at.count == 0) return false;
     
     // Most recent sample is at (write_index - 1) % MAX_BUFFER_SIZE
-    uint16_t latest_index = (write_index - 1 + MAX_BUFFER_SIZE) % MAX_BUFFER_SIZE;
-    return circular_buffer[latest_index].raw_value;
+    const AdcSample& latest = circular_buffer[(at.write_index - 1 + MAX_BUFFER_SIZE) % MAX_BUFFER_SIZE];
+    if (raw_out) *raw_out = latest.raw_value.load();
+    if (timestamp_out) *timestamp_out = latest.timestamp_ms.load();
+    return true;
 }
 
 // Unified smoothing method with outlier rejection on raw data
 int32_t CircularBufferMath::get_smoothed_raw(uint32_t window_ms) const {
-    if (samples_count == 0) return 0;
-    
     // Calculate max samples needed for this window
     int max_samples = calculate_max_samples_for_window(window_ms);
+    if (max_samples == 0) return 0;
     
     // Allocate temporary array on stack (reasonable size expected)
     int32_t* samples = (int32_t*)alloca(max_samples * sizeof(int32_t));
@@ -71,23 +95,25 @@ int32_t CircularBufferMath::get_smoothed_raw(uint32_t window_ms) const {
     return apply_outlier_rejection(samples, actual_samples);
 }
 
-int CircularBufferMath::get_samples_in_window(uint32_t window_ms, int32_t* samples_out,
-                                              int samples_capacity) const {
-    if (samples_count == 0 || !samples_out || samples_capacity <= 0) return 0;
+int CircularBufferMath::collect_window(uint32_t window_ms, int32_t* values_out,
+                                       uint32_t* ages_out, int capacity) const {
+    if (!values_out || capacity <= 0) return 0;
     
-    uint32_t current_time = millis();
-    uint32_t window_start = current_time - window_ms;
+    const Snapshot at = snapshot();
+    // Read the clock after the snapshot: every published sample was
+    // timestamped before it was published, so no age can be negative.
+    const uint32_t current_time = millis();
     int collected_samples = 0;
     
     // Walk backwards from most recent sample
-    const uint16_t count_snapshot = samples_count;
-    const uint16_t write_snapshot = write_index;
-    for (int i = 0; i < count_snapshot && collected_samples < samples_capacity; i++) {
-        uint16_t index = (write_snapshot - 1 - i + MAX_BUFFER_SIZE) % MAX_BUFFER_SIZE;
+    for (int i = 0; i < at.count && collected_samples < capacity; i++) {
+        uint16_t index = (at.write_index - 1 - i + MAX_BUFFER_SIZE) % MAX_BUFFER_SIZE;
+        const uint32_t age_ms = current_time - circular_buffer[index].timestamp_ms.load();
         
         // Check if sample is within time window
-        if (circular_buffer[index].timestamp_ms >= window_start) {
-            samples_out[collected_samples] = circular_buffer[index].raw_value;
+        if (age_ms <= window_ms) {
+            values_out[collected_samples] = circular_buffer[index].raw_value.load();
+            if (ages_out) ages_out[collected_samples] = age_ms;
             collected_samples++;
         } else {
             break; // Samples are time-ordered, so we can stop here
@@ -97,8 +123,13 @@ int CircularBufferMath::get_samples_in_window(uint32_t window_ms, int32_t* sampl
     return collected_samples;
 }
 
+int CircularBufferMath::get_samples_in_window(uint32_t window_ms, int32_t* samples_out,
+                                              int samples_capacity) const {
+    return collect_window(window_ms, samples_out, nullptr, samples_capacity);
+}
+
 int32_t CircularBufferMath::apply_outlier_rejection(const int32_t* samples, int count) const {
-    if (count == 0) return 0;
+    if (count <= 0) return 0;
     if (count == 1) return samples[0];
     if (count == 2) return (samples[0] + samples[1]) / 2;
 
@@ -133,7 +164,8 @@ int CircularBufferMath::calculate_max_samples_for_window(uint32_t window_ms) con
     int estimated_samples = (window_ms * HW_LOADCELL_SAMPLE_RATE_SPS) / 1000 + 10; // +10 for safety margin
     
     // Cap at reasonable limits
-    if (estimated_samples > (int)samples_count) {
+    const int samples_count = snapshot().count;
+    if (estimated_samples > samples_count) {
         estimated_samples = samples_count;
     }
     if (estimated_samples > MAX_BUFFER_SIZE) {
@@ -151,15 +183,16 @@ int32_t CircularBufferMath::get_display_raw() {
     // Asymmetric display filter on raw values (fast up, slow down)
     int32_t current_raw = get_smoothed_raw(300); // 300ms base window
     
-    if (!display_filter_initialized) {
-        display_filtered_raw = current_raw;
-        display_filter_initialized = true;
-        return display_filtered_raw;
+    if (!display_filter_initialized_.load()) {
+        display_filtered_raw_.store(current_raw);
+        display_filter_initialized_.store(true);
+        return current_raw;
     }
     
     // Apply asymmetric filter (fast up, slow down) - adapted for raw values
     // Use deadband equivalent to ~0.01g in raw units (approximate)
     int32_t raw_deadband = 100; // This should be configurable based on calibration
+    int32_t display_filtered_raw = display_filtered_raw_.load();
     
     if (abs(current_raw - display_filtered_raw) < raw_deadband) {
         return display_filtered_raw; // No change within deadband
@@ -174,6 +207,7 @@ int32_t CircularBufferMath::get_display_raw() {
         display_filtered_raw = (int32_t)(alpha * current_raw + (1.0f - alpha) * display_filtered_raw);
     }
     
+    display_filtered_raw_.store(display_filtered_raw);
     return display_filtered_raw;
 }
 
@@ -182,18 +216,20 @@ int32_t CircularBufferMath::get_raw_high_latency() const {
 }
 
 uint32_t CircularBufferMath::get_buffer_time_span_ms() const {
-    if (samples_count < 2) return 0;
+    const Snapshot at = snapshot();
+    if (at.count < 2) return 0;
     
     // Time span from oldest to newest sample
-    uint16_t oldest_index = (samples_count < MAX_BUFFER_SIZE) ? 0 : write_index;
-    uint16_t newest_index = (write_index - 1 + MAX_BUFFER_SIZE) % MAX_BUFFER_SIZE;
+    uint16_t oldest_index = (at.write_index - at.count + MAX_BUFFER_SIZE) % MAX_BUFFER_SIZE;
+    uint16_t newest_index = (at.write_index - 1 + MAX_BUFFER_SIZE) % MAX_BUFFER_SIZE;
     
-    return circular_buffer[newest_index].timestamp_ms - circular_buffer[oldest_index].timestamp_ms;
+    return circular_buffer[newest_index].timestamp_ms.load() - circular_buffer[oldest_index].timestamp_ms.load();
 }
 
 bool CircularBufferMath::get_window_delta(uint32_t window_ms, int32_t* delta_out,
                                           uint32_t* span_ms_out, int* samples_out) const {
-    if (!delta_out || samples_count < 2) {
+    const Snapshot at = snapshot();
+    if (!delta_out || at.count < 2) {
         if (delta_out) {
             *delta_out = 0;
         }
@@ -206,8 +242,7 @@ bool CircularBufferMath::get_window_delta(uint32_t window_ms, int32_t* delta_out
         return false;
     }
 
-    uint32_t current_time = millis();
-    uint32_t window_start = current_time - window_ms;
+    const uint32_t current_time = millis();
 
     int collected = 0;
     int32_t newest_raw = 0;
@@ -215,21 +250,23 @@ bool CircularBufferMath::get_window_delta(uint32_t window_ms, int32_t* delta_out
     uint32_t newest_ts = 0;
     uint32_t oldest_ts = 0;
 
-    for (int i = 0; i < samples_count; ++i) {
-        uint16_t index = (write_index - 1 - i + MAX_BUFFER_SIZE) % MAX_BUFFER_SIZE;
+    for (int i = 0; i < at.count; ++i) {
+        uint16_t index = (at.write_index - 1 - i + MAX_BUFFER_SIZE) % MAX_BUFFER_SIZE;
         const AdcSample& sample = circular_buffer[index];
+        const int32_t raw_value = sample.raw_value.load();
+        const uint32_t timestamp_ms = sample.timestamp_ms.load();
 
-        if (sample.timestamp_ms < window_start) {
+        if (current_time - timestamp_ms > window_ms) {
             break;
         }
 
         if (collected == 0) {
-            newest_raw = sample.raw_value;
-            newest_ts = sample.timestamp_ms;
+            newest_raw = raw_value;
+            newest_ts = timestamp_ms;
         }
 
-        oldest_raw = sample.raw_value;
-        oldest_ts = sample.timestamp_ms;
+        oldest_raw = raw_value;
+        oldest_ts = timestamp_ms;
         ++collected;
     }
 
@@ -248,46 +285,47 @@ bool CircularBufferMath::get_window_delta(uint32_t window_ms, int32_t* delta_out
     *delta_out = newest_raw - oldest_raw;
 
     if (span_ms_out) {
-        if (newest_ts >= oldest_ts) {
-            *span_ms_out = newest_ts - oldest_ts;
-        } else {
-            *span_ms_out = (UINT32_MAX - oldest_ts) + newest_ts + 1;
-        }
+        // Unsigned subtraction is also correct across a millis() wrap.
+        *span_ms_out = newest_ts - oldest_ts;
     }
 
     return true;
 }
 
 bool CircularBufferMath::is_settled(uint32_t window_ms, int32_t threshold_raw_units) const {
-    float std_dev = get_standard_deviation_raw(window_ms);
-    bool settled = std_dev <= threshold_raw_units;
-    
-    // Debug output every 1s during settling checks
-    static uint32_t last_debug_time = 0;
-    if (millis() - last_debug_time > 1000) {
-        // Get raw samples for display
-        int max_samples = calculate_max_samples_for_window(window_ms);
-        if (max_samples > 0) {
-            int32_t* samples = (int32_t*)alloca(max_samples * sizeof(int32_t));
-            int actual_samples = get_samples_in_window(window_ms, samples, max_samples);
+    const uint32_t effective_window_ms = std::max(window_ms, MIN_SETTLING_WINDOW_MS);
+    const int max_samples = calculate_max_samples_for_window(effective_window_ms);
+    if (max_samples < MIN_SETTLING_SAMPLES) return false;
+
+    int32_t* samples = (int32_t*)alloca(max_samples * sizeof(int32_t));
+    const int actual_samples = get_samples_in_window(effective_window_ms, samples, max_samples);
+    if (actual_samples < MIN_SETTLING_SAMPLES) return false;
             
-            // Format raw samples on one line (limit to first 10 samples to avoid spam)
-            char sample_str[256] = {0};
-            int offset = 0;
-            int samples_to_show = std::min(actual_samples, 10);
-            for (int i = 0; i < samples_to_show; i++) {
-                offset += snprintf(sample_str + offset, sizeof(sample_str) - offset, 
-                                 "%ld%s", (long)samples[i], (i < samples_to_show - 1) ? "," : "");
-            }
-            if (actual_samples > 10) {
-                offset += snprintf(sample_str + offset, sizeof(sample_str) - offset, "...");
-            }
+    const float std_dev = calculate_standard_deviation(samples, actual_samples);
+    // Samples are newest first; a steady rise or fall shows up end to end.
+    const int64_t drift = static_cast<int64_t>(samples[0]) - samples[actual_samples - 1];
+    const int64_t drift_limit = 2LL * threshold_raw_units;
+    bool settled = std_dev <= threshold_raw_units && drift <= drift_limit && -drift <= drift_limit;
             
-            LOG_LOADCELL_DEBUG("[SETTLING] Window:%lums Samples:%d Raw:[%s] StdDev:%.2f Threshold:%ld Settled:%s\n",
-                             window_ms, actual_samples, sample_str, std_dev, (long)threshold_raw_units, 
-                             settled ? "YES" : "NO");
+    // Debug output every 1s during settling checks (callers run on several tasks)
+    static std::atomic<uint32_t> last_debug_time{0};
+    if (millis() - last_debug_time.load() > 1000) {
+        // Format raw samples on one line (limit to first 10 samples to avoid spam)
+        char sample_str[256] = {0};
+        int offset = 0;
+        int samples_to_show = std::min(actual_samples, 10);
+        for (int i = 0; i < samples_to_show; i++) {
+            offset += snprintf(sample_str + offset, sizeof(sample_str) - offset,
+                             "%ld%s", (long)samples[i], (i < samples_to_show - 1) ? "," : "");
         }
-        last_debug_time = millis();
+        if (actual_samples > 10) {
+            offset += snprintf(sample_str + offset, sizeof(sample_str) - offset, "...");
+        }
+
+        LOG_LOADCELL_DEBUG("[SETTLING] Window:%lums Samples:%d Raw:[%s] StdDev:%.2f Drift:%lld Threshold:%ld Settled:%s\n",
+                         effective_window_ms, actual_samples, sample_str, std_dev, (long long)drift,
+                         (long)threshold_raw_units, settled ? "YES" : "NO");
+        last_debug_time.store(millis());
     }
     
     return settled;
@@ -347,30 +385,16 @@ float CircularBufferMath::get_raw_flow_rate(uint32_t window_ms) const {
     
     // Allocate temporary arrays
     int32_t* samples = (int32_t*)alloca(max_samples * sizeof(int32_t));
-    uint32_t* timestamps = (uint32_t*)alloca(max_samples * sizeof(uint32_t));
+    uint32_t* ages = (uint32_t*)alloca(max_samples * sizeof(uint32_t));
     
-    // Get samples and timestamps within window
-    int collected = 0;
-    uint32_t current_time = millis();
-    uint32_t window_start = current_time - window_ms;
-    
-    for (int i = 0; i < (int)samples_count && collected < max_samples; i++) {
-        uint16_t index = (write_index - 1 - i + MAX_BUFFER_SIZE) % MAX_BUFFER_SIZE;
-        
-        if (circular_buffer[index].timestamp_ms >= window_start) {
-            samples[collected] = circular_buffer[index].raw_value;
-            timestamps[collected] = circular_buffer[index].timestamp_ms;
-            collected++;
-        } else {
-            break;
-        }
-    }
+    // Get samples and their ages within window
+    const int collected = collect_window(window_ms, samples, ages, max_samples);
     
     if (collected < 2) return 0.0f;
     
     // Simple linear regression for flow rate
     int32_t raw_change = samples[0] - samples[collected - 1]; // Most recent - oldest
-    uint32_t time_change = timestamps[0] - timestamps[collected - 1];
+    uint32_t time_change = ages[collected - 1] - ages[0];
     
     if (time_change == 0) return 0.0f;
     
@@ -380,14 +404,14 @@ float CircularBufferMath::get_raw_flow_rate(uint32_t window_ms) const {
 
 float CircularBufferMath::get_raw_flow_rate_95th_percentile(uint32_t window_ms) const {
     // Define parameters for the sub-window analysis
-    const uint32_t MIN_SAMPLES_FOR_PERCENTILE = 10;
+    const int MIN_SAMPLES_FOR_PERCENTILE = 10;
     const uint32_t SUB_WINDOW_MS = 300;
     const uint32_t STEP_MS = 100;
     const int MIN_SUB_WINDOWS = 4;
     const int MAX_SUB_WINDOWS = 32;
     const int MIN_SAMPLES_PER_SUB_WINDOW = 3;
 
-    if (samples_count < MIN_SAMPLES_FOR_PERCENTILE) {
+    if (get_sample_count() < MIN_SAMPLES_FOR_PERCENTILE) {
         return get_raw_flow_rate(window_ms); // Fallback for insufficient data
     }
 
@@ -395,29 +419,16 @@ float CircularBufferMath::get_raw_flow_rate_95th_percentile(uint32_t window_ms) 
     uint32_t min_window_for_samples = (MIN_SAMPLES_FOR_PERCENTILE * 1000) / HW_LOADCELL_SAMPLE_RATE_SPS;
     uint32_t effective_window_ms = std::max(window_ms, min_window_for_samples);
 
-    // 1. Collect all relevant samples and timestamps in one go.
+    // 1. Collect all relevant samples and their ages in one go.
     int max_samples = calculate_max_samples_for_window(effective_window_ms);
     if (max_samples < MIN_SAMPLES_FOR_PERCENTILE) {
         return get_raw_flow_rate(effective_window_ms);
     }
 
     int32_t* sample_values = (int32_t*)alloca(max_samples * sizeof(int32_t));
-    uint32_t* sample_times = (uint32_t*)alloca(max_samples * sizeof(uint32_t));
-    int collected_samples = 0;
-    uint32_t current_time = millis();
-    uint32_t window_start_time = current_time - effective_window_ms;
-
-    for (int i = 0; i < (int)samples_count && collected_samples < max_samples; ++i) {
-        uint16_t index = (write_index - 1 - i + MAX_BUFFER_SIZE) % MAX_BUFFER_SIZE;
-        if (circular_buffer[index].timestamp_ms >= window_start_time) {
-            // Samples are collected from newest to oldest
-            sample_values[collected_samples] = circular_buffer[index].raw_value;
-            sample_times[collected_samples] = circular_buffer[index].timestamp_ms;
-            collected_samples++;
-        } else {
-            break; // Samples are time-ordered
-        }
-    }
+    uint32_t* sample_ages = (uint32_t*)alloca(max_samples * sizeof(uint32_t));
+    // Samples are collected from newest to oldest
+    const int collected_samples = collect_window(effective_window_ms, sample_values, sample_ages, max_samples);
 
     if (collected_samples < MIN_SAMPLES_FOR_PERCENTILE) {
         return get_raw_flow_rate(effective_window_ms);
@@ -431,15 +442,16 @@ float CircularBufferMath::get_raw_flow_rate_95th_percentile(uint32_t window_ms) 
 
     // 3. Iterate through sub-windows and calculate flow rate for each.
     for (int i = 0; i < num_sub_windows; ++i) {
-        uint32_t sub_window_end_time = current_time - (i * STEP_MS);
-        uint32_t sub_window_start_time = sub_window_end_time - SUB_WINDOW_MS;
+        // Sub-window i covers sample ages [i * STEP_MS, i * STEP_MS + SUB_WINDOW_MS].
+        uint32_t sub_window_newest_age = i * STEP_MS;
+        uint32_t sub_window_oldest_age = sub_window_newest_age + SUB_WINDOW_MS;
 
         // Find the newest and oldest samples within this sub-window from our collected arrays
         int newest_idx = -1, oldest_idx = -1;
         for (int j = 0; j < collected_samples; ++j) {
-            if (sample_times[j] <= sub_window_end_time) {
+            if (sample_ages[j] >= sub_window_newest_age) {
                 if (newest_idx == -1) newest_idx = j;
-                if (sample_times[j] >= sub_window_start_time) {
+                if (sample_ages[j] <= sub_window_oldest_age) {
                     oldest_idx = j;
                 } else {
                     break; // Past the start of the sub-window
@@ -448,7 +460,7 @@ float CircularBufferMath::get_raw_flow_rate_95th_percentile(uint32_t window_ms) 
         }
 
         if (newest_idx != -1 && oldest_idx != -1 && (oldest_idx - newest_idx + 1) >= MIN_SAMPLES_PER_SUB_WINDOW) {
-            uint32_t time_delta = sample_times[newest_idx] - sample_times[oldest_idx];
+            uint32_t time_delta = sample_ages[oldest_idx] - sample_ages[newest_idx];
             if (time_delta > 0) {
                 int32_t raw_delta = sample_values[newest_idx] - sample_values[oldest_idx];
                 flow_rates[valid_flow_rates_count++] = (float)raw_delta * 1000.0f / time_delta;
@@ -479,55 +491,50 @@ bool CircularBufferMath::raw_flowrate_is_stable(uint32_t window_ms) const {
 }
 
 int32_t CircularBufferMath::get_min_raw(uint32_t window_ms) const {
-    const uint16_t count_snapshot = samples_count;
-    const uint16_t write_snapshot = write_index;
-    if (count_snapshot == 0) return 0;
+    const Snapshot at = snapshot();
+    if (at.count == 0) return 0;
 
-    const uint32_t window_start = millis() - window_ms;
+    const uint32_t current_time = millis();
     bool found = false;
     int32_t min_val = 0;
-    for (int i = 0; i < count_snapshot; ++i) {
-        const uint16_t index = (write_snapshot - 1 - i + MAX_BUFFER_SIZE) % MAX_BUFFER_SIZE;
+    for (int i = 0; i < at.count; ++i) {
+        const uint16_t index = (at.write_index - 1 - i + MAX_BUFFER_SIZE) % MAX_BUFFER_SIZE;
         const AdcSample& sample = circular_buffer[index];
-        if (sample.timestamp_ms < window_start) break;
-        if (!found || sample.raw_value < min_val) min_val = sample.raw_value;
+        if (current_time - sample.timestamp_ms.load() > window_ms) break;
+        const int32_t raw_value = sample.raw_value.load();
+        if (!found || raw_value < min_val) min_val = raw_value;
         found = true;
     }
     return found ? min_val : 0;
 }
 
 int32_t CircularBufferMath::get_max_raw(uint32_t window_ms) const {
-    const uint16_t count_snapshot = samples_count;
-    const uint16_t write_snapshot = write_index;
-    if (count_snapshot == 0) return 0;
+    const Snapshot at = snapshot();
+    if (at.count == 0) return 0;
 
-    const uint32_t window_start = millis() - window_ms;
+    const uint32_t current_time = millis();
     bool found = false;
     int32_t max_val = 0;
-    for (int i = 0; i < count_snapshot; ++i) {
-        const uint16_t index = (write_snapshot - 1 - i + MAX_BUFFER_SIZE) % MAX_BUFFER_SIZE;
+    for (int i = 0; i < at.count; ++i) {
+        const uint16_t index = (at.write_index - 1 - i + MAX_BUFFER_SIZE) % MAX_BUFFER_SIZE;
         const AdcSample& sample = circular_buffer[index];
-        if (sample.timestamp_ms < window_start) break;
-        if (!found || sample.raw_value > max_val) max_val = sample.raw_value;
+        if (current_time - sample.timestamp_ms.load() > window_ms) break;
+        const int32_t raw_value = sample.raw_value.load();
+        if (!found || raw_value > max_val) max_val = raw_value;
         found = true;
     }
     return found ? max_val : 0;
 }
 
 void CircularBufferMath::reset_display_filter() {
-    display_filter_initialized = false;
-    display_filtered_raw = 0;
+    display_filter_initialized_.store(false);
+    display_filtered_raw_.store(0);
 }
 
 void CircularBufferMath::clear_all_samples() {
-    write_index = 0;
-    samples_count = 0;
-    display_filter_initialized = false;
-    flow_stability_initialized = false;
-    
-    // Clear buffer
-    for (uint16_t i = 0; i < MAX_BUFFER_SIZE; i++) {
-        circular_buffer[i].raw_value = 0;
-        circular_buffer[i].timestamp_ms = 0;
-    }
+    display_filter_initialized_.store(false);
+    // Applied by the sampling task before its next sample; until then every
+    // reader sees an empty buffer. Slots need no zeroing: only the published
+    // count makes a slot readable.
+    clear_requests_.fetch_add(1, std::memory_order_acq_rel);
 }

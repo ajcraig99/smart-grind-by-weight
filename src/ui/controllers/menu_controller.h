@@ -70,4 +70,5 @@ private:
     static void static_motor_timer_cb(lv_timer_t* timer);
     void return_to_menu();
     void perform_diagnostics_reset();
+    void show_tare_failed();
 };

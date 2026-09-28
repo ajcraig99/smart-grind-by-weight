@@ -100,7 +100,14 @@ void CalibrationUIController::handle_ok() {
     CalibrationStep step = ui_manager_->calibration_screen.get_step();
     switch (step) {
         case CAL_STEP_EMPTY:
-            UIOperations::execute_tare(ui_manager_->get_hardware_manager(), [this]() {
+            UIOperations::execute_tare(ui_manager_->get_hardware_manager(), [this](bool tared) {
+                if (!tared) {
+                    // Returning to calibration restarts it at the empty step.
+                    ui_manager_->show_confirmation(
+                        "Tare failed", "The scale kept moving.\nKeep it still and empty,\nthen try again.",
+                        "OK", lv_color_hex(THEME_COLOR_WARNING), nullptr, "BACK");
+                    return;
+                }
                 // Capture baseline ADC value after taring
                 baseline_adc_value_ = ui_manager_->get_hardware_manager()->get_weight_sensor()->get_raw_adc_instant();
                 ui_manager_->calibration_screen.set_step(CAL_STEP_WEIGHT);
@@ -111,7 +118,14 @@ void CalibrationUIController::handle_ok() {
             break;
         case CAL_STEP_WEIGHT: {
             float cal_weight = ui_manager_->calibration_screen.get_calibration_weight();
-            UIOperations::execute_calibration(ui_manager_->get_hardware_manager(), cal_weight, [this]() {
+            UIOperations::execute_calibration(ui_manager_->get_hardware_manager(), cal_weight, [this](bool calibrated) {
+                if (!calibrated) {
+                    // The previous factor is kept; calibration restarts at the empty step.
+                    ui_manager_->show_confirmation(
+                        "Calibration failed", "No valid reading of the\nweight. The previous\ncalibration is kept.",
+                        "OK", lv_color_hex(THEME_COLOR_WARNING), nullptr, "BACK");
+                    return;
+                }
                 ui_manager_->calibration_screen.set_step(CAL_STEP_NOISE_CHECK);
                 start_noise_check();
                 if (ui_manager_) {

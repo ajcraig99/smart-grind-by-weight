@@ -129,6 +129,7 @@ int main() {
 #include <string>
 using std::min;
 #define LOG_BLE(...) ((void)0)
+#define GRIND_SCALE_PRECISION_SETTLING_TIME_MS 500
 uint32_t clock_ms=0;
 uint32_t millis(){return clock_ms;}
 constexpr int32_t kAdcSaturationMargin=0xFFFF,kAdcMaximumRaw=0xFFFFFF;
@@ -141,11 +142,12 @@ public:
  std::atomic<uint32_t> last_sample_ms_{0};
  std::atomic<int32_t> diagnostic_raw_adc_{-1};
  Filter raw_filter;
- bool doTare=false,tareStatus=false,data_available=false;
- int tareTimes=0,DATA_SET=18;
+ bool doTare=false,tareStatus=false,data_available=false,settled=true;
+ int tareTimes=0,DATA_SET=18,TARE_MAX_EXTRA_SAMPLES=10;
  int32_t tare_offset=0,current_raw_adc=0;
  float current_weight=0;
  bool has_hardware_fault(){return fault;}
+ bool is_settled(uint32_t){return settled;}
  bool data_waiting_async(){return waiting;}
  bool update_async(){return read_ok;}
  int32_t get_raw_adc_data(){return raw;}
@@ -204,6 +206,16 @@ int main(){
  for(int32_t raw:{0x10000,0xFFFFFF-0x10000}){
   sensor.raw=raw;assert(sensor.sample_and_feed_filter());assert(sensor.has_recent_sample());
   assert(!sensor.is_adc_near_saturation());
+ }
+ // A settled scale takes its zero after DATA_SET samples; a moving one waits
+ // up to TARE_MAX_EXTRA_SAMPLES more, then uses the settling-window average.
+ for(bool settled:{true,false}){
+  sensor.raw=0x800000;sensor.settled=settled;sensor.doTare=true;sensor.tareTimes=0;
+  sensor.tare_offset=0;sensor.tare_initialized_=false;sensor.tareStatus=false;
+  int samples=0;
+  while(sensor.doTare){clock_ms+=100;assert(sensor.sample_and_feed_filter());assert(++samples<100);}
+  assert(samples==sensor.DATA_SET+1+(settled?0:sensor.TARE_MAX_EXTRA_SAMPLES));
+  assert(sensor.tare_offset==42 && sensor.tare_initialized_ && sensor.tareStatus);
  }
  sensor.raw=0x800000;clock_ms=UINT32_MAX-100;assert(sensor.sample_and_feed_filter());
  clock_ms=398;assert(sensor.has_recent_sample());clock_ms=399;assert(!sensor.has_recent_sample());

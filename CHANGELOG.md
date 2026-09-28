@@ -51,6 +51,23 @@ line. Earlier release history remains available in the original project's
 - Build with `-O2` instead of `-Ofast`, which let the compiler delete the
   checks that reject corrupt (NaN or infinite) calibration and settings values.
 
+### Scale readings
+
+- Share the sample buffer safely between the sampling task and every reader.
+  A clear requested from the touchscreen is applied by the sampling task, and
+  readers never see a half-updated window.
+- Time windows use sample ages, so readings stay correct across the 49.7-day
+  `millis()` rollover.
+- A settled reading needs at least three samples and no steady drift. A
+  200 ms window at 10 samples per second held one or two samples and always
+  read as settled, including during a slow trickle of grounds.
+- Tare waits up to 1 second longer for a settled scale and averages the full
+  500 ms window instead of its last two or three samples.
+- Calibration no longer reads the HX711 from the touchscreen task. It is
+  refused, keeping the previous factor, when there is no fresh reading, no
+  valid zero or a weight change under 1000 counts. The touchscreen reports a
+  failed tare or calibration instead of continuing silently.
+
 ### Firmware update robustness
 
 - Confirm a newly installed image only after 20 seconds of healthy running. A

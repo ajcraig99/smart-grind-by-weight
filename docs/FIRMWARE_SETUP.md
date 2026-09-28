@@ -107,6 +107,11 @@ After flashing firmware, calibrate the load cell for accurate measurements:
 
 **Tip**: A coffee mug with water makes ideal calibration weight - weigh it on kitchen scale first.
 
+If the scale keeps moving, or the weight barely changes the reading, the
+grinder shows **Tare failed** or **Calibration failed**, keeps the previous
+calibration and starts again at the empty step. Keep the scale still and use a
+heavier reference weight if it repeats.
+
 ### Auto-Tune Motor Response
 
 The auto-tune feature models your grinder's motor response behavior by measuring the physical lag between relay activation and grounds production. This accounts for hardware variations like voltage differences (110V vs 220V), relay types (solid-state vs mechanical), and burr inertia across different grinder models. The default 50ms value works well for most setups, but if you experience unreliable pulse corrections or want to minimize coffee waste through hardware-specific optimization, run auto-tune via **Menu → Tune Pulses** (Tools section). The 1-2 minute calibration process finds the minimum reliable pulse duration for your specific hardware and saves it automatically.

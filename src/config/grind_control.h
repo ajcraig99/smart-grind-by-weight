@@ -89,7 +89,7 @@ enum class GrinderPurgeMode {
 
 // Tare and calibration timing (hardware sample rate dependent)
 #define GRIND_TARE_SAMPLE_WINDOW_MS 500                                           // Time window for tare sampling
-#define GRIND_TARE_TIMEOUT_MS 3000                                                // Maximum tare completion time
+#define GRIND_TARE_TIMEOUT_MS 4000                                                // Maximum tare completion time (a tare needs up to 29 samples at 10 SPS)
 #define GRIND_CALIBRATION_SAMPLE_WINDOW_MS 800                                    // Time window for calibration sampling  
 #define GRIND_CALIBRATION_TIMEOUT_MS 2000                                         // Maximum calibration completion time
 

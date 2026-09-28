@@ -67,6 +67,8 @@ private:
     
     // Tare implementation (hardware-independent)
     static const uint8_t DATA_SET = 16 + 1 + 1;  // SAMPLES + IGN_HIGH_SAMPLE + IGN_LOW_SAMPLE
+    // A tare waits up to this many further samples for a settled window.
+    static const uint8_t TARE_MAX_EXTRA_SAMPLES = 10;
     bool doTare;
     uint8_t tareTimes;
     bool tareStatus;
@@ -124,7 +126,7 @@ public:
     void power_down();
     
     // Tare operations
-    void tare();                          // Blocking tare
+    bool tare();                          // Blocking tare; false if it did not finish in time
     void tareNoDelay();                   // Exact HX711_ADC method
     bool getTareStatus();                 // Exact HX711_ADC method
     
@@ -133,8 +135,9 @@ public:
     bool is_tare_in_progress() const { return doTare; }
     bool has_valid_tare() const { return tare_initialized_.load(); }
     
-    // Calibration
-    void calibrate(float known_weight);
+    // Calibration. Returns false, keeping the previous factor, when there is
+    // no fresh sample or valid zero, or the weight change is too small.
+    bool calibrate(float known_weight);
     void set_calibration_factor(float factor);
     void set_zero_offset(int32_t offset);
     
@@ -165,6 +168,9 @@ public:
     
     // Primary weight readings using CircularBufferMath with single conversion point
     float get_instant_weight() const;                        // Latest single sample converted to weight
+    // Latest single sample as a weight, with its timestamp, which identifies
+    // the sample so a caller can act once per ADC reading.
+    bool get_latest_sample(float* weight_out, uint32_t* timestamp_out) const;
     float get_weight_low_latency() const;                    // 50ms window - for real-time control
     float get_display_weight();                              // 250ms + asymmetric filter - for UI
     float get_weight_high_latency() const;                   // 250ms window - for final measurements

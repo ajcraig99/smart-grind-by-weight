@@ -237,9 +237,10 @@ void MenuUIController::handle_scale_open() {
 
     ui_manager_->menu_screen.reset_scale_display();
 
-    UIOperations::execute_tare(hardware, [this]() {
+    UIOperations::execute_tare(hardware, [this](bool tared) {
         if (!ui_manager_) return;
         ui_manager_->refresh_auto_action_settings();
+        if (!tared) show_tare_failed();
 
         auto* sensor = ui_manager_->hardware_manager->get_weight_sensor();
         float weight = sensor ? sensor->get_display_weight() : 0.0f;
@@ -254,9 +255,10 @@ void MenuUIController::handle_scale_tare() {
     auto* hardware = ui_manager_->get_hardware_manager();
     if (!hardware) return;
 
-    UIOperations::execute_tare(hardware, [this]() {
+    UIOperations::execute_tare(hardware, [this](bool tared) {
         if (!ui_manager_) return;
         ui_manager_->refresh_auto_action_settings();
+        if (!tared) show_tare_failed();
 
         auto* sensor = ui_manager_->hardware_manager->get_weight_sensor();
         float weight = sensor ? sensor->get_display_weight() : 0.0f;
@@ -264,6 +266,12 @@ void MenuUIController::handle_scale_tare() {
             ui_manager_->menu_screen.update_scale_weight(weight);
         }
     });
+}
+
+void MenuUIController::show_tare_failed() {
+    ui_manager_->show_confirmation(
+        "Tare incomplete", "The scale kept moving.\nKeep it still, then\ntap TARE again.",
+        "OK", lv_color_hex(THEME_COLOR_WARNING), nullptr, "BACK");
 }
 
 void MenuUIController::handle_autotune() {
