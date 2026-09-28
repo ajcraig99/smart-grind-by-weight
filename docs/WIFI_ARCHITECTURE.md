@@ -125,6 +125,14 @@ releases.
 - Hardware tasks are removed from task-watchdog monitoring before OTA suspends
   them and registered again before they resume. A deliberately suspended task
   must never cause a watchdog reboot midway through an otherwise healthy upload.
+- A Bluetooth update that receives no data for 30 seconds is aborted, so a
+  client that stays connected but goes silent cannot keep the motor tasks
+  suspended. When any update ends without a restart, the grinder replaces the
+  update screen with an "Update Failed" notice.
+- A newly installed image is confirmed only after it has run for 20 seconds
+  with every task alive (`FirmwareValidation`). A crash, watchdog reset or
+  power loss before then makes the bootloader start the previous firmware.
+  During those 20 seconds ESP-IDF refuses to start another update.
 
 ## Service boundaries
 

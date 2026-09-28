@@ -102,6 +102,7 @@ void OTAHandler::restore_normal_power() {
 }
 
 bool OTAHandler::start_ota(uint32_t size, const String& expected_build_number, bool is_full_update, const String& expected_firmware_version) {
+    const std::lock_guard<std::recursive_mutex> update_lock(update_mutex);
     LOG_OTA_DEBUG("start_ota() called - size=%lu, build=%s, full=%d\n", 
                   (unsigned long)size, expected_build_number.c_str(), is_full_update);
     
@@ -182,12 +183,14 @@ bool OTAHandler::start_ota(uint32_t size, const String& expected_build_number, b
     LOG_OTA_DEBUG("start_update() SUCCESS\n");
     
     ota_in_progress = true;
+    last_activity_ms = millis();
     current_status = BLE_OTA_RECEIVING;
     LOG_OTA_DEBUG("OTA started successfully - status=BLE_OTA_RECEIVING\n");
     return true;
 }
 
 bool OTAHandler::process_data_chunk(const uint8_t* data, size_t size) {
+    const std::lock_guard<std::recursive_mutex> update_lock(update_mutex);
     if (!ota_in_progress) {
         return false;
     }
@@ -206,6 +209,7 @@ bool OTAHandler::process_data_chunk(const uint8_t* data, size_t size) {
     }
     
     received_size += size;
+    last_activity_ms = millis();
     
     // Progress logging every 16KB for better visibility, plus at start and end
     if (received_size % 16384 == 0 || received_size == size || received_size == patch_size) {
@@ -218,6 +222,9 @@ bool OTAHandler::process_data_chunk(const uint8_t* data, size_t size) {
 }
 
 bool OTAHandler::complete_ota() {
+    // Held through patching and the restart: the stall check must not abort
+    // an update while its patch is being applied.
+    const std::lock_guard<std::recursive_mutex> update_lock(update_mutex);
     LOG_OTA_DEBUG("complete_ota() called\n");
     
     if (!ota_in_progress) {
@@ -292,10 +299,24 @@ bool OTAHandler::complete_ota() {
 }
 
 void OTAHandler::abort_ota() {
+    const std::lock_guard<std::recursive_mutex> update_lock(update_mutex);
     if (ota_in_progress) {
         LOG_BLE("OTA: Aborting update\n");
         recover_failed_update();
     }
+}
+
+bool OTAHandler::abort_if_stalled(uint32_t now_ms) {
+    // A callback holding the lock is receiving or applying the update.
+    std::unique_lock<std::recursive_mutex> update_lock(update_mutex, std::try_to_lock);
+    if (!update_lock.owns_lock() || !ota_in_progress ||
+        now_ms - last_activity_ms < BLE_OTA_STALL_TIMEOUT_MS) {
+        return false;
+    }
+    LOG_BLE("OTA: No data for %lus; aborting update\n",
+            static_cast<unsigned long>(BLE_OTA_STALL_TIMEOUT_MS / 1000UL));
+    recover_failed_update();
+    return true;
 }
 
 void OTAHandler::recover_failed_update() {

@@ -10,6 +10,7 @@
 #include "ui/ui_manager.h"
 #include "config/constants.h"
 #include "system/screensaver_settings.h"
+#include "system/firmware_validation.h"
 #include "config/build_info.h"
 #include "bluetooth/manager.h"
 #include "tasks/task_manager.h"
@@ -236,6 +237,8 @@ void loop() {
         }
     }
     
+    FirmwareValidation::update(current_time, task_manager.are_tasks_healthy());
+
     // Check OTA state and suspend hardware tasks if needed
     static bool hardware_suspended = false;
     bool ota_active = bluetooth_manager.is_updating() || device_web_server.is_ota_active();

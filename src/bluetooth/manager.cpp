@@ -353,7 +353,12 @@ void BluetoothManager::disable() {
 
 void BluetoothManager::handle() {
     if (!ble_enabled) return;
-    
+
+    if (ota_handler.abort_if_stalled(millis())) {
+        log("Bluetooth OTA: Update stalled; motor tasks resumed\n");
+        set_ota_status(BLE_OTA_ERROR);
+    }
+
     // Only check timeout when no client is connected
     if (!device_connected) {
         unsigned long disconnected_elapsed = millis() - last_disconnect_time;

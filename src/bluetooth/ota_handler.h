@@ -8,6 +8,7 @@
 #include <esp_app_format.h>
 #include <soc/rtc.h>
 #include <esp_pm.h>
+#include <mutex>
 #include "../system/operation_interlock.h"
 
 // Include detools/delta libraries
@@ -64,6 +65,10 @@ private:
     bool hardware_suspended = false;
     bool touch_disabled = false;
     OperationInterlock::Token operation_token = 0;
+    uint32_t last_activity_ms = 0;
+    // Serialises NimBLE callbacks (start, chunks, end, abort) with the stall
+    // check that runs on the Bluetooth task.
+    std::recursive_mutex update_mutex;
     
     // Power management
     BLEPowerState power_state;
@@ -115,6 +120,14 @@ public:
      * Abort OTA update
      */
     void abort_ota();
+
+    /**
+     * Abort an update that has received no data for BLE_OTA_STALL_TIMEOUT_MS.
+     * A connected client that goes silent would otherwise keep the motor
+     * tasks suspended and the update screen up indefinitely.
+     * @return true if the update was aborted
+     */
+    bool abort_if_stalled(uint32_t now_ms);
     
     /**
      * Get current OTA status

@@ -51,7 +51,9 @@ Before flashing, verify that the selected image matches the display generation. 
      **Settings → System & updates**, and upload the matching V1 or V2
      application `.bin`
    - The grinder validates the image, installs it and restarts; keep it powered
-     until the update completes
+     until the update completes and for 20 seconds after the restart. A new
+     image that crashes or loses power in that time is replaced by the
+     previous firmware automatically
    - One-tap GitHub release installs (the green refresh symbol and
      **Menu → Wi-Fi → Install update**) exist only in builds with
      `NETWORK_RELEASE_UPDATES_ENABLED` set to 1 in `src/config/network.h`. It

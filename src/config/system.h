@@ -85,6 +85,14 @@
 #define SYS_JOG_STAGE_4_MULTIPLIER 13                                          // Stage 4: 13 increments per 64ms = ~20.3g/s
 
 //------------------------------------------------------------------------------
+// FIRMWARE ROLLBACK
+//------------------------------------------------------------------------------
+// A newly installed image stays on probation until it has run this long with
+// all tasks alive. A crash, watchdog reset or power loss before then makes the
+// bootloader start the previous firmware again.
+#define SYS_FIRMWARE_VALIDATION_DELAY_MS 20000                                 // Healthy run time before confirming an update
+
+//------------------------------------------------------------------------------
 // LOGGING CONFIGURATION
 //------------------------------------------------------------------------------
 #define SYS_LOG_EVERY_N_GRIND_LOOPS 1                                          // Log frequency for grind control loop

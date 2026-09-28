@@ -30,5 +30,6 @@ private:
 
     UIManager* ui_manager_;
     bool data_export_active_;
+    bool firmware_update_screen_active_ = false;  // Update screen shown for a web or BLE update
     char expected_build_[16];
 };

@@ -14,6 +14,7 @@ STUBS = r'''
 #include <map>
 #include <cassert>
 #include <stdexcept>
+#include <mutex>
 #include "system/operation_interlock.h"
 #define LOG_BLE(...) ((void)0)
 #define LOG_OTA_DEBUG(...) ((void)0)
@@ -24,6 +25,9 @@ STUBS = r'''
 #define CONFIG_ESP_TASK_WDT_TIMEOUT_S 5
 #define CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0 1
 #define CONFIG_ESP_TASK_WDT_PANIC 1
+#define BLE_OTA_STALL_TIMEOUT_MS 30000UL
+uint32_t now_ms = 0;
+uint32_t millis() { return now_ms; }
 constexpr int ESP_OK = 0;
 constexpr int PARTITION_PAGE_SIZE=4096;
 constexpr int ESP_PARTITION_TYPE_DATA=1, ESP_PARTITION_SUBTYPE_DATA_SPIFFS=130;
@@ -155,6 +159,21 @@ int main() {
     assert(!operation_interlock().try_acquire()); // Keep locked until reboot/recovery.
     watchdog_error=0;
     ota.abort_ota();
+    recovered(ota,prefs);
+    // A client that stops sending: only a full stall window without data aborts.
+    now_ms=1000;
+    assert(ota.start_ota(8,"2",true,"next"));
+    assert(!ota.abort_if_stalled(1000+29999));
+    now_ms=20000; assert(ota.process_data_chunk(bytes,4));
+    assert(!ota.abort_if_stalled(20000+29999)); // Each chunk restarts the window.
+    assert(ota.abort_if_stalled(20000+30000));
+    recovered(ota,prefs);
+    assert(!ota.abort_if_stalled(UINT32_MAX)); // Nothing left to abort.
+    // Timer rollover does not fire early.
+    now_ms=UINT32_MAX-10;
+    assert(ota.start_ota(8,"2",true,"next"));
+    assert(!ota.abort_if_stalled(UINT32_MAX-10+29999));
+    assert(ota.abort_if_stalled(UINT32_MAX-10+30000));
     recovered(ota,prefs);
 }
 '''

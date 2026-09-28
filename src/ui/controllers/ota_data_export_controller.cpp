@@ -34,6 +34,7 @@ bool OtaDataExportController::update() {
     }
 
     if (device_web_server.is_ota_preparing() || device_web_server.is_ota_active()) {
+        firmware_update_screen_active_ = true;
         if (!ui_manager_->state_machine->is_state(UIState::OTA_UPDATE)) {
             ui_manager_->ota_screen.show_ota_mode();
             ui_manager_->switch_to_state(UIState::OTA_UPDATE);
@@ -53,6 +54,7 @@ bool OtaDataExportController::update() {
     auto* bluetooth = ui_manager_->bluetooth_manager;
 
     if (bluetooth->is_updating()) {
+        firmware_update_screen_active_ = true;
         if (!ui_manager_->state_machine->is_state(UIState::OTA_UPDATE)) {
             ui_manager_->ota_screen.show_ota_mode();
             ui_manager_->switch_to_state(UIState::OTA_UPDATE);
@@ -61,6 +63,19 @@ bool OtaDataExportController::update() {
             ui_manager_->ota_screen.update_progress(progress);
         }
         return true;
+    }
+
+    if (firmware_update_screen_active_) {
+        // A successful update restarts the grinder before this point, so an
+        // update that is no longer running here was aborted, stalled or
+        // rejected. The update screen has no buttons; replace it with the
+        // failure notice so the grinder is usable again.
+        firmware_update_screen_active_ = false;
+        if (ui_manager_->state_machine->is_state(UIState::OTA_UPDATE)) {
+            ui_manager_->ota_screen.hide();
+            show_failure_warning("");
+        }
+        return false;
     }
 
     if (bluetooth->is_data_export_active()) {

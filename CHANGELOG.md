@@ -37,6 +37,17 @@ line. Earlier release history remains available in the original project's
   sampling. Discard oversized request bodies without buffering them.
 - Send WebSocket acknowledgements after releasing the grind controller lock.
 
+### Firmware update robustness
+
+- Confirm a newly installed image only after 20 seconds of healthy running. A
+  crash, watchdog reset or power loss before then rolls back to the previous
+  firmware.
+- Abort a Bluetooth update that receives no data for 30 seconds, restoring the
+  motor tasks.
+- Leave the update screen with an "Update Failed" notice when a Wi-Fi or
+  Bluetooth update ends without restarting. The grinder no longer stays on a
+  screen with no buttons.
+
 ## [1.5.9] - 2026-09-06
 
 ### Firmware update hotfix
