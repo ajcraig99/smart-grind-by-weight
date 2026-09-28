@@ -14,12 +14,16 @@
 > **[Smart Grind by Weight Home Assistant integration →](https://github.com/Clinteastman/smart-grind-home-assistant)**
 
 > [!IMPORTANT]
-> **Personal fork with hardened network features.** Wi-Fi stays off until it is
-> switched on at the grinder. Remote grind starts and firmware updates over
-> Wi-Fi or Bluetooth need permission on the touchscreen. One-tap release updates
-> are compiled out, because they would install the upstream fork's releases over
-> this firmware. See the [security model](docs/WIFI_ARCHITECTURE.md#security-model)
-> and the [code review](docs/CODE_REVIEW.md).
+> **Personal fork with hardened network features and safety fixes.** Wi-Fi
+> stays off until it is switched on at the grinder. Remote grind starts and
+> firmware updates over Wi-Fi or Bluetooth need permission on the touchscreen.
+> One-tap release updates are compiled out, because they would install the
+> upstream fork's releases over this firmware. A motor dead-man, dry-run
+> detection and touch guards are added. See the
+> [security model](docs/WIFI_ARCHITECTURE.md#security-model), the
+> [code review](docs/CODE_REVIEW.md) and the
+> [status of its findings](docs/REVIEW_STATUS.md). None of these changes has
+> been tested on hardware yet.
 
 Turn a compatible coffee grinder into a precise, touch-controlled
 grind-by-weight system using a Waveshare ESP32-S3 AMOLED board and load cell.

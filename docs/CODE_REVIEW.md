@@ -3,7 +3,7 @@
 > **Baseline note (2026-09-27):** this review was written against upstream commit `afdacc8`. After it was written, this branch was rebased onto the community fork (`Clinteastman/smart-grind-by-weight`, commit `b4a0be6`), as chosen in section 2 (option A).
 > - All file:line references below refer to `afdacc8`, not the current code.
 > - Findings that section 2 marks as fixed in the community fork no longer apply.
-> - A re-baselined status of every finding on the new base will follow as a separate document.
+> - The status of every finding on this branch is in [REVIEW_STATUS.md](REVIEW_STATUS.md).
 
 **Scope:** upstream `jaapp/smart-grind-by-weight` `main` at commit `afdacc8` (this fork's starting point, as of 2026-09-27).
 
