@@ -1,0 +1,10 @@
+# Digital twin build outputs
+/.deps/
+/out/
+/host/build/
+/wasm/build/
+/web/node_modules/
+/web/build/
+/qa/node_modules/
+/qa/out/
+/mc/out/
