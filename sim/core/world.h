@@ -53,10 +53,18 @@ void log_set_echo(bool echo_to_stderr);
 // ---- deterministic randomness for firmware random()/esp_random() ----
 uint32_t firmware_random();
 
+// ---- firmware time base: the chip's clocks restart from 0 at every boot ----
+uint64_t firmware_now_us();
+void set_firmware_epoch_us(uint64_t epoch_us);
+uint64_t firmware_epoch_us();
+
 // ---- lifecycle ----
 void world_init(uint64_t seed);
 bool world_restart_requested();
 void world_request_restart(const char* reason);
+// esp_reset_reason_t code the next boot reports (default ESP_RST_SW).
+void world_set_restart_reason(int code);
+int world_restart_reason();
 uint64_t world_seed();
 
 // Hook the runtime installs to observe each millisecond (trace sampling etc.).

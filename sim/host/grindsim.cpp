@@ -10,6 +10,7 @@
 #include "../core/world.h"
 #include "../sim_api.h"
 
+#include <fcntl.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -42,7 +43,11 @@ struct Options {
     int jobs = 1;
     bool echo_log = false;
     std::string resume_path;
+    int summary_fd = -1;
+    double post_reset_observe_s = 20.0;
 };
+
+std::vector<std::string> g_argv;
 
 void usage() {
     std::fprintf(stderr,
@@ -84,6 +89,8 @@ bool parse_args(int argc, char** argv, Options& o) {
         else if (a == "--jobs") o.jobs = std::atoi(next("--jobs"));
         else if (a == "--echo-log") o.echo_log = true;
         else if (a == "--resume") o.resume_path = next("--resume");
+        else if (a == "--summary-fd") o.summary_fd = std::atoi(next("--summary-fd"));
+        else if (a == "--post-reset-s") o.post_reset_observe_s = std::atof(next("--post-reset-s"));
         else if (a == "--set") {
             const std::string kv = next("--set");
             const size_t eq = kv.find('=');
@@ -163,8 +170,57 @@ std::string scenario_name_of(const std::string& json) {
     return q1 == std::string::npos || q2 == std::string::npos ? "normal" : json.substr(q1 + 1, q2 - q1 - 1);
 }
 
-// One complete run in this process. Returns the summary rows.
-std::string run_once(const Options& o) {
+void write_all(int fd, const std::string& data) {
+    size_t off = 0;
+    while (off < data.size()) {
+        const ssize_t w = write(fd, data.data() + off, data.size() - off);
+        if (w <= 0) {
+            if (errno == EINTR) continue;
+            break;
+        }
+        off += static_cast<size_t>(w);
+    }
+}
+
+// Re-execute this program to continue after a firmware reset: a new process image gives the
+// firmware fresh global objects (RAM lost), while NVS, LittleFS and the plant are carried in `blob`.
+[[noreturn]] void exec_resume(const Options& o, const std::string& blob, int summary_fd) {
+    std::vector<std::string> args;
+    for (size_t i = 0; i < g_argv.size(); ++i) {
+        const std::string& a = g_argv[i];
+        if (a == "--resume" || a == "--summary-fd" || a == "--batch" || a == "--jobs" || a == "--seed" ||
+            a == "--summary") {
+            ++i;  // drop the flag and its value
+            continue;
+        }
+        args.push_back(a);
+    }
+    args.push_back("--seed");
+    args.push_back(std::to_string(static_cast<unsigned long long>(o.seed)));
+    args.push_back("--resume");
+    args.push_back(blob);
+    args.push_back("--summary-fd");
+    args.push_back(std::to_string(summary_fd));
+    if (!o.out_path.empty()) {
+        // keep --out: the resumed run appends to it
+    }
+    std::vector<char*> cargv;
+    for (auto& a : args) cargv.push_back(const_cast<char*>(a.c_str()));
+    cargv.push_back(nullptr);
+    execv("/proc/self/exe", cargv.data());
+    std::perror("grindsim: execv");
+    _exit(3);
+}
+
+struct RunResult {
+    std::string rows;
+    bool restart = false;
+    std::string blob_path;
+};
+
+// One run in this process: a fresh boot, or the continuation after a reset (--resume).
+RunResult run_once(const Options& o) {
+    RunResult result;
     sim_create(o.seed);
     if (o.echo_log) sim::log_set_echo(true);
     if (!o.params_path.empty()) {
@@ -187,15 +243,29 @@ std::string run_once(const Options& o) {
         std::exit(2);
     }
     if (o.target > 0) sim::operator_set_target(static_cast<float>(o.target));
-    sim::operator_seed_preferences();
+    const bool resuming = !o.resume_path.empty();
+    if (resuming) {
+        std::string blob;
+        if (!read_file(o.resume_path, blob) ||
+            sim_persist_import(reinterpret_cast<const uint8_t*>(blob.data()), blob.size()) != 0) {
+            std::fprintf(stderr, "grindsim: cannot resume from %s\n", o.resume_path.c_str());
+            std::exit(2);
+        }
+        std::remove(o.resume_path.c_str());
+    } else {
+        sim::operator_seed_preferences();
+    }
     sim_trace_period_ms(o.out_path.empty() ? 0 : o.trace_ms);
+    if (resuming) sim::trace_suppress_header();
 
-    FILE* out = o.out_path.empty() ? nullptr : std::fopen(o.out_path.c_str(), "wb");
-    FILE* log = o.log_path.empty() ? nullptr : std::fopen(o.log_path.c_str(), "wb");
+    FILE* out = o.out_path.empty() ? nullptr : std::fopen(o.out_path.c_str(), resuming ? "ab" : "wb");
+    FILE* log = o.log_path.empty() ? nullptr : std::fopen(o.log_path.c_str(), resuming ? "ab" : "wb");
     std::vector<char> buf(1 << 20);
+    if (resuming && log) std::fprintf(log, "\n[SIM] ===== firmware reset: new boot at %.3f s =====\n", sim::now_us() / 1e6);
 
     sim_boot();
-    sim::operator_start();
+    if (resuming) sim::operator_start_post_reset(o.post_reset_observe_s);
+    else sim::operator_start();
     const uint64_t end_us = static_cast<uint64_t>(o.max_s * 1e6);
     while (sim::now_us() < end_us) {
         sim_run_ms(100);
@@ -203,17 +273,29 @@ std::string run_once(const Options& o) {
         while ((n = sim_trace_read(buf.data(), buf.size())) > 0) if (out) std::fwrite(buf.data(), 1, n, out);
         while ((n = sim_log_read(buf.data(), buf.size())) > 0) if (log) std::fwrite(buf.data(), 1, n, log);
         if (sim::world_restart_requested()) {
-            // The firmware image restarted (esp_restart, watchdog or a scenario reset). The twin
-            // reproduces a reboot as a fresh process with NVS, LittleFS and the plant carried over.
-            // TODO(reset): implemented by the resume path; until then stop here.
+            result.restart = true;
             break;
         }
         if (sim::operator_finished()) break;
     }
-    sim::runtime_close_records();
+    if (result.restart) {
+        const size_t len = sim_persist_export(nullptr, 0);
+        std::vector<uint8_t> blob(len);
+        sim_persist_export(blob.data(), blob.size());
+        char path[] = "/tmp/grindsim-reset-XXXXXX";
+        const int fd = mkstemp(path);
+        if (fd >= 0) {
+            write_all(fd, std::string(reinterpret_cast<const char*>(blob.data()), blob.size()));
+            close(fd);
+            result.blob_path = path;
+        }
+    } else {
+        sim::runtime_close_records();
+    }
     if (out) std::fclose(out);
     if (log) std::fclose(log);
-    return summary_rows(o, scenario_name_of(scenario));
+    result.rows = summary_rows(o, scenario_name_of(scenario));
+    return result;
 }
 
 int run_batch(const Options& base) {
@@ -258,13 +340,9 @@ int run_batch(const Options& base) {
                 o.seed = base.seed + static_cast<uint64_t>(next);
                 o.out_path.clear();
                 o.log_path.clear();
-                const std::string rows = run_once(o);
-                size_t off = 0;
-                while (off < rows.size()) {
-                    const ssize_t w = write(fds[1], rows.data() + off, rows.size() - off);
-                    if (w <= 0) break;
-                    off += static_cast<size_t>(w);
-                }
+                const RunResult r = run_once(o);
+                write_all(fds[1], r.rows);
+                if (r.restart && !r.blob_path.empty()) exec_resume(o, r.blob_path, fds[1]);
                 close(fds[1]);
                 _exit(0);
             }
@@ -288,20 +366,26 @@ int run_batch(const Options& base) {
 }  // namespace
 
 int main(int argc, char** argv) {
+    for (int i = 0; i < argc; ++i) g_argv.emplace_back(argv[i]);
     Options o;
     if (!parse_args(argc, argv, o)) return 2;
     if (o.batch > 0) return run_batch(o);
-    const std::string rows = run_once(o);
-    if (!o.summary_path.empty()) {
-        FILE* f = std::fopen(o.summary_path.c_str(), "wb");
-        if (f) {
-            std::fputs(kSummaryHeader, f);
-            std::fputs(rows.c_str(), f);
-            std::fclose(f);
+    int fd = o.summary_fd;
+    if (fd < 0) {
+        if (!o.summary_path.empty()) {
+            fd = open(o.summary_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (fd < 0) {
+                std::fprintf(stderr, "cannot write %s\n", o.summary_path.c_str());
+                return 2;
+            }
+        } else {
+            fd = 1;
         }
-    } else {
-        std::fputs(kSummaryHeader, stdout);
-        std::fputs(rows.c_str(), stdout);
+        write_all(fd, kSummaryHeader);
     }
+    const RunResult r = run_once(o);
+    write_all(fd, r.rows);
+    if (r.restart && !r.blob_path.empty()) exec_resume(o, r.blob_path, fd);
+    if (fd > 2) close(fd);
     return 0;
 }

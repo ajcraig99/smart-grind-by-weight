@@ -9,12 +9,12 @@ EspClass ESP;
 
 unsigned long millis() {
     sim::note_clock_read();
-    return static_cast<unsigned long>(sim::now_us() / 1000ULL);
+    return static_cast<unsigned long>(sim::firmware_now_us() / 1000ULL);
 }
 
 unsigned long micros() {
     sim::note_clock_read();
-    return static_cast<unsigned long>(sim::now_us());
+    return static_cast<unsigned long>(sim::firmware_now_us());
 }
 
 void delay(uint32_t ms) {

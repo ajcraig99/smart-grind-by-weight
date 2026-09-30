@@ -58,6 +58,8 @@ const std::vector<GrindRecord>& runtime_records();
 GrindRecord* runtime_open_record();
 FirmwareView runtime_last_view();
 void runtime_close_records();
+// After a reboot: an observation record that accounts motor time until closed.
+void runtime_begin_observation();
 
 // Faults the runtime remembers for SAFETY accounting (the plant owns the physics).
 void runtime_note_fault(int fault, int active);
@@ -65,6 +67,7 @@ bool runtime_fault_active(int fault);
 
 // Trace (CSV rows sampled every period).
 void trace_set_period_ms(uint32_t period);
+void trace_suppress_header();
 void trace_on_frame(uint64_t boundary_us, const FirmwareView& view);
 size_t trace_read(char* buf, size_t cap);
 const std::string& trace_header();
@@ -77,5 +80,6 @@ std::string operator_status();
 void operator_set_target(float target_g);
 void operator_seed_preferences();
 void operator_on_frame();
+void operator_start_post_reset(double observe_s);
 
 }  // namespace sim

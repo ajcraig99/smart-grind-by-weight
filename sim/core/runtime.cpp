@@ -205,6 +205,18 @@ void runtime_close_records() {
     rec->open = false;
 }
 
+void runtime_begin_observation() {
+    sim_plant_outputs_t out;
+    plant_outputs(&out);
+    GrindRecord r;
+    r.index = 1000 + static_cast<uint32_t>(g_records.size());
+    r.t_start_s = static_cast<double>(now_us()) / 1e6;
+    r.loaded_g = out.m_loaded_g;
+    r.true_cup_end_g = out.m_cup_g;
+    r.error = "post-reset observation";
+    g_records.push_back(r);
+}
+
 void runtime_note_fault(int fault, int active) {
     if (fault > 0 && fault < 16) g_fault_active[fault] = active != 0;
 }
@@ -307,12 +319,14 @@ size_t sim_log_read(char* buf, size_t cap) { return sim::log_read(buf, cap); }
 void sim_trace_period_ms(uint32_t period_ms) { sim::trace_set_period_ms(period_ms); }
 size_t sim_trace_read(char* buf, size_t cap) { return sim::trace_read(buf, cap); }
 
-// Persistent state layout: "SGT1", u64 t_us, u32 nvs_len, nvs, u32 fs_len, fs, u32 plant_len, plant.
+// Persistent state layout: "SGT2", u64 t_us, u32 reset_reason, u32 nvs_len, nvs, u32 fs_len, fs,
+// u32 plant_len, plant. RAM (firmware objects, tasks) is not carried: a reset loses it.
 size_t sim_persist_export(uint8_t* buf, size_t cap) {
-    std::vector<uint8_t> out = {'S', 'G', 'T', '1'};
+    std::vector<uint8_t> out = {'S', 'G', 'T', '2'};
     auto put_u32 = [&out](uint32_t v) { for (int i = 0; i < 4; ++i) out.push_back(static_cast<uint8_t>(v >> (8 * i))); };
     const uint64_t t = sim::now_us();
     for (int i = 0; i < 8; ++i) out.push_back(static_cast<uint8_t>(t >> (8 * i)));
+    put_u32(static_cast<uint32_t>(sim::world_restart_reason()));
     const auto nvs = sim::nvs_store().serialize();
     put_u32(static_cast<uint32_t>(nvs.size()));
     out.insert(out.end(), nvs.begin(), nvs.end());
@@ -328,7 +342,7 @@ size_t sim_persist_export(uint8_t* buf, size_t cap) {
 }
 
 int sim_persist_import(const uint8_t* buf, size_t len) {
-    if (!buf || len < 12 || std::memcmp(buf, "SGT1", 4) != 0) return -1;
+    if (!buf || len < 16 || std::memcmp(buf, "SGT2", 4) != 0) return -1;
     size_t pos = 4;
     uint64_t t = 0;
     for (int i = 0; i < 8; ++i) t |= static_cast<uint64_t>(buf[pos++]) << (8 * i);
@@ -338,6 +352,8 @@ int sim_persist_import(const uint8_t* buf, size_t len) {
         for (int i = 0; i < 4; ++i) v |= static_cast<uint32_t>(buf[pos++]) << (8 * i);
         return true;
     };
+    uint32_t reason = 1;
+    if (!get_u32(reason)) return -1;
     uint32_t n;
     if (!get_u32(n) || pos + n > len || !sim::nvs_store().deserialize(buf + pos, n)) return -2;
     pos += n;
@@ -346,7 +362,8 @@ int sim_persist_import(const uint8_t* buf, size_t len) {
     if (!get_u32(n) || n != plant_sizeof() || pos + n > len) return -4;
     std::memcpy(reinterpret_cast<uint8_t*>(sim::plant()), buf + pos, n);
     sim::reset(t);
-    sim::set_reset_reason(3 /* ESP_RST_SW */);
+    sim::set_firmware_epoch_us(t);
+    sim::set_reset_reason(static_cast<int>(reason));
     return 0;
 }
 

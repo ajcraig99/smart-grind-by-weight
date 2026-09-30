@@ -58,6 +58,8 @@ constexpr size_t kLogCap = 1u << 20;
 uint64_t g_seed = 1;
 uint64_t g_fw_rng = 0;
 bool g_restart_requested = false;
+uint64_t g_fw_epoch_us = 0;
+int g_restart_reason = 3;  // ESP_RST_SW
 FrameObserver g_frame_observer = nullptr;
 
 constexpr uint64_t kHx711PowerDownUs = 60;  // HX711: SCK high > 60 us enters power down
@@ -271,17 +273,26 @@ void world_init(uint64_t seed) {
     g_display_on = true;
     g_log.clear();
     g_restart_requested = false;
+    g_fw_epoch_us = 0;
+    g_restart_reason = 3;
     set_frame_hook(on_frame);
 }
 
 bool world_restart_requested() { return g_restart_requested; }
+uint64_t firmware_now_us() { return sim::now_us() - g_fw_epoch_us; }
+void set_firmware_epoch_us(uint64_t epoch_us) { g_fw_epoch_us = epoch_us; }
+uint64_t firmware_epoch_us() { return g_fw_epoch_us; }
+
 void world_request_restart(const char* reason) {
     g_restart_requested = true;
+    request_stop();
     char line[160];
     const int n = std::snprintf(line, sizeof(line), "[SIM] restart requested: %s\n", reason ? reason : "");
     if (n > 0) log_write(line, static_cast<size_t>(n));
 }
 uint64_t world_seed() { return g_seed; }
+void world_set_restart_reason(int code) { g_restart_reason = code; }
+int world_restart_reason() { return g_restart_reason; }
 void world_set_frame_observer(FrameObserver observer) { g_frame_observer = observer; }
 
 }  // namespace sim

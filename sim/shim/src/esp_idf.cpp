@@ -23,6 +23,54 @@ namespace {
 esp_reset_reason_t g_reset_reason = ESP_RST_POWERON;
 }
 
+
+// ---- task watchdog model ----
+#include <map>
+namespace {
+uint32_t g_wdt_timeout_ms = 5000;
+bool g_wdt_panic = true;
+std::map<void*, uint64_t> g_wdt_tasks;  // subscribed task -> last reset (us)
+uint64_t g_wdt_event = 0;
+bool g_wdt_fired = false;
+
+void wdt_check(void*) {
+    g_wdt_event = 0;
+    const uint64_t now = sim::now_us();
+    for (auto& kv : g_wdt_tasks) {
+        sim::Task* task = static_cast<sim::Task*>(kv.first);
+        if (sim::task_state(task) == sim::TaskState::DELETED) continue;
+        if (!g_wdt_fired && now - kv.second >= static_cast<uint64_t>(g_wdt_timeout_ms) * 1000ULL) {
+            g_wdt_fired = true;
+            char line[200];
+            const int n = std::snprintf(line, sizeof(line),
+                "E (%lu) task_wdt: Task watchdog got triggered. Task not responding: %s\n",
+                static_cast<unsigned long>(now / 1000ULL), sim::task_name(task));
+            if (n > 0) sim::log_write(line, static_cast<size_t>(n));
+            if (g_wdt_panic) {
+                sim::world_set_restart_reason(ESP_RST_TASK_WDT);
+                sim::world_request_restart("task watchdog");
+            }
+        }
+    }
+    if (!g_wdt_tasks.empty()) g_wdt_event = sim::event_schedule(now + 100000, wdt_check, nullptr);
+}
+}  // namespace
+
+void sim_wdt_configure(uint32_t timeout_ms, bool panic) {
+    g_wdt_timeout_ms = timeout_ms ? timeout_ms : 5000;
+    g_wdt_panic = panic;
+}
+void sim_wdt_add(void* task) {
+    if (!task) return;
+    g_wdt_tasks[task] = sim::now_us();
+    if (!g_wdt_event) g_wdt_event = sim::event_schedule(sim::now_us() + 100000, wdt_check, nullptr);
+}
+void sim_wdt_delete(void* task) { g_wdt_tasks.erase(task); }
+void sim_wdt_reset(void* task) {
+    auto it = g_wdt_tasks.find(task);
+    if (it != g_wdt_tasks.end()) it->second = sim::now_us();
+}
+
 namespace sim {
 void set_reset_reason(int reason) { g_reset_reason = static_cast<esp_reset_reason_t>(reason); }
 }
@@ -48,6 +96,7 @@ const char* esp_err_to_name(esp_err_t code) {
 esp_reset_reason_t esp_reset_reason(void) { return g_reset_reason; }
 
 void esp_restart(void) {
+    sim::world_set_restart_reason(ESP_RST_SW);
     sim::world_request_restart("esp_restart");
     // The chip stops executing this image. Park the caller; the runtime reboots the world.
     for (;;) {
@@ -96,16 +145,32 @@ void sim_esp_log(esp_log_level_t level, const char* tag, const char* format, ...
     char line[320];
     const char* letter = level == ESP_LOG_ERROR ? "E" : level == ESP_LOG_WARN ? "W" : "I";
     const int n = std::snprintf(line, sizeof(line), "%s (%lu) %s: %s\n", letter,
-                                static_cast<unsigned long>(sim::now_us() / 1000ULL), tag ? tag : "", message);
+                                static_cast<unsigned long>(sim::firmware_now_us() / 1000ULL), tag ? tag : "", message);
     if (n > 0) sim::log_write(line, static_cast<size_t>(n) < sizeof(line) ? static_cast<size_t>(n) : sizeof(line) - 1);
 }
 
-// ---- task watchdog: recorded only; the twin never panics on it ----
-esp_err_t esp_task_wdt_init(const esp_task_wdt_config_t*) { return ESP_OK; }
-esp_err_t esp_task_wdt_reconfigure(const esp_task_wdt_config_t*) { return ESP_OK; }
-esp_err_t esp_task_wdt_add(TaskHandle_t) { return ESP_OK; }
-esp_err_t esp_task_wdt_delete(TaskHandle_t) { return ESP_OK; }
-esp_err_t esp_task_wdt_reset(void) { return ESP_OK; }
+// ---- task watchdog ----
+// Arduino-ESP32 3.3.2 sdkconfig (esp32s3/qio_opi): CONFIG_ESP_TASK_WDT_TIMEOUT_S 5 and
+// CONFIG_ESP_TASK_WDT_PANIC 1. A subscribed task silent for the timeout panics the chip.
+// The idle-task subscriptions (CPU starvation) are not modelled.
+esp_err_t esp_task_wdt_init(const esp_task_wdt_config_t* config) { return esp_task_wdt_reconfigure(config); }
+esp_err_t esp_task_wdt_reconfigure(const esp_task_wdt_config_t* config) {
+    if (!config) return ESP_ERR_INVALID_ARG;
+    sim_wdt_configure(config->timeout_ms, config->trigger_panic);
+    return ESP_OK;
+}
+esp_err_t esp_task_wdt_add(TaskHandle_t task) {
+    sim_wdt_add(task ? reinterpret_cast<void*>(task) : reinterpret_cast<void*>(sim::current_task()));
+    return ESP_OK;
+}
+esp_err_t esp_task_wdt_delete(TaskHandle_t task) {
+    sim_wdt_delete(task ? reinterpret_cast<void*>(task) : reinterpret_cast<void*>(sim::current_task()));
+    return ESP_OK;
+}
+esp_err_t esp_task_wdt_reset(void) {
+    sim_wdt_reset(reinterpret_cast<void*>(sim::current_task()));
+    return ESP_OK;
+}
 
 // ---- partitions / OTA: running from ota_0, confirmed image ----
 static esp_partition_t g_ota0 = {nullptr, ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_0, 0x10000, 0x600000, 4096, "app0", false, false};
@@ -229,7 +294,7 @@ esp_err_t esp_timer_delete(esp_timer_handle_t timer) {
 
 int64_t esp_timer_get_time(void) {
     sim::note_clock_read();
-    return static_cast<int64_t>(sim::now_us());
+    return static_cast<int64_t>(sim::firmware_now_us());
 }
 
 bool esp_timer_is_active(esp_timer_handle_t timer) { return timer && timer->active; }

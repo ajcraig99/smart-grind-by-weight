@@ -45,6 +45,7 @@ uint64_t g_next_event_id = 1;
 FrameHook g_frame_hook = nullptr;
 uint32_t g_clock_reads_in_slice = 0;
 bool g_in_frame_processing = false;
+bool g_stop_requested = false;
 
 constexpr uint32_t kSpinReadThreshold = 20000;
 
@@ -274,19 +275,24 @@ void run_until(uint64_t t_end_us) {
     for (;;) {
         // Run every ready task at the current instant.
         for (;;) {
+            if (g_stop_requested) return;
             Task* task = pick_ready();
             if (!task) break;
             switch_to(task);
             reap();
         }
-        if (g_now_us >= t_end_us) break;
+        if (g_stop_requested || g_now_us >= t_end_us) break;
         // Nothing can run now: advance to the next millisecond boundary (or the end time).
         const uint64_t boundary = next_boundary(g_now_us);
         advance_world_to(boundary < t_end_us ? boundary : t_end_us);
     }
 }
 
+void request_stop() { g_stop_requested = true; }
+bool stop_requested() { return g_stop_requested; }
+
 void reset(uint64_t start_us) {
+    g_stop_requested = false;
     for (Task* task : g_tasks) {
         fiber_destroy(task->fiber);
         delete task;

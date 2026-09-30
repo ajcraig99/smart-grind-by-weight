@@ -22,6 +22,7 @@ constexpr size_t kTraceCap = 64u << 20;
 }  // namespace
 
 const std::string& trace_header() { return g_header; }
+void trace_suppress_header() { g_header_pending = false; }
 
 void trace_set_period_ms(uint32_t period) {
     g_period_ms = period;

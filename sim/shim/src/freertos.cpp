@@ -5,6 +5,7 @@
 #include "freertos/task.h"
 
 #include "../../core/scheduler.h"
+#include "../../core/world.h"
 
 #include <cstring>
 #include <deque>
@@ -98,7 +99,7 @@ BaseType_t xTaskDelayUntil(TickType_t* previous_wake, TickType_t increment) {
     return pdFALSE;
 }
 
-TickType_t xTaskGetTickCount(void) { return static_cast<TickType_t>(sim::now_us() / 1000ULL); }
+TickType_t xTaskGetTickCount(void) { return static_cast<TickType_t>(sim::firmware_now_us() / 1000ULL); }
 TickType_t xTaskGetTickCountFromISR(void) { return xTaskGetTickCount(); }
 void vTaskSuspend(TaskHandle_t task) { sim::task_suspend(as_task(task)); }
 void vTaskResume(TaskHandle_t task) { sim::task_resume(as_task(task)); }

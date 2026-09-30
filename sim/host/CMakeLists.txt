@@ -13,6 +13,7 @@ set(CMAKE_C_STANDARD 11)
 get_filename_component(SIM_DIR "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
 get_filename_component(REPO_DIR "${SIM_DIR}/.." ABSOLUTE)
 
+enable_testing()
 include("${SIM_DIR}/cmake/twin_sources.cmake")
 
 set(TWIN_ARCH_FLAGS -m32 -msse2 -mfpmath=sse)
@@ -22,7 +23,8 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
 
+set(SIMPLANT_BUILD_TESTS ON CACHE BOOL "Build the plant unit tests" FORCE)
 twin_add_targets()
 
-enable_testing()
+
 include("${SIM_DIR}/cmake/twin_tests.cmake" OPTIONAL)

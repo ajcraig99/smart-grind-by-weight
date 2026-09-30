@@ -56,6 +56,9 @@ void event_cancel(uint64_t id);
 // ---- world ----
 void set_frame_hook(FrameHook hook);
 void run_until(uint64_t t_end_us);
+// Make run_until return at the next scheduling point (restart requested).
+void request_stop();
+bool stop_requested();
 // Drop all tasks and events and reset the clock (fresh world in the same process).
 void reset(uint64_t start_us = 0);
 // Number of tasks not deleted.

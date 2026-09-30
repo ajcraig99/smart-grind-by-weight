@@ -141,6 +141,8 @@ void fire(Event& e) {
     } else if (e.kind == "action") {
         plant_action(plant(), e.code, e.value);
     } else if (e.kind == "reset") {
+        // value: esp_reset_reason_t the next boot reports; default ESP_RST_POWERON (power cut).
+        world_set_restart_reason(e.value > 0 ? static_cast<int>(e.value) : 1);
         world_request_restart("scenario reset");
     }
 }
@@ -321,6 +323,26 @@ void operator_start() {
     g_last_phase_seen = -1;
     for (Event& e : g_sc.events) e.fired = false;
     task_create("operator", operator_task, nullptr, 20, 1, 256 * 1024);
+}
+
+namespace {
+double g_observe_s = 20.0;
+void post_reset_task(void*) {
+    g_status = "post-reset boot";
+    runtime_begin_observation();
+    const bool ready = wait_until([] { return runtime_booted() && ui() == kUiReady; }, g_sc.boot_timeout_s);
+    g_status = ready ? "post-reset ready" : "post-reset not ready (ui " + std::to_string(ui()) + ")";
+    wait_s(g_observe_s);
+    runtime_close_records();
+    g_finished = true;
+    block(kNever);
+}
+}  // namespace
+
+void operator_start_post_reset(double observe_s) {
+    g_finished = false;
+    g_observe_s = observe_s;
+    task_create("operator", post_reset_task, nullptr, 20, 1, 256 * 1024);
 }
 
 bool operator_finished() { return g_finished; }
