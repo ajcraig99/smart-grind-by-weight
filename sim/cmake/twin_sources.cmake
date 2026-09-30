@@ -76,6 +76,7 @@ function(twin_add_targets)
   target_compile_options(twin_firmware PRIVATE -Wno-format -Wno-unused-parameter)
 
   if(NOT EMSCRIPTEN)
+    target_sources(twin_firmware PRIVATE "${SIM_DIR}/core/js_api.cpp")
     add_executable(grindsim "${SIM_DIR}/host/grindsim.cpp")
     target_link_libraries(grindsim PRIVATE twin_firmware)
   endif()
