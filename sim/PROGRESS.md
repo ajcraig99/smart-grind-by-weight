@@ -11,9 +11,9 @@ Gate command: `git diff --stat 3430179a4cdc2d5914b55badb9c24bee2a565f50 -- src i
 |------|--------|
 | 0 Recon, ARCHITECTURE.md, sim_api.h | done |
 | 1 Native sim + Monte Carlo | done (6300-run report, reviewed) |
-| 2 Browser dashboard (WASM) | built by web-builder, 23/23 headless checks, pending commit |
-| 3 Firmware UI on virtual screen | works (native PNG dumps + page canvas), pending commit |
-| 4 3D twin + polish + visual QA | not started |
+| 2 Browser dashboard (WASM) | done: committed in 1573f03; 23/23 headless file:// checks re-run by lead; page rebuild is byte-reproducible |
+| 3 Firmware UI on virtual screen | done: real LVGL UI in canvas, pointer taps drive the FT3168 shim; screenshots viewed by lead |
+| 4 3D twin + polish + visual QA | in progress (web-builder 3D pass, visual-qa suite) |
 
 ## Recon (Step "Recon first")
 
@@ -86,7 +86,7 @@ It is left untouched; the twin lives in new subdirectories.
 
 ## Next
 
-- Tier 2/3 commit, then Tier 4.
+- Tier 4: three.js scene (web-builder), visual QA suite (visual-qa), README polish.
 
 ## Decisions
 
