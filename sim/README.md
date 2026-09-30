@@ -1,72 +1,68 @@
-# Desktop simulator
+# Digital twin of the grind-by-weight firmware
 
-The desktop simulator runs the Smart Grind-by-Weight LVGL interface in a native
-Windows window. It is intended for fast UI and grind-flow development without
-flashing or connecting a development board.
+This directory holds two things:
 
-The simulated panel has the same 280 x 456 logical resolution as the Waveshare
-display. It currently runs the production Ready screen, both production
-Grinding screen layouts, and the production Play/Stop/Complete control. A
-deterministic grinder/load-cell model supplies rising weight, changing flow,
-motor run-on, settling, and completion data.
+1. **The digital twin** (everything below): the real, unmodified firmware from `src/` running on a
+   virtual clock against a physics model of the grinder, the grounds path and the load cell. It builds
+   natively (Monte Carlo harness `grindsim`) and to WebAssembly (the offline page `sim/dist/index.html`).
+2. The older **Windows desktop UI simulator** (`sim/main.cpp`, `sim/CMakeLists.txt`, `sim/platform/`,
+   `sim/*.ps1`, three `*_test.cpp`); unchanged, see the section at the end.
 
-## Requirements
+## Use the page (no build needed)
 
-- Windows 10 or later
-- Visual Studio 2022 with the Desktop development with C++ workload
-- Git and internet access for the first standalone build (CMake fetches LVGL 9.5.0)
+Open `sim/dist/index.html` from this branch on GitHub, choose "Download raw file", and double-click the
+downloaded file. It runs offline in Chrome, Edge or Firefox (one file: the WebAssembly firmware, the
+plant model and the dashboard are all inside it).
 
-No ESP32, display, load cell, grinder, PlatformIO, or SDL installation is
-required.
+## Build and run natively (Linux)
 
-## Run
+```bash
+sim/tools/fetch_deps.sh                         # LVGL 9.5.0 into sim/.deps (once)
+sudo apt-get install -y g++-multilib ninja-build   # 32-bit host build (ILP32 like the ESP32)
+cmake -S sim/host -B sim/out/host -G Ninja && ninja -C sim/out/host
+ctest --test-dir sim/out/host                   # plant, scheduler, smoke and determinism tests
 
-From PowerShell at the repository root:
-
-```powershell
-.\sim\run.ps1
+# one grind: trace CSV, firmware log, summary row, PNG snapshots of the firmware screen
+sim/out/host/grindsim --seed 7 --scenario sim/scenarios/normal.json \
+    --out run.csv --log log.txt --summary summary.csv --screens shots/
+# batch: one fresh process per seed, summary rows in seed order
+sim/out/host/grindsim --batch 200 --seed 1000 --jobs 4 --scenario sim/scenarios/normal.json --summary s.csv
+# plant parameters: --params file.json or --set name=value (names in sim/plant/PARAMS.md)
 ```
 
-If a firmware build has already installed LVGL 9.5.0, the simulator reuses that
-source and performs no second download. Otherwise the first run downloads LVGL;
-later runs reuse the local build. Set `SMART_GRIND_LVGL_SOURCE` to an existing
-LVGL 9.5.0 source directory when using a custom dependency layout.
+Monte Carlo report: `python3 sim/mc/run_mc.py` (see `sim/mc/README.md`) writes
+`sim/reports/montecarlo.md`.
 
-Use the on-screen circular button to start, stop, acknowledge, and restart the
-grind flow. The desktop-only keyboard shortcuts are kept outside the simulated
-panel UI:
+## Build the page
 
-- `V`: switch between the production arc and chart grinding layouts
-- `T`: tare the simulated load cell
-
-## Automated smoke test
-
-```powershell
-.\sim\build.ps1 -Test
+```bash
+source /path/to/emsdk/emsdk_env.sh     # any recent emsdk; tested with emcc 6.0.10
+sim/wasm/build.sh                      # -> sim/out/wasm/grindtwin.js (WASM embedded)
+npm --prefix sim/web install && npm --prefix sim/web run build   # -> sim/dist/index.html
 ```
 
-The smoke scenario creates the production UI, starts a grind, verifies that the
-screen transitions to Grinding, and confirms that simulated load-cell weight
-advances.
+## What is real and what is modelled
 
-The test command also runs deterministic render-budget benchmarks for the arc
-and chart layouts and for an animated Ready-screen tab swipe. They count LVGL
-flushes and flushed pixels, protecting the UI from accidentally returning to
-excessive redraws or sluggish page transitions.
+- Real: every file under `src/` except the Bluetooth manager, the BLE OTA handler and the network
+  services (Wi-Fi, web server, API, provisioning, GaggiMate client), which are replaced by
+  "radio absent" stubs (`sim/shim/stubs/comms_stubs.cpp`). The LVGL 9.5.0 library and the firmware's
+  own `include/lv_conf.h` render the real UI.
+- Faked platform (`sim/shim/`): Arduino core, FreeRTOS (cooperative, deterministic), ESP-IDF timers,
+  RMT relay output, GPIO, the HX711 two-wire protocol, the FT3168 touch controller, the CO5300 panel,
+  NVS/Preferences and LittleFS (in memory), task watchdog.
+- Modelled (`sim/plant/`): relay, motor, single-dose burr chamber and run-dry, chute retention,
+  transport delay, cup and platform, load-cell mechanics, HX711 cadence and noise, faults. Most
+  parameters are placeholders (`sim/plant/ASSUMPTIONS_PLANT.md`); numbers describe the model.
+- See `ARCHITECTURE.md` (design), `ASSUMPTIONS.md`, `FINDINGS.md`, `QUESTIONS.md`, `PROGRESS.md`.
 
-The simulator does not execute built ESP32 `.bin` files; those contain Xtensa
-machine code and cannot run in a native Windows process. The complete
-compatibility gate is therefore:
+## Scenarios
 
-1. Build the V1 firmware target.
-2. Build the V2 firmware target.
-3. Build and run this simulator smoke test against the shared production UI
-   source.
+JSON files drive a scripted user (`sim/core/operator.cpp`): beans per dose, cup mass, purge handling,
+number of grinds, and timed events (faults, cup actions, resets) anchored to boot, START, CONTINUE or
+the first entry of a controller phase. Examples: `sim/scenarios/normal.json`,
+`sim/scenarios/findings/*.json`, `sim/mc/scenarios/*.json`.
 
-## Scope and hardware boundary
+## Windows desktop UI simulator (pre-existing)
 
-The simulator is suitable for UI layout, interaction flows, deterministic grind
-scenarios, and future web/BLE integration work. Physical hardware remains the
-authority for AMOLED initialization, QSPI/DMA timing, real touch-controller
-behaviour, ESP32 memory pressure, BLE/Wi-Fi coexistence, relay wiring, HX711
-electrical noise, and final motor safety checks.
+Its original README is kept verbatim in `sim/DESKTOP_SIMULATOR.md` (this file was the desktop
+simulator's README before the digital twin was added).
