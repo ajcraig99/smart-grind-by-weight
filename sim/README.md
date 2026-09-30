@@ -41,6 +41,21 @@ sim/wasm/build.sh                      # -> sim/out/wasm/grindtwin.js (WASM embe
 npm --prefix sim/web install && npm --prefix sim/web run build   # -> sim/dist/index.html
 ```
 
+## Checks
+
+- `ctest --test-dir sim/out/host` (plant, scheduler, smoke, determinism).
+- `node sim/web/test/run.mjs` (page smoke test) and `node sim/qa/run_qa.mjs` (visual QA; writes
+  `sim/qa/REPORT.md`, screenshots in `sim/qa/screenshots/`). Both use headless Chromium via file://
+  (`PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm --prefix sim/qa install` once; set the Chromium path in the scripts).
+
+## The page
+
+Dashboard: live weight/flow/error/relay traces against the plant's truth, controller state diagram,
+mass balance, plant parameter sliders, fault and action buttons, run history, CSV/log export, speed
+0.25x-20x with pause and 20 ms steps. The firmware's own LVGL UI is shown on a 280x456 canvas (click
+it to touch) and as a texture on a generic 3D grinder (orbit camera, exploded view with labelled
+controller board, HX711, load cell, relay, motor, burrs, chute).
+
 ## What is real and what is modelled
 
 - Real: every file under `src/` except the Bluetooth manager, the BLE OTA handler and the network

@@ -13,7 +13,7 @@ Gate command: `git diff --stat 3430179a4cdc2d5914b55badb9c24bee2a565f50 -- src i
 | 1 Native sim + Monte Carlo | done (6300-run report, reviewed) |
 | 2 Browser dashboard (WASM) | done: committed in 1573f03; 23/23 headless file:// checks re-run by lead; page rebuild is byte-reproducible |
 | 3 Firmware UI on virtual screen | done: real LVGL UI in canvas, pointer taps drive the FT3168 shim; screenshots viewed by lead |
-| 4 3D twin + polish + visual QA | in progress (web-builder 3D pass, visual-qa suite) |
+| 4 3D twin + polish + visual QA | done: three.js generic grinder, raycast touch, exploded view; QA suite 178/178, 0 blocker/major |
 
 ## Recon (Step "Recon first")
 
@@ -86,7 +86,7 @@ It is left untouched; the twin lives in new subdirectories.
 
 ## Next
 
-- Tier 4: three.js scene (web-builder), visual QA suite (visual-qa), README polish.
+- Nothing required remains. Optional: see MORNING.md next steps.
 
 ## Decisions
 
@@ -139,3 +139,14 @@ None.
   completed result) after reading the source.
 - Web-builder built Tier 2 + 3 in parallel while the Monte Carlo ran (decision: the WASM module and page do not change Tier 1;
   Tier 2/3 committed only after Tier 1).
+- Tier 4: web-builder added scene3d.js (31/31 page checks); visual-qa suite sim/qa (178 checks, 3 runs identical);
+  lead fixed 4 minor CSS defects it found (TIMEOUT highlight colour, card width shift, fault hover, history header wrap)
+  and re-ran the suite: 178/178. One minor open: a drag starting on the 3D screen is sent to the firmware as a swipe.
+
+## Final gates (lead, at the end)
+
+- Firmware diff vs 3430179 over src include components partitions.csv platformio.ini: empty.
+- ctest sim/out/host: 22/22 (plant 19, scheduler, smoke, determinism). Repo tools/tests: 43 OK.
+- Same seed twice: identical CSV/log/summary; native vs WASM trace byte-identical.
+- WASM build OK (emcc 6.0.10); page rebuild byte-reproducible; headless Chromium via file:// with no console errors,
+  scripted grinds complete (web test 31/31, QA 178/178); screenshots viewed by the lead.

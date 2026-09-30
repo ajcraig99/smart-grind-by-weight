@@ -1,0 +1,13 @@
+{
+  "name": "grindtwin-visual-qa",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Headless-browser visual QA suite for sim/dist/index.html (the grind-by-weight digital twin page)",
+  "type": "module",
+  "scripts": {
+    "test": "node run_qa.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "1.63.0"
+  }
+}

@@ -1,0 +1,37 @@
+[
+  {
+    "severity": "minor",
+    "title": "A drag that starts on the grinder's screen in the 3D view is sent to the firmware as a touch swipe instead of orbiting the camera. In the QA run it switched the grinder from DOUBLE 18.0 g to SINGLE 9.0 g (the target changed silently). The hint under the view says 'Click the screen on the 3D grinder to touch it', so this is by design, but orbiting from the screen area is easy to do by accident. Possible change: require a click (no movement) to count as a touch, and start orbiting when the pointer moves more than a few pixels.",
+    "steps": "Open the page, in the 3D twin card press on the small screen on the grinder body, drag sideways, release; the virtual screen now shows a different mode."
+  },
+  {
+    "severity": "cosmetic",
+    "title": "Weight, error and flow plots: at cup placement (about 8-11 s of virtual time after boot) the firmware reading jumps off scale and is drawn as two or three full-height vertical orange lines (also negative spikes while the cup is lifted for the purge). They dominate the plot and can be mistaken for faults. Consider clamping the y range or drawing off-scale samples as markers.",
+    "steps": "Auto grind (seed 1, target 18, beans 22); look at the Live traces card (see out/1280x800_s1_normal_whole_grind_traces.png)."
+  },
+  {
+    "severity": "cosmetic",
+    "title": "Mass balance card at 1280 px: the conservation-error value wraps, the label 'Conservation error' onto two lines and the unit 'g' alone on a third. At 1920 px it is on one line.",
+    "steps": "Open the page at 1280x800 and look at the Mass balance card (out/1280x800_s1_normal_completed_full.png)."
+  },
+  {
+    "severity": "cosmetic",
+    "title": "3D view at the default camera: the cup and the grounds stream cover the ring and weight shown on the grinder's screen, and the screen text is only about 8 px high, so the weight is hard to read in 3D (it is readable on the 2D virtual screen).",
+    "steps": "Load beans, place cup, tap Play, look at the 3D twin card while grinding (screenshots/05-3d-view-grinding.png)."
+  },
+  {
+    "severity": "cosmetic",
+    "title": "1920x1080: the 3D canvas is 1294x499 px, so the grinder occupies the middle third and the rest is empty background; the virtual-screen card is a narrow column beside a very wide 3D card.",
+    "steps": "Open the page at 1920x1080 (out/1920x1080_s1_normal_completed_full.png)."
+  },
+  {
+    "severity": "cosmetic",
+    "title": "State diagram: the edge labels 'start' and 're-tare' are crossed by their own arrows once the arrows turn green, which makes them harder to read.",
+    "steps": "Run one grind and look at the Controller state diagram (out/1920x1080_s1_normal_completed_diagram.png)."
+  },
+  {
+    "severity": "cosmetic",
+    "title": "Headless Chromium with software WebGL logs four console warnings per page load ('GL Driver Message ... GPU stall due to ReadPixels'). They come from the graphics driver, are not errors, and may not appear with a hardware GPU; the suite does not fail on them but lists them in the notes.",
+    "steps": "Open the page in headless Chromium started with --disable-gpu and read the console."
+  }
+]
