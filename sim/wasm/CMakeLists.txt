@@ -23,7 +23,7 @@ set(TWIN_EXPORTS
   _twin_fault _twin_touch _twin_framebuffer _twin_framebuffer_dirty _twin_operator_start
   _twin_restart_requested _twin_param_table _twin_state_json _twin_records_json _twin_log_read
   _twin_trace_read _twin_trace_header _twin_persist_size _twin_persist_export _twin_persist_import
-  _twin_trace_suppress_header _twin_begin_post_reset _malloc _free)
+  _twin_trace_suppress_header _twin_begin_post_reset _twin_restart_reason _twin_operator_active _malloc _free)
 list(JOIN TWIN_EXPORTS "," TWIN_EXPORTS_CSV)
 
 add_executable(grindtwin "${SIM_DIR}/core/js_api.cpp")

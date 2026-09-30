@@ -221,3 +221,7 @@ TWIN_EXPORT void twin_begin_post_reset(double observe_s) {
     sim::operator_start_post_reset(observe_s);
     g_operator_running = true;
 }
+
+// esp_reset_reason_t code of the pending restart (1 power-on, 3 software, 6 task watchdog).
+TWIN_EXPORT int twin_restart_reason() { return sim::world_restart_reason(); }
+TWIN_EXPORT int twin_operator_active() { return g_operator_running && !sim::operator_finished() ? 1 : 0; }
