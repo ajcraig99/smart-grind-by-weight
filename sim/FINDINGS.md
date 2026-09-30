@@ -119,3 +119,28 @@ Observation: `findings/noise.json` (noise x20 from 3 s into PREDICTIVE): COMPLET
 
 Interpretation: settling never succeeds under that noise, so every pulse waits for its 3 s settling
 timeout and decides on the smoothed weight.
+
+## F11 - The controller aims at the low edge of its tolerance band
+
+Observation: nominal Monte Carlo set (500 seeds, `sim/reports/montecarlo.md` 3.2): firmware result
+SUCCESS in 489 runs, but the true cup mass is below target - 0.03 g in 58.6 % of runs (mean true error
+-0.028 g); the firmware-reported error is in band in 96.6 % of runs; reported minus true is
++0.007 g (sd 0.005 g).
+
+Interpretation: `run_pulse_decision_phase` (src/controllers/weight_grind_strategy.cpp) ends when
+`target - settled < GRIND_ACCURACY_TOLERANCE_G` and sizes pulses towards `target - tolerance`, so
+accepted results sit just inside the lower edge of the band. Any small measurement bias (here a
+model offset of +0.007 g whose cause is Uncertain) moves about half of them outside the band. The
+magnitude depends on the plant placeholders; the one-sided aim is in the code.
+
+## F12 - The dry-run rule does not run during correction pulses
+
+Observation: single-dose run-dry set (`sim/reports/montecarlo.md` 3.6): for doses just large enough to
+leave the predictive phase but not to reach the target, the grind ends COMPLETED / MAX_PULSES 0.04 to
+0.2 g short after 10 pulses on a nearly empty burr chamber, instead of "No beans?".
+
+Interpretation: `dry_run_detected()` is only called in the PRIME and PREDICTIVE cases of
+`GrindController::update()` (src/controllers/grind_controller.cpp), not in the pulse phases, and
+MAX_PULSES counts as a completed grind (`is_completed_grind_result`,
+src/controllers/grind_session_result.h), so the UI shows the completion screen for a short dose.
+The same applies to F3 (stuck reading during pulses) and F4 (bump).

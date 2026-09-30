@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grind-by-weight digital twin</title>
+<style>
+/*__CSS__*/
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <h1>Grind-by-weight digital twin</h1>
+    <div id="world-status" class="status" role="status">Loading firmware module&hellip;</div>
+  </div>
+
+  <div class="group" aria-label="World setup">
+    <label>Seed <input id="in-seed" type="number" value="1" step="1" min="0"></label>
+    <label>Target <input id="in-target" type="number" value="18.0" step="0.1" min="1" max="200"><span class="u">g</span></label>
+    <label>Beans per dose <input id="in-beans" type="number" value="22" step="0.5" min="0"><span class="u">g</span></label>
+    <label>Purge action
+      <select id="in-purge"><option value="discard">discard</option><option value="keep">keep</option></select>
+    </label>
+    <label class="check" title="Hold the new world paused at power-on so a run can be set up and reproduced exactly"><input id="in-startpaused" type="checkbox"> start paused</label>
+    <button id="btn-boot" class="primary" title="Create a fresh world from the seed and boot the firmware">Boot / Restart world</button>
+    <button id="btn-auto" title="Scripted user: loads beans, places the cup, taps START on the firmware screen, answers the purge prompt, taps OK">Auto grind</button>
+    <button id="btn-powercycle" title="Export flash + physical world, re-instantiate the firmware, import, boot (RAM is lost)">Power-cycle firmware</button>
+  </div>
+
+  <div class="group" aria-label="Time control">
+    <div class="seg" id="speed-seg" role="radiogroup" aria-label="Speed"></div>
+    <button id="btn-pause" title="Pause or resume virtual time">Pause</button>
+    <button id="btn-step" title="Advance 20 ms of virtual time while paused" disabled>Step 20 ms</button>
+    <div class="clock" title="Virtual time since power-on">
+      <span id="vt">0.000</span><span class="u"> s</span>
+      <span id="ratio" class="muted"></span>
+    </div>
+  </div>
+</header>
+
+<main class="layout">
+  <div class="col col-left">
+    <section class="card sticky" id="card-screen">
+      <h2>Virtual screen <span class="sub">the firmware's own LVGL UI, 280&times;456</span></h2>
+      <div class="screen-wrap" id="screen-wrap">
+        <canvas id="screen" width="280" height="456" aria-label="Virtual touch screen"></canvas>
+        <div id="screen-off" class="screen-off" hidden>display off</div>
+      </div>
+      <div class="row between">
+        <div class="seg" id="scale-seg" role="radiogroup" aria-label="Screen scale">
+          <button data-scale="1" class="on" role="radio" aria-checked="true">1&times;</button>
+          <button data-scale="1.5" role="radio" aria-checked="false">1.5&times;</button>
+        </div>
+        <span class="muted small">click or touch the screen; Play button at the bottom</span>
+      </div>
+      <dl class="kv" id="screen-kv">
+        <dt>Controller phase</dt><dd id="kv-phase">-</dd>
+        <dt>UI state</dt><dd id="kv-ui">-</dd>
+        <dt>Operator</dt><dd id="kv-operator">-</dd>
+        <dt>Firmware</dt><dd id="kv-fw">-</dd>
+      </dl>
+    </section>
+
+  </div>
+
+  <div class="col col-right">
+    <div class="controls-row">
+      <section class="card" id="card-mass">
+        <h2>Mass balance <span class="sub">grams</span></h2>
+        <div id="mass-bars"></div>
+        <div class="row between cons">
+          <span>Conservation error</span><span id="cons-err" class="mono">-</span>
+        </div>
+      </section>
+      <section class="card" id="card-actions">
+        <h2>Physical actions</h2>
+        <div id="actions" class="btn-grid"></div>
+      </section>
+      <section class="card" id="card-faults">
+        <h2>Fault injection <span class="sub">toggle</span></h2>
+        <div id="faults" class="btn-grid"></div>
+      </section>
+    </div>
+
+    <section class="card" id="card-traces">
+      <h2>Live traces
+        <span class="sub">firmware reading against simulated truth</span>
+        <span class="spacer"></span>
+        <div class="seg" id="view-seg" role="radiogroup" aria-label="Trace window">
+          <button data-view="window" class="on" role="radio" aria-checked="true">Last 60 s</button>
+          <button data-view="grind" role="radio" aria-checked="false">Whole grind</button>
+        </div>
+        <button id="btn-trace-csv" title="Download the accumulated 10 ms trace as CSV">Trace CSV</button>
+      </h2>
+      <canvas id="plot-weight" class="plot" style="height:190px"></canvas>
+      <canvas id="plot-error" class="plot" style="height:120px"></canvas>
+      <canvas id="plot-flow" class="plot" style="height:140px"></canvas>
+      <canvas id="plot-strip" class="plot" style="height:92px"></canvas>
+    </section>
+
+    <section class="card" id="card-diagram">
+      <h2>Controller state diagram <span class="sub">GrindPhase of the running firmware</span>
+        <span class="spacer"></span><span id="diag-ui" class="badge">UI: -</span></h2>
+      <div id="diagram"></div>
+      <p class="muted small" id="diag-note">
+        Highlighted box: current phase. Green arrows: transitions taken in the current grind. Transitions derived from
+        <code>grind_controller.cpp</code>, <code>weight_grind_strategy.cpp</code>, <code>time_grind_strategy.cpp</code>.
+        Abort causes (any active phase to TIMEOUT): dry run, scale fault, vessel removed, dead-man safety stop, 60 s timeout.
+        TARE_CONFIRM to TIME_GRINDING exists in code but time mode enters TIME_GRINDING from SETUP.
+      </p>
+      <div id="trail" class="trail mono small"></div>
+    </section>
+
+    <section class="card" id="card-history">
+      <h2>Run history
+        <span class="spacer"></span>
+        <button id="btn-history-csv">History CSV</button>
+      </h2>
+      <div class="table-wrap">
+        <table id="history">
+          <thead>
+            <tr><th>#</th><th>Result</th><th>Error</th><th>Target g</th><th>Firmware final g</th><th>True cup g</th>
+              <th>True err g</th><th>Pulses</th><th>Motor s</th><th>Start s</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p id="history-empty" class="muted small">No grinds yet. Press Auto grind or tap Play on the virtual screen.</p>
+    </section>
+
+    <section class="card" id="card-params">
+      <h2>Plant parameters
+        <span class="sub">sweep range; tick marks the default</span>
+        <span class="spacer"></span>
+        <input id="param-filter" type="search" placeholder="filter" aria-label="Filter parameters">
+        <button id="btn-params-reset">Reset all</button>
+      </h2>
+      <div id="params" class="params"></div>
+    </section>
+
+    <section class="card" id="card-log">
+      <h2>Firmware log
+        <span class="spacer"></span>
+        <input id="log-filter" type="search" placeholder="filter" aria-label="Filter log">
+        <label class="inline"><input id="log-follow" type="checkbox" checked> auto-scroll</label>
+        <button id="btn-log-txt">Log text</button>
+        <button id="btn-log-clear">Clear</button>
+      </h2>
+      <pre id="log" class="log" tabindex="0"></pre>
+    </section>
+  </div>
+</main>
+
+<div id="toast" class="toast" role="status" hidden></div>
+
+<!-- Emscripten module with the WebAssembly embedded (SINGLE_FILE). Defines createGrindTwin. -->
+<script>
+/*__TWIN__*/
+</script>
+<script>
+/*__BUNDLE__*/
+</script>
+</body>
+</html>

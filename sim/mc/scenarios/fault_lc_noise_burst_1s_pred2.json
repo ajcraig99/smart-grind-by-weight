@@ -1,0 +1,21 @@
+{
+  "name": "fault_lc_noise_burst_1s_pred2",
+  "target_g": 18.0,
+  "beans_g": 22.0,
+  "purge_action": "discard",
+  "events": [
+    {
+      "when": "phase:PREDICTIVE",
+      "delay_s": 2.0,
+      "fault": "lc_noise_burst",
+      "active": 1,
+      "value": 20
+    },
+    {
+      "when": "phase:PREDICTIVE",
+      "delay_s": 3.0,
+      "fault": "lc_noise_burst",
+      "active": 0
+    }
+  ]
+}

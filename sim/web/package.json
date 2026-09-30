@@ -1,0 +1,18 @@
+{
+  "name": "grind-twin-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Offline dashboard and virtual screen for the grind-by-weight digital twin (single-file build).",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node test/run.mjs"
+  },
+  "dependencies": {
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "playwright-core": "^1.50.0"
+  }
+}

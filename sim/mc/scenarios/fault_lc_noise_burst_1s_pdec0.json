@@ -1,0 +1,21 @@
+{
+  "name": "fault_lc_noise_burst_1s_pdec0",
+  "target_g": 18.0,
+  "beans_g": 22.0,
+  "purge_action": "discard",
+  "events": [
+    {
+      "when": "phase:PULSE_DECISION",
+      "delay_s": 0.0,
+      "fault": "lc_noise_burst",
+      "active": 1,
+      "value": 20
+    },
+    {
+      "when": "phase:PULSE_DECISION",
+      "delay_s": 1.0,
+      "fault": "lc_noise_burst",
+      "active": 0
+    }
+  ]
+}

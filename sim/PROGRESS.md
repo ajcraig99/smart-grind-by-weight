@@ -10,9 +10,9 @@ Gate command: `git diff --stat 3430179a4cdc2d5914b55badb9c24bee2a565f50 -- src i
 | Tier | Status |
 |------|--------|
 | 0 Recon, ARCHITECTURE.md, sim_api.h | done |
-| 1 Native sim + Monte Carlo | native twin done and gated; Monte Carlo report in progress (subagent) |
-| 2 Browser dashboard (WASM) | not started |
-| 3 Firmware UI on virtual screen | not started |
+| 1 Native sim + Monte Carlo | done (6300-run report, reviewed) |
+| 2 Browser dashboard (WASM) | built by web-builder, 23/23 headless checks, pending commit |
+| 3 Firmware UI on virtual screen | works (native PNG dumps + page canvas), pending commit |
 | 4 3D twin + polish + visual QA | not started |
 
 ## Recon (Step "Recon first")
@@ -86,8 +86,7 @@ It is left untouched; the twin lives in new subdirectories.
 
 ## Next
 
-- Tier 1: Monte Carlo report (montecarlo subagent running), FINDINGS.md, MORNING.md.
-- Tier 2 prep: WASM build of the same sources (emsdk ready).
+- Tier 2/3 commit, then Tier 4.
 
 ## Decisions
 
@@ -132,3 +131,11 @@ It is left untouched; the twin lives in new subdirectories.
 ## Firmware seams (rule 1 exception)
 
 None.
+
+## Log
+
+- Monte Carlo subagent: 141 scenario files, 6300 runs, full run 6 min, deterministic (quick mode rerun diffed identical by lead).
+  Lead corrected three interpretation statements (dry-run rule scope, no stuck-value check, bump mechanism / MAX_PULSES is a
+  completed result) after reading the source.
+- Web-builder built Tier 2 + 3 in parallel while the Monte Carlo ran (decision: the WASM module and page do not change Tier 1;
+  Tier 2/3 committed only after Tier 1).

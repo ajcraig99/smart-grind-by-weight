@@ -1,0 +1,20 @@
+{
+  "name": "fault_motor_stall_2s_pdec0",
+  "target_g": 18.0,
+  "beans_g": 22.0,
+  "purge_action": "discard",
+  "events": [
+    {
+      "when": "phase:PULSE_DECISION",
+      "delay_s": 0.0,
+      "fault": "motor_stall",
+      "active": 1
+    },
+    {
+      "when": "phase:PULSE_DECISION",
+      "delay_s": 2.0,
+      "fault": "motor_stall",
+      "active": 0
+    }
+  ]
+}

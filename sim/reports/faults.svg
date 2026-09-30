@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="890" height="524" viewBox="0 0 890 524" font-family="Helvetica, Arial, sans-serif" role="img"><title>Outcome per fault family (runs where the fault was injected)</title><desc>Share of outcomes per injected fault family.</desc><rect width="890" height="524" fill="#ffffff"/><text x="16.0" y="24.0" font-size="15" text-anchor="start" fill="#0b0b0b" font-weight="bold">Outcome per fault family (runs where the fault was injected)</text>
+<rect x="16.00" y="39.00" width="12.00" height="12.00" fill="#2a78d6" fill-opacity="0.7"></rect>
+<text x="34.0" y="49.0" font-size="11" text-anchor="start" fill="#52514e" font-weight="normal">SUCCESS in band</text>
+<rect x="143.00" y="39.00" width="12.00" height="12.00" fill="#eb6834" fill-opacity="0.7"></rect>
+<text x="161.0" y="49.0" font-size="11" text-anchor="start" fill="#52514e" font-weight="normal">SUCCESS overshoot (true err &gt; +0.03 g)</text>
+<rect x="412.60" y="39.00" width="12.00" height="12.00" fill="#1baf7a" fill-opacity="0.7"></rect>
+<text x="430.6" y="49.0" font-size="11" text-anchor="start" fill="#52514e" font-weight="normal">SUCCESS undershoot (true err &lt; -0.03 g)</text>
+<rect x="688.40" y="39.00" width="12.00" height="12.00" fill="#e87ba4" fill-opacity="0.7"></rect>
+<text x="706.4" y="49.0" font-size="11" text-anchor="start" fill="#52514e" font-weight="normal">OVERSHOOT</text>
+<rect x="16.00" y="57.00" width="12.00" height="12.00" fill="#eda100" fill-opacity="0.7"></rect>
+<text x="34.0" y="67.0" font-size="11" text-anchor="start" fill="#52514e" font-weight="normal">MAX_PULSES</text>
+<rect x="112.00" y="57.00" width="12.00" height="12.00" fill="#4a3aa7" fill-opacity="0.7"></rect>
+<text x="130.0" y="67.0" font-size="11" text-anchor="start" fill="#52514e" font-weight="normal">TIMEOUT</text>
+<rect x="189.40" y="57.00" width="12.00" height="12.00" fill="#e34948" fill-opacity="0.7"></rect>
+<text x="207.4" y="67.0" font-size="11" text-anchor="start" fill="#52514e" font-weight="normal">ERROR</text>
+<rect x="254.40" y="57.00" width="12.00" height="12.00" fill="#52514e" fill-opacity="0.7"></rect>
+<text x="272.4" y="67.0" font-size="11" text-anchor="start" fill="#52514e" font-weight="normal">SCALE_ERROR</text>
+<rect x="356.60" y="57.00" width="12.00" height="12.00" fill="#b5b4ad" fill-opacity="0.7"></rect>
+<text x="374.6" y="67.0" font-size="11" text-anchor="start" fill="#52514e" font-weight="normal">NONE / other</text>
+<text x="302.0" y="107.0" font-size="11" text-anchor="end" fill="#0b0b0b" font-weight="normal">Load cell disconnect (n=160)</text>
+<rect x="310.00" y="92.00" width="518.00" height="20.00" fill="#52514e" rx="2"><title>SCALE_ERROR: 160 (100.0%)</title></rect>
+<text x="569.0" y="106.0" font-size="10" text-anchor="middle" fill="#ffffff" font-weight="bold">100%</text>
+<text x="302.0" y="135.0" font-size="11" text-anchor="end" fill="#0b0b0b" font-weight="normal">Load cell stuck reading (n=160)</text>
+<rect x="310.00" y="120.00" width="128.00" height="20.00" fill="#eda100" rx="2"><title>MAX_PULSES: 40 (25.0%)</title></rect>
+<text x="374.0" y="134.0" font-size="10" text-anchor="middle" fill="#0b0b0b" font-weight="bold">25%</text>
+<rect x="440.00" y="120.00" width="388.00" height="20.00" fill="#e34948" rx="2"><title>ERROR: 120 (75.0%)</title></rect>
+<text x="634.0" y="134.0" font-size="10" text-anchor="middle" fill="#ffffff" font-weight="bold">75%</text>
+<text x="302.0" y="163.0" font-size="11" text-anchor="end" fill="#0b0b0b" font-weight="normal">Load cell noise burst x20, 1 s (n=160)</text>
+<rect x="310.00" y="148.00" width="118.25" height="20.00" fill="#2a78d6" rx="2"><title>SUCCESS in band: 37 (23.1%)</title></rect>
+<text x="369.1" y="162.0" font-size="10" text-anchor="middle" fill="#ffffff" font-weight="bold">23%</text>
+<rect x="430.25" y="148.00" width="397.75" height="20.00" fill="#1baf7a" rx="2"><title>SUCCESS undershoot (true err &lt; -0.03 g): 123 (76.9%)</title></rect>
+<text x="629.1" y="162.0" font-size="10" text-anchor="middle" fill="#0b0b0b" font-weight="bold">77%</text>
+<text x="302.0" y="191.0" font-size="11" text-anchor="end" fill="#0b0b0b" font-weight="normal">Load cell noise x20, permanent (n=20)</text>
+<rect x="310.00" y="176.00" width="206.00" height="20.00" fill="#2a78d6" rx="2"><title>SUCCESS in band: 8 (40.0%)</title></rect>
+<text x="413.0" y="190.0" font-size="10" text-anchor="middle" fill="#ffffff" font-weight="bold">40%</text>
+<rect x="518.00" y="176.00" width="24.00" height="20.00" fill="#eb6834" rx="2"><title>SUCCESS overshoot (true err &gt; +0.03 g): 1 (5.0%)</title></rect>
+<rect x="544.00" y="176.00" width="50.00" height="20.00" fill="#1baf7a" rx="2"><title>SUCCESS undershoot (true err &lt; -0.03 g): 2 (10.0%)</title></rect>
+<text x="569.0" y="190.0" font-size="10" text-anchor="middle" fill="#0b0b0b" font-weight="bold">10%</text>
+<rect x="596.00" y="176.00" width="232.00" height="20.00" fill="#e87ba4" rx="2"><title>OVERSHOOT: 9 (45.0%)</title></rect>
+<text x="712.0" y="190.0" font-size="10" text-anchor="middle" fill="#0b0b0b" font-weight="bold">45%</text>
+<text x="302.0" y="219.0" font-size="11" text-anchor="end" fill="#0b0b0b" font-weight="normal">Relay stuck on (n=180)</text>
+<rect x="310.00" y="204.00" width="402.44" height="20.00" fill="#e87ba4" rx="2"><title>OVERSHOOT: 140 (77.8%)</title></rect>
+<text x="511.2" y="218.0" font-size="10" text-anchor="middle" fill="#0b0b0b" font-weight="bold">78%</text>
+<rect x="714.44" y="204.00" width="35.56" height="20.00" fill="#4a3aa7" rx="2"><title>TIMEOUT: 13 (7.2%)</title></rect>
+<text x="732.2" y="218.0" font-size="10" text-anchor="middle" fill="#ffffff" font-weight="bold">7%</text>
+<rect x="752.00" y="204.00" width="76.00" height="20.00" fill="#e34948" rx="2"><title>ERROR: 27 (15.0%)</title></rect>
+<text x="790.0" y="218.0" font-size="10" text-anchor="middle" fill="#ffffff" font-weight="bold">15%</text>
+<text x="302.0" y="247.0" font-size="11" text-anchor="end" fill="#0b0b0b" font-weight="normal">Relay stuck off (n=180)</text>
+<rect x="310.00" y="232.00" width="1.00" height="20.00" fill="#2a78d6" rx="2"><title>SUCCESS in band: 1 (0.6%)</title></rect>
+<rect x="312.89" y="232.00" width="110.67" height="20.00" fill="#eda100" rx="2"><title>MAX_PULSES: 39 (21.7%)</title></rect>
+<text x="368.2" y="246.0" font-size="10" text-anchor="middle" fill="#0b0b0b" font-weight="bold">22%</text>
+<rect x="425.56" y="232.00" width="402.44" height="20.00" fill="#e34948" rx="2"><title>ERROR: 140 (77.8%)</title></rect>
+<text x="626.8" y="246.0" font-size="10" text-anchor="middle" fill="#ffffff" font-weight="bold">78%</text>
+<text x="302.0" y="275.0" font-size="11" text-anchor="end" fill="#0b0b0b" font-weight="normal">Cup removed (not replaced) (n=160)</text>
+<rect x="310.00" y="260.00" width="453.00" height="20.00" fill="#e34948" rx="2"><title>ERROR: 140 (87.5%)</title></rect>
+<text x="536.5" y="274.0" font-size="10" text-anchor="middle" fill="#ffffff" font-weight="bold">88%</text>
+<rect x="765.00" y="260.00" width="63.00" height="20.00" fill="#b5b4ad" rx="2"><title>NONE / other: 20 (12.5%)</title></rect>
+<text x="796.5" y="274.0" font-size="10" text-anchor="middle" fill="#0b0b0b" font-weight="bold">12%</text>
+<text x="302.0" y="303.0" font-size="11" text-anchor="end" fill="#0b0b0b" font-weight="normal">Cup bumped, peak 30 g (n=160)</text>
+<rect x="310.00" y="288.00" width="66.25" height="20.00" fill="#2a78d6" rx="2"><title>SUCCESS in band: 21 (13.1%)</title></rect>
+<text x="343.1" y="302.0" font-size="10" text-anchor="middle" fill="#ffffff" font-weight="bold">13%</text>
+<rect x="378.25" y="288.00" width="365.25" height="20.00" fill="#1baf7a" rx="2"><title>SUCCESS undershoot (true err &lt; -0.03 g): 113 (70.6%)</title></rect>
+<text x="560.9" y="302.0" font-size="10" text-anchor="middle" fill="#0b0b0b" font-weight="bold">71%</text>
+<rect x="745.50" y="288.00" width="7.75" height="20.00" fill="#e87ba4" rx="2"><title>OVERSHOOT: 3 (1.9%)</title></rect>
+<rect x="755.25" y="288.00" width="72.75" height="20.00" fill="#eda100" rx="2"><title>MAX_PULSES: 23 (14.4%)</title></rect>
+<text x="791.6" y="302.0" font-size="10" text-anchor="middle" fill="#0b0b0b" font-weight="bold">14%</text>
+<text x="302.0" y="331.0" font-size="11" text-anchor="end" fill="#0b0b0b" font-weight="normal">Cup bumped, peak 200 g (n=160)</text>
+<rect x="310.00" y="316.00" width="40.25" height="20.00" fill="#2a78d6" rx="2"><title>SUCCESS in band: 13 (8.1%)</title></rect>
+<text x="330.1" y="330.0" font-size="10" text-anchor="middle" fill="#ffffff" font-weight="bold">8%</text>
+<rect x="352.25" y="316.00" width="199.50" height="20.00" fill="#1baf7a" rx="2"><title>SUCCESS undershoot (true err &lt; -0.03 g): 62 (38.8%)</title></rect>
+<text x="452.0" y="330.0" font-size="10" text-anchor="middle" fill="#0b0b0b" font-weight="bold">39%</text>
+<rect x="553.75" y="316.00" width="4.50" height="20.00" fill="#e87ba4" rx="2"><title>OVERSHOOT: 2 (1.2%)</title></rect>
+<rect x="560.25" y="316.00" width="267.75" height="20.00" fill="#eda100" rx="2"><title>MAX_PULSES: 83 (51.9%)</title></rect>
+<text x="694.1" y="330.0" font-size="10" text-anchor="middle" fill="#0b0b0b" font-weight="bold">52%</text>
+<text x="302.0" y="359.0" font-size="11" text-anchor="end" fill="#0b0b0b" font-weight="normal">Motor stall, permanent (n=160)</text>
+<rect x="310.00" y="344.00" width="1.25" height="20.00" fill="#2a78d6" rx="2"><title>SUCCESS in band: 1 (0.6%)</title></rect>
+<rect x="313.25" y="344.00" width="124.75" height="20.00" fill="#eda100" rx="2"><title>MAX_PULSES: 39 (24.4%)</title></rect>
+<text x="375.6" y="358.0" font-size="10" text-anchor="middle" fill="#0b0b0b" font-weight="bold">24%</text>
+<rect x="440.00" y="344.00" width="388.00" height="20.00" fill="#e34948" rx="2"><title>ERROR: 120 (75.0%)</title></rect>
+<text x="634.0" y="358.0" font-size="10" text-anchor="middle" fill="#ffffff" font-weight="bold">75%</text>
+<text x="302.0" y="387.0" font-size="11" text-anchor="end" fill="#0b0b0b" font-weight="normal">Motor stall, 2 s (n=60)</text>
+<rect x="310.00" y="372.00" width="50.00" height="20.00" fill="#2a78d6" rx="2"><title>SUCCESS in band: 6 (10.0%)</title></rect>
+<text x="335.0" y="386.0" font-size="10" text-anchor="middle" fill="#ffffff" font-weight="bold">10%</text>
+<rect x="362.00" y="372.00" width="448.67" height="20.00" fill="#1baf7a" rx="2"><title>SUCCESS undershoot (true err &lt; -0.03 g): 52 (86.7%)</title></rect>
+<text x="586.3" y="386.0" font-size="10" text-anchor="middle" fill="#0b0b0b" font-weight="bold">87%</text>
+<rect x="812.67" y="372.00" width="15.33" height="20.00" fill="#e87ba4" rx="2"><title>OVERSHOOT: 2 (3.3%)</title></rect>
+<text x="302.0" y="415.0" font-size="11" text-anchor="end" fill="#0b0b0b" font-weight="normal">Feed blocked (bridging) (n=180)</text>
+<rect x="310.00" y="400.00" width="67.33" height="20.00" fill="#2a78d6" rx="2"><title>SUCCESS in band: 24 (13.3%)</title></rect>
+<text x="343.7" y="414.0" font-size="10" text-anchor="middle" fill="#ffffff" font-weight="bold">13%</text>
+<rect x="379.33" y="400.00" width="390.89" height="20.00" fill="#1baf7a" rx="2"><title>SUCCESS undershoot (true err &lt; -0.03 g): 136 (75.6%)</title></rect>
+<text x="574.8" y="414.0" font-size="10" text-anchor="middle" fill="#0b0b0b" font-weight="bold">76%</text>
+<rect x="772.22" y="400.00" width="55.78" height="20.00" fill="#e34948" rx="2"><title>ERROR: 20 (11.1%)</title></rect>
+<text x="800.1" y="414.0" font-size="10" text-anchor="middle" fill="#ffffff" font-weight="bold">11%</text>
+<text x="302.0" y="443.0" font-size="11" text-anchor="end" fill="#0b0b0b" font-weight="normal">Reset mid-grind (power-on reset) (n=160)</text>
+<rect x="310.00" y="428.00" width="518.00" height="20.00" fill="#b5b4ad" rx="2"><title>NONE / other: 160 (100.0%)</title></rect>
+<text x="569.0" y="442.0" font-size="10" text-anchor="middle" fill="#0b0b0b" font-weight="bold">100%</text>
+<text x="302.0" y="471.0" font-size="11" text-anchor="end" fill="#0b0b0b" font-weight="normal">Beans run out early (10 g loaded, no event) (n=20)</text>
+<rect x="310.00" y="456.00" width="518.00" height="20.00" fill="#e34948" rx="2"><title>ERROR: 20 (100.0%)</title></rect>
+<text x="569.0" y="470.0" font-size="10" text-anchor="middle" fill="#ffffff" font-weight="bold">100%</text>
+<text x="310.0" y="506.0" font-size="10" text-anchor="start" fill="#52514e" font-weight="normal">share of runs; hover a segment for counts. Segments under 34 px are unlabelled.</text></svg>

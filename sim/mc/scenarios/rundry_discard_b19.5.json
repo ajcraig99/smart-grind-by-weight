@@ -1,0 +1,7 @@
+{
+  "name": "rundry_discard_b19.5",
+  "target_g": 18.0,
+  "beans_g": 19.5,
+  "purge_action": "discard",
+  "purge_mode": 1
+}

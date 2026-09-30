@@ -1,0 +1,14 @@
+{
+  "name": "fault_bump200_rnd3",
+  "target_g": 18.0,
+  "beans_g": 22.0,
+  "purge_action": "discard",
+  "events": [
+    {
+      "when": "start",
+      "delay_s": 17.4,
+      "action": "bump",
+      "value": 200
+    }
+  ]
+}

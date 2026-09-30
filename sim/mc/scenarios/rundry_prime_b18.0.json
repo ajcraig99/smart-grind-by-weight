@@ -1,0 +1,7 @@
+{
+  "name": "rundry_prime_b18.0",
+  "target_g": 18.0,
+  "beans_g": 18.0,
+  "purge_action": "discard",
+  "purge_mode": 0
+}

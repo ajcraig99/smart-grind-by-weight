@@ -1,0 +1,7 @@
+{
+  "name": "rundry_keep_b17.5",
+  "target_g": 18.0,
+  "beans_g": 17.5,
+  "purge_action": "keep",
+  "purge_mode": 1
+}

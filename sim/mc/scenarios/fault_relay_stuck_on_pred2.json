@@ -1,0 +1,14 @@
+{
+  "name": "fault_relay_stuck_on_pred2",
+  "target_g": 18.0,
+  "beans_g": 22.0,
+  "purge_action": "discard",
+  "events": [
+    {
+      "when": "phase:PREDICTIVE",
+      "delay_s": 2.0,
+      "fault": "relay_stuck_on",
+      "active": 1
+    }
+  ]
+}
