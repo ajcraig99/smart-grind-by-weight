@@ -1,0 +1,1 @@
+{"name":"lc_disconnect","beans_g":22,"events":[{"when":"phase:PREDICTIVE","delay_s":3.0,"fault":"lc_disconnect"}]}

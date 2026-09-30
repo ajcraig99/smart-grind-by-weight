@@ -1,0 +1,1 @@
+{"name":"stuck_in_pulse","beans_g":22,"events":[{"when":"phase:PULSE_DECISION","delay_s":0.0,"fault":"lc_stuck"}]}

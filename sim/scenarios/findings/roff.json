@@ -1,0 +1,1 @@
+{"name":"relay_stuck_off","beans_g":22,"events":[{"when":"start","delay_s":0,"fault":"relay_stuck_off"}]}
