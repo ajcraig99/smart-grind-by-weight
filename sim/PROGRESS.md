@@ -10,7 +10,7 @@ Gate command: `git diff --stat 3430179a4cdc2d5914b55badb9c24bee2a565f50 -- src i
 | Tier | Status |
 |------|--------|
 | 0 Recon, ARCHITECTURE.md, sim_api.h | done |
-| 1 Native sim + Monte Carlo | in progress |
+| 1 Native sim + Monte Carlo | native twin done and gated; Monte Carlo report in progress (subagent) |
 | 2 Browser dashboard (WASM) | not started |
 | 3 Firmware UI on virtual screen | not started |
 | 4 3D twin + polish + visual QA | not started |
@@ -79,9 +79,15 @@ It is left untouched; the twin lives in new subdirectories.
 - Step 0: BRIEF.md saved, PROGRESS.md created.
 - Recon (above), ARCHITECTURE.md, sim_api.h.
 
+- Tier 1: plant model (plant-modeller subagent, reviewed, 19 tests); shims + scheduler + fibers;
+  full firmware links and runs natively (-m32); scripted operator taps the real UI buttons;
+  grindsim CLI (single, --batch with fork per run, reset via re-exec); task watchdog model;
+  host tests (scheduler, smoke, determinism) + plant tests in CTest (22 pass).
+
 ## Next
 
-- Tier 1: shims + scheduler + CMake host build, plant model (subagent), grindsim CLI, Monte Carlo (subagent).
+- Tier 1: Monte Carlo report (montecarlo subagent running), FINDINGS.md, MORNING.md.
+- Tier 2 prep: WASM build of the same sources (emsdk ready).
 
 ## Decisions
 
@@ -98,7 +104,17 @@ It is left untouched; the twin lives in new subdirectories.
 
 ## Blockers (with attempts)
 
-None yet.
+- PlatformIO build: registry unreachable (see toolchain section). Not needed; fallback is zero seams.
+
+## Decisions (continued)
+
+- D7 Communications (bluetooth/manager.cpp, bluetooth/ota_handler.cpp, network/*.cpp) are not compiled; their
+  classes are implemented in sim/shim/stubs/comms_stubs.cpp as radio absent / never connected / no transfer.
+  data_stream.cpp and image_upload_handler.cpp are compiled from src.
+- D8 Each run is a fresh process image (firmware globals are constructed once per process). Batch forks per run;
+  a firmware reset re-executes grindsim with NVS, LittleFS and plant state carried over (sim_persist_export).
+- D9 Firmware clocks (millis, micros, esp_timer, ticks) restart at 0 at each simulated boot; world time continues.
+- D10 Trace never calls WeightSensor::get_display_weight (it mutates the display filter); only const getters.
 
 ## Toolchain versions and fallbacks used
 
@@ -106,7 +122,12 @@ None yet.
 - Emscripten: emsdk (first choice) cloned from GitHub, `emsdk install latest` -> emcc 6.0.10. Worked.
 - Headless browser: Playwright Chromium already on the VM at /opt/pw-browsers/chromium-1194 (first choice).
 - LVGL 9.5.0 source: git clone --branch v9.5.0 from GitHub.
-- PlatformIO: pip install platformio 6.2.0; `pio run` test result: (pending)
+- PlatformIO: pip install platformio 6.2.0; `pio run -e waveshare-esp32s3-touch-amoled-164` tested once:
+  platform and Arduino-ESP32 3.3.2 downloaded from GitHub, then failed installing `platformio/tool-scons`
+  from the PlatformIO registry (HTTPClientError). So the rule 1 exception does not apply: zero firmware changes.
+  The downloaded framework was used as a read-only reference: CONFIG_FREERTOS_HZ 1000 and
+  CONFIG_ESP_TASK_WDT_TIMEOUT_S 5 / PANIC 1 (framework-arduinoespressif32-libs/esp32s3/qio_opi/include/sdkconfig.h:1178,1097-1098),
+  loopTask priority 1 on core 1 (framework-arduinoespressif32/cores/esp32/main.cpp:113).
 
 ## Firmware seams (rule 1 exception)
 
