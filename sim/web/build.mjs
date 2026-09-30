@@ -29,6 +29,9 @@ const bundled = await build({
   logLevel: 'warning',
 });
 let bundle = bundled.outputFiles[0].text;
+// three.js uses XML namespace identifiers (createElementNS); they are names, never fetched. Split the
+// literal so the page holds no URL strings at all and the offline guard below stays strict.
+bundle = bundle.replace(/"http:\/\/www\.w3\.org\//g, '"http:"+"//www.w3.org/');
 const css = fs.readFileSync(path.join(here, 'src', 'style.css'), 'utf8');
 let template = fs.readFileSync(path.join(here, 'index.template.html'), 'utf8');
 

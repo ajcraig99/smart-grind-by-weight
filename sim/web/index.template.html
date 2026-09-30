@@ -65,6 +65,24 @@
   </div>
 
   <div class="col col-right">
+    <section class="card" id="card-3d">
+      <h2>3D twin
+        <span class="sub">generic stylised grinder, driven by the simulated state</span>
+        <span class="spacer"></span>
+        <span class="leds" title="Relay command (firmware output) and relay contact (after latency)">
+          <span class="led-item"><i id="led-cmd" class="led cmd"></i>relay cmd</span>
+          <span class="led-item"><i id="led-contact" class="led contact"></i>contact</span>
+        </span>
+        <span id="three-tools" class="row">
+          <button id="btn-explode" aria-pressed="false" title="Animate the parts apart and label the electronics">Exploded view</button>
+          <button id="btn-view-reset" title="Return the camera to the default view">Reset view</button>
+        </span>
+        <button id="btn-3d-toggle" title="Collapse the 3D view (rendering pauses)">Hide 3D</button>
+      </h2>
+      <div id="three-wrap" class="three-wrap"></div>
+      <p class="muted small three-hint">Drag to orbit, wheel to zoom, right-drag to pan. Click the screen on the 3D grinder to touch it.</p>
+    </section>
+
     <div class="controls-row">
       <section class="card" id="card-mass">
         <h2>Mass balance <span class="sub">grams</span></h2>

@@ -53,6 +53,8 @@ export class Twin {
       persistExport: c('persist_export', 'number', ['number', 'number']),
       persistImport: c('persist_import', 'number', ['number', 'number']),
       traceSuppressHeader: c('trace_suppress_header', null, []),
+      restartReason: c('restart_reason', 'number', []),
+      operatorActive: c('operator_active', 'number', []),
     };
   }
 
@@ -73,6 +75,8 @@ export class Twin {
   fault(code, active, v = 0) { this.f.fault(code, active ? 1 : 0, v); }
   touch(x, y, pressed) { this.f.touch(Math.round(x), Math.round(y), pressed ? 1 : 0); }
   operatorStart() { this.f.operatorStart(); }
+  restartReason() { return this.f.restartReason(); }
+  operatorActive() { return this.f.operatorActive() !== 0; }
   restartRequested() { return this.f.restartRequested() !== 0; }
   traceHeader() { return this.f.traceHeader(); }
   traceSuppressHeader() { this.f.traceSuppressHeader(); }

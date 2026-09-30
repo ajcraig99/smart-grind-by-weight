@@ -24,7 +24,7 @@ function check(name, ok, detail = '') {
 }
 
 const problems = [];
-const browser = await chromium.launch({ executablePath: chromePath, headless: true, args: ['--no-sandbox', '--disable-gpu'] });
+const browser = await chromium.launch({ executablePath: chromePath, headless: true, args: ['--no-sandbox', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, acceptDownloads: true });
 const page = await context.newPage();
 page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') problems.push(`console.${m.type()}: ${m.text()}`); });
@@ -68,6 +68,12 @@ const nonBlack = await page.evaluate(() => {
 });
 check('virtual screen shows firmware pixels', nonBlack > 2000, `${nonBlack} lit pixels`);
 
+// ---- 3D twin renders
+await page.waitForFunction(() => window.twinApp.scene3d && window.twinApp.scene3d.stats.frames > 2, null, { timeout: 30000 });
+const probe0 = await page.evaluate(() => window.twinApp.scene3d.probe());
+check('3D canvas exists and renders non-blank pixels', probe0.lit > 0.1 * probe0.total, `${probe0.lit}/${probe0.total} px differ from the background (${probe0.w}x${probe0.h})`);
+await page.locator('#card-3d').screenshot({ path: path.join(outDir, '01-3d-idle.png') });
+
 // ---- manual tap on the Play button
 await setSpeed(5);
 await page.click('#actions button:has-text("Load beans")');
@@ -101,10 +107,27 @@ await setSpeed(2);
 await page.click('#btn-auto');
 await page.click('#btn-pause'); // resume
 await waitPhase('PREDICTIVE', 120000);
+await page.waitForFunction(() => window.twinApp.scene3d.particles > 15, null, { timeout: 30000, polling: 'raf' });
 await page.click('#btn-pause');
 await page.waitForTimeout(150);
 await shot('03-dashboard-grinding.png');
 await shot('03-screen-grinding.png', '#screen');
+const probeG = await page.evaluate(() => ({ ...window.twinApp.scene3d.probe(), particles: window.twinApp.scene3d.particles, cmd: document.getElementById('led-cmd').className, contact: document.getElementById('led-contact').className }));
+check('3D grounds stream visible while grinding', probeG.particles > 15 && probeG.lit > 0.1 * probeG.total, `${probeG.particles} particles in flight; LEDs: ${probeG.cmd} / ${probeG.contact}`);
+await page.evaluate(() => window.scrollTo(0, 0));
+await shot('03-3d-grinding.png', '#card-3d');
+// exploded view
+await page.click('#btn-explode');
+await page.waitForFunction(() => window.twinApp.scene3d.explodeAmount >= 0.999, null, { timeout: 20000, polling: 'raf' });
+await page.waitForTimeout(400);
+const labels = await page.evaluate(() => window.twinApp.scene3d.labelsVisible);
+check('exploded view toggles and shows labelled parts', labels >= 7, `${labels} labels visible`);
+await page.evaluate(() => window.scrollTo(0, 0));
+await shot('03-3d-exploded.png', '#card-3d');
+await page.click('#btn-explode');
+await page.waitForFunction(() => window.twinApp.scene3d.explodeAmount <= 0.001, null, { timeout: 20000, polling: 'raf' });
+check('exploded view toggles back', (await page.evaluate(() => window.twinApp.scene3d.explodeAmount)) === 0);
+await page.click('#btn-view-reset');
 const grindState = await state();
 check('grinding state captured', grindState.phase_name === 'PREDICTIVE' && grindState.motor_speed > 0.1, `motor ${grindState.motor_speed}`);
 await page.click('#btn-step'); // single step while paused
@@ -193,6 +216,49 @@ check('parameter slider moves and updates the value', parseFloat(val) > 2.9, `fl
 await page.click('.param[data-name="flow_nominal_gps"] button');
 const val2 = await page.locator('.param[data-name="flow_nominal_gps"] input[type=number]').inputValue();
 check('parameter reset returns to default', parseFloat(val2) === 1.9, `flow_nominal_gps = ${val2}`);
+
+// ---- 3D collapse, raycast touch on the 3D screen, WebGL-less fallback
+await page.click('#btn-3d-toggle');
+const f0 = await page.evaluate(() => window.twinApp.scene3d.stats.frames);
+await page.waitForTimeout(600);
+const f1 = await page.evaluate(() => window.twinApp.scene3d.stats.frames);
+check('collapsed 3D card stops rendering', f1 === f0 && (await page.isHidden('#three-wrap')), `frames ${f0} -> ${f1}`);
+await page.click('#btn-3d-toggle');
+await page.waitForFunction((f) => window.twinApp.scene3d.stats.frames > f, f1, { timeout: 10000 });
+check('3D card resumes rendering when expanded', true);
+
+await page.fill('#in-seed', '3');
+await setSpeed(5);
+await page.click('#btn-boot');
+await page.waitForFunction(() => window.twinApp.world === 5 && !window.twinApp.busy, null, { timeout: 60000 });
+await ready();
+await page.click('#actions button:has-text("Load beans")');
+await page.click('#actions button:has-text("Place cup")');
+await page.locator('#three-wrap').scrollIntoViewIfNeeded();
+await page.waitForTimeout(800);
+const [cx, cy] = await page.evaluate(() => window.twinApp.scene3d.panelToClient(140, 396));
+const beforeTouch = (await state()).phase_name;
+await page.mouse.move(cx, cy);
+await page.mouse.down();
+await page.waitForTimeout(250);
+await page.mouse.up();
+await waitPhaseNot('IDLE', 20000).catch(() => {});
+const afterTouch = (await state()).phase_name;
+check('touch on the 3D screen (raycast) starts a grind', beforeTouch === 'IDLE' && afterTouch !== 'IDLE', `${beforeTouch} -> ${afterTouch}`);
+
+{
+  const b2 = await chromium.launch({ executablePath: chromePath, headless: true, args: ['--no-sandbox', '--disable-gpu', '--disable-3d-apis', '--disable-webgl', '--disable-webgl2'] });
+  const p2 = await (await b2.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
+  const errs2 = [];
+  p2.on('pageerror', (e) => errs2.push(e.message));
+  await p2.goto(pathToFileURL(page_path).href);
+  await p2.waitForFunction(() => window.twinApp && !window.twinApp.busy && window.twinApp.state() && window.twinApp.state().booted, null, { timeout: 60000 });
+  const msg = await p2.locator('#three-wrap .three-msg').count();
+  const still = (await p2.evaluate(() => window.twinApp.state().booted)) === 1;
+  check('without WebGL: clear message, rest of the page still works', msg === 1 && still && errs2.length === 0, errs2.join('|'));
+  await p2.screenshot({ path: path.join(outDir, '07-no-webgl.png') });
+  await b2.close();
+}
 
 // ---- network and errors
 const external = requests.filter((u) => !u.startsWith('file://') && !u.startsWith('data:') && !u.startsWith('blob:'));

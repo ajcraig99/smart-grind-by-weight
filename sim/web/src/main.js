@@ -4,6 +4,7 @@ import { createTwin, PANEL_W, PANEL_H } from './twin.js';
 import { TraceStore } from './trace.js';
 import { makePlots } from './plots.js';
 import { StateDiagram, PHASE_NAMES } from './diagram.js';
+import { createScene3D } from './scene3d.js';
 import {
   buildMasses, updateMasses, buildActions, buildFaults, buildParams, renderHistory, historyCsv,
   LogPanel, download, toast,
@@ -14,7 +15,8 @@ const SPEEDS = [0.25, 0.5, 1, 2, 5, 10, 20];
 const FAST_BOOT_MS = 6500;
 const TAP_MIN_HOLD_MS = 70; // firmware polls touch every 16 ms; it needs >= 50 ms for a tap
 const PAUSED_TAP_EXTRA_MS = 250;
-const OPERATOR_IDLE = new Set(['manual', 'idle', 'done', 'start refused', 'grind did not finish']);
+// esp_reset_reason_t codes reported by the twin
+const RESET_REASONS = { 1: 'power-on', 3: 'software restart', 4: 'panic', 5: 'interrupt watchdog', 6: 'task watchdog', 7: 'other watchdog' };
 
 const app = {
   twin: null,
@@ -45,7 +47,9 @@ const app = {
   trailDirty: true,
   params: new Map(), // name -> value for parameters that differ from the default
   paramTable: [],
+  perf: { advance: 0, trace: 0, plots: 0, poll: 0, screen: 0, three: 0 },
   gui: {},
+  three: { visible: false, collapsed: false },
 };
 
 // ------------------------------------------------------------------ helpers
@@ -72,7 +76,10 @@ sctx.fillStyle = '#000';
 sctx.fillRect(0, 0, PANEL_W, PANEL_H);
 
 function refreshScreen() {
-  if (app.twin && app.twin.takeFramebuffer(screenPixels)) sctx.putImageData(screenImage, 0, 0);
+  if (app.twin && app.twin.takeFramebuffer(screenPixels)) {
+    sctx.putImageData(screenImage, 0, 0);
+    if (app.gui.scene3d) app.gui.scene3d.markScreenDirty();
+  }
 }
 
 function panelXY(ev) {
@@ -82,25 +89,22 @@ function panelXY(ev) {
   return [Math.min(PANEL_W - 1, Math.max(0, x)), Math.min(PANEL_H - 1, Math.max(0, y))];
 }
 
-screenCanvas.addEventListener('pointerdown', (ev) => {
-  if (!app.twin || app.busy || app.touch) return;
-  ev.preventDefault();
-  screenCanvas.setPointerCapture(ev.pointerId);
-  const [x, y] = panelXY(ev);
-  app.touch = { id: ev.pointerId, x, y, pressVt: app.vtRun, releasing: false, releaseAt: 0 };
+// Touch input shared by the 2D canvas and the 3D screen (raycast). Coordinates are panel pixels.
+function touchStart(x, y, id) {
+  if (!app.twin || app.busy || app.touch) return false;
+  app.touch = { id, x, y, pressVt: app.vtRun, releasing: false, releaseAt: 0 };
   app.twin.touch(x, y, true);
-});
-screenCanvas.addEventListener('pointermove', (ev) => {
+  return true;
+}
+function touchMove(x, y, id) {
   const t = app.touch;
-  if (!t || t.id !== ev.pointerId || t.releasing || !app.twin) return;
-  const [x, y] = panelXY(ev);
+  if (!t || t.id !== id || t.releasing || !app.twin) return;
   t.x = x; t.y = y;
   app.twin.touch(x, y, true);
-});
-function endTouch(ev) {
+}
+function touchEnd(x, y, id) {
   const t = app.touch;
-  if (!t || t.id !== ev.pointerId || t.releasing || !app.twin) return;
-  const [x, y] = panelXY(ev);
+  if (!t || t.id !== id || t.releasing || !app.twin) return;
   t.x = x; t.y = y;
   t.releasing = true;
   t.releaseAt = Math.max(app.vtRun, t.pressVt + TAP_MIN_HOLD_MS);
@@ -110,8 +114,17 @@ function endTouch(ev) {
     pumpAll(true);
   }
 }
-screenCanvas.addEventListener('pointerup', endTouch);
-screenCanvas.addEventListener('pointercancel', endTouch);
+screenCanvas.addEventListener('pointerdown', (ev) => {
+  const [x, y] = panelXY(ev);
+  if (touchStart(x, y, ev.pointerId)) {
+    ev.preventDefault();
+    screenCanvas.setPointerCapture(ev.pointerId);
+  }
+});
+screenCanvas.addEventListener('pointermove', (ev) => { const [x, y] = panelXY(ev); touchMove(x, y, ev.pointerId); });
+const endPointer = (ev) => { const [x, y] = panelXY(ev); touchEnd(x, y, ev.pointerId); };
+screenCanvas.addEventListener('pointerup', endPointer);
+screenCanvas.addEventListener('pointercancel', endPointer);
 screenCanvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
 // ------------------------------------------------------------------ virtual time
@@ -136,17 +149,22 @@ function advance(ms) {
 
 function frame(now) {
   requestAnimationFrame(frame);
-  const dt = Math.min(100, now - app.lastFrame);
+  const rawDt = now - app.lastFrame;
+  const dt = Math.min(250, rawDt);
   app.lastFrame = now;
   if (!app.twin || app.busy) return;
 
   if (!app.paused) {
     app.budget += dt * app.speed;
     const start = performance.now();
+    // Normally about 11 ms of work per frame; when frames are slow anyway (weak GPU, big window) use more of them.
+    const maxWork = Math.min(60, Math.max(11, dt * 0.5));
     let ran = 0;
-    while (app.budget >= 1 && performance.now() - start < 11 && !app.needRestart) {
+    while (app.budget >= 1 && performance.now() - start < maxWork && !app.needRestart) {
       const ms = Math.min(Math.floor(app.budget), 100);
+      const pa = performance.now();
       advance(ms);
+      app.perf.advance += performance.now() - pa;
       app.budget -= ms;
       ran += ms;
     }
@@ -154,7 +172,7 @@ function frame(now) {
     const cap = Math.max(50, 2 * dt * app.speed);
     if (app.budget > cap) app.budget = cap;
     app.stat.v += ran;
-    app.stat.w += dt;
+    app.stat.w += rawDt;
     if (now - app.lastStatT >= 500) {
       app.ratio = app.stat.w > 0 ? app.stat.v / app.stat.w : null;
       app.stat = { v: 0, w: 0 };
@@ -162,21 +180,39 @@ function frame(now) {
     }
   }
   pumpAll(false, now);
+  frame3d(now);
   if (app.needRestart) powerCycle('firmware requested a restart');
+}
+
+// 3D twin: driven by the state snapshot each frame while the card is visible.
+function frame3d(now) {
+  const sc = app.gui.scene3d;
+  if (!sc || !app.three.visible || !app.twin || app.busy || document.hidden) return;
+  const t = performance.now();
+  sc.frame(now, app.twin.state(), app.speed, app.paused);
+  app.perf.three += performance.now() - t;
 }
 
 // Drain outputs and refresh panels. `force` ignores the rate limits.
 function pumpAll(force, now = performance.now()) {
   if (!app.twin) return;
+  let t = performance.now();
   refreshScreen();
+  app.perf.screen += performance.now() - t;
   if (force || now - app.lastTrace >= 60) {
     app.lastTrace = now;
+    t = performance.now();
     drainTrace();
+    app.perf.trace += performance.now() - t;
+    t = performance.now();
     drawPlots();
+    app.perf.plots += performance.now() - t;
   }
   if (force || now - app.lastPoll >= 100) {
     app.lastPoll = now;
+    t = performance.now();
     poll();
+    app.perf.poll += performance.now() - t;
   }
 }
 
@@ -232,10 +268,6 @@ function archiveEpoch() {
   app.epochRows = [];
 }
 
-function operatorActive(s) {
-  const o = s.operator || 'manual';
-  return !OPERATOR_IDLE.has(o) && !o.startsWith('boot timeout');
-}
 
 function poll() {
   const tw = app.twin;
@@ -274,7 +306,9 @@ function poll() {
   app.log.render($('log-filter').value, $('log-follow').checked);
   renderTrail();
 
-  $('btn-auto').disabled = app.busy || !s.booted || operatorActive(s);
+  $('btn-auto').disabled = app.busy || !s.booted || tw.operatorActive();
+  $('led-cmd').classList.toggle('on', !!s.relay_pin);
+  $('led-contact').classList.toggle('on', !!s.relay_contact);
   $('btn-powercycle').disabled = app.busy || !s.booted;
   $('btn-step').disabled = !app.paused;
   if (s.restart) app.needRestart = true;
@@ -360,6 +394,8 @@ async function powerCycle(reason) {
   try {
     drainTrace();
     archiveEpoch();
+    const why = RESET_REASONS[old.restartReason()] || 'code ' + old.restartReason();
+    if (app.needRestart) reason += ' [' + why + ']';
     const blob = old.exportPersist();
     app.twin = null;
     await startWorld({ blob, reason });
@@ -474,6 +510,41 @@ function wire() {
   setH();
 }
 
+function wire3d() {
+  const wrap = $('three-wrap');
+  app.gui.scene3d = createScene3D(wrap, screenCanvas, {
+    down: (x, y, id) => touchStart(x, y, id),
+    move: (x, y, id) => touchMove(x, y, id),
+    up: (x, y, id) => touchEnd(x, y, id),
+  });
+  const card = $('card-3d');
+  const sc = app.gui.scene3d;
+  if (!sc) {
+    $('three-tools').hidden = true;
+    $('btn-3d-toggle').hidden = true;
+    $('card-3d').querySelector('.three-hint').hidden = true;
+    return;
+  }
+  new IntersectionObserver((entries) => {
+    app.three.visible = entries.some((e) => e.isIntersecting) && !app.three.collapsed;
+    if (app.three.visible) sc.wake();
+  }).observe(wrap);
+  $('btn-explode').addEventListener('click', () => {
+    const on = !sc.exploded;
+    sc.setExploded(on);
+    $('btn-explode').classList.toggle('on', on);
+    $('btn-explode').setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+  $('btn-view-reset').addEventListener('click', () => sc.resetView());
+  $('btn-3d-toggle').addEventListener('click', () => {
+    app.three.collapsed = !app.three.collapsed;
+    card.classList.toggle('collapsed', app.three.collapsed);
+    $('btn-3d-toggle').textContent = app.three.collapsed ? 'Show 3D' : 'Hide 3D';
+    app.three.visible = !app.three.collapsed;
+    if (app.three.visible) sc.wake();
+  });
+}
+
 function fatal(e) {
   console.error(e);
   setStatus('Error: ' + (e && e.message ? e.message : e));
@@ -489,6 +560,7 @@ async function main() {
   app.gui.faults = buildFaults(() => app.twin);
   app.gui.actions = buildActions(() => app.twin, { beans: numVal('in-beans', 22) });
   wire();
+  wire3d();
 
   app.trace.onPhaseChange = (t, from, to) => {
     app.gui.diagram.onTransition(from, to);
@@ -517,6 +589,8 @@ window.twinApp = {
   get busy() { return app.busy; },
   get world() { return app.world; },
   traceRows: () => app.trace.n,
+  perf: () => ({ ...app.perf }),
+  get scene3d() { return app.gui.scene3d; },
 };
 
 main().catch(fatal);
