@@ -261,7 +261,7 @@ void Arduino_GFX::fillScreen(uint16_t color) {
     sim::framebuffer_mark_dirty();
 }
 
-static void blit(int16_t x, int16_t y, const uint16_t* bitmap, int16_t w, int16_t h) {
+static void blit(int16_t x, int16_t y, const uint16_t* bitmap, int16_t w, int16_t h, bool big_endian) {
     uint16_t* fb = sim::framebuffer();
     for (int16_t row = 0; row < h; ++row) {
         const int yy = y + row;
@@ -269,19 +269,24 @@ static void blit(int16_t x, int16_t y, const uint16_t* bitmap, int16_t w, int16_
         for (int16_t col = 0; col < w; ++col) {
             const int xx = x + col;
             if (xx < 0 || xx >= sim::kScreenWidth) continue;
-            fb[yy * sim::kScreenWidth + xx] = bitmap[row * w + col];
+            const uint16_t p = bitmap[row * w + col];
+            fb[yy * sim::kScreenWidth + xx] = big_endian ? static_cast<uint16_t>((p >> 8) | (p << 8)) : p;
         }
     }
     sim::framebuffer_mark_dirty();
 }
 
+// Arduino_GFX 1.6.7: draw16bitRGBBitmap converts native pixels to the panel's big-endian order
+// (Arduino_ESP32QSPI::writePixels, MSB_32_16_16_SET), draw16bitBeRGBBitmap sends bytes as they are
+// (writeBytes). LVGL 9.5 byte-swaps the flushed buffer when LV_COLOR_16_SWAP is set
+// (lv_refr.c:1433-1434), which include/lv_conf.h does for the device build. The virtual panel
+// stores native RGB565, so the big-endian path is swapped back here.
 void Arduino_GFX::draw16bitRGBBitmap(int16_t x, int16_t y, uint16_t* bitmap, int16_t w, int16_t h) {
-    blit(x, y, bitmap, w, h);
+    blit(x, y, bitmap, w, h, false);
 }
 
-// See sim/ASSUMPTIONS.md R4: pixels are shown as LVGL rendered them (native RGB565).
 void Arduino_GFX::draw16bitBeRGBBitmap(int16_t x, int16_t y, uint16_t* bitmap, int16_t w, int16_t h) {
-    blit(x, y, bitmap, w, h);
+    blit(x, y, bitmap, w, h, true);
 }
 
 void Arduino_GFX::displayOn() { sim::display_set_on(true); }

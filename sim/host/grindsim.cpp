@@ -9,6 +9,7 @@
 #include "../core/scheduler.h"
 #include "../core/world.h"
 #include "../sim_api.h"
+#include "png_writer.h"
 
 #include <fcntl.h>
 #include <sys/wait.h>
@@ -44,6 +45,8 @@ struct Options {
     bool echo_log = false;
     std::string resume_path;
     int summary_fd = -1;
+    std::string screens_dir;
+    uint32_t screen_every_ms = 1000;
     double post_reset_observe_s = 20.0;
 };
 
@@ -54,7 +57,7 @@ void usage() {
                  "usage: grindsim [--seed N] [--target G] [--params p.json] [--scenario s.json]\n"
                  "                [--set name=value]... [--out run.csv] [--summary summary.csv]\n"
                  "                [--log log.txt] [--trace-ms 10] [--max-s 400] [--echo-log]\n"
-                 "                [--batch N --jobs J]\n");
+                 "                [--batch N --jobs J] [--screens DIR --screen-every-ms 1000]\n");
 }
 
 bool read_file(const std::string& path, std::string& out) {
@@ -90,6 +93,8 @@ bool parse_args(int argc, char** argv, Options& o) {
         else if (a == "--echo-log") o.echo_log = true;
         else if (a == "--resume") o.resume_path = next("--resume");
         else if (a == "--summary-fd") o.summary_fd = std::atoi(next("--summary-fd"));
+        else if (a == "--screens") o.screens_dir = next("--screens");
+        else if (a == "--screen-every-ms") o.screen_every_ms = static_cast<uint32_t>(std::atoi(next("--screen-every-ms")));
         else if (a == "--post-reset-s") o.post_reset_observe_s = std::atof(next("--post-reset-s"));
         else if (a == "--set") {
             const std::string kv = next("--set");
@@ -272,6 +277,14 @@ RunResult run_once(const Options& o) {
         size_t n;
         while ((n = sim_trace_read(buf.data(), buf.size())) > 0) if (out) std::fwrite(buf.data(), 1, n, out);
         while ((n = sim_log_read(buf.data(), buf.size())) > 0) if (log) std::fwrite(buf.data(), 1, n, log);
+        if (!o.screens_dir.empty() && o.screen_every_ms > 0 &&
+            (sim::now_us() / 1000ULL) % o.screen_every_ms < 100 && sim_framebuffer_take_dirty()) {
+            char name[64];
+            std::snprintf(name, sizeof(name), "/screen_%07llu.png",
+                          static_cast<unsigned long long>(sim::now_us() / 1000ULL));
+            sim::write_png_rgb565(o.screens_dir + name, sim_framebuffer(), sim::kScreenWidth, sim::kScreenHeight,
+                                  sim_display_on() ? 1.0f : 0.0f);
+        }
         if (sim::world_restart_requested()) {
             result.restart = true;
             break;
