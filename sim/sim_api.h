@@ -55,14 +55,15 @@ typedef struct sim_plant_outputs {
     double m_burr_g;            /* beans/grounds in the burr chamber */
     double m_chute_g;           /* grounds retained in the chute */
     double m_inflight_g;        /* grounds between chute exit and cup */
-    double m_cup_g;             /* grounds in the cup (or on the platform when no cup) */
+    double m_cup_g;             /* grounds inside the cup, wherever the cup is */
+    double m_platform_g;        /* grounds that fell onto the bare platform (no cup present) */
     double m_spilled_g;         /* grounds discarded by the user (emptied cup, purge tipped out) */
     double conservation_error_g;/* m_loaded - sum of the above; must stay ~0 */
 
     /* cup and load cell */
     int cup_present;
     double cup_mass_g;          /* empty cup (vessel) mass */
-    double scale_true_g;        /* static mass on the platform above the empty-platform preload */
+    double scale_true_g;        /* static mass on the platform: cup+contents if present, platform grounds, press */
     double scale_signal_g;      /* sensed mass incl. impact, vibration, creep, drift (pre-ADC noise) */
 
     /* HX711 */
@@ -94,7 +95,8 @@ enum sim_plant_action {
     SIM_ACT_LOAD_BEANS = 4,   /* value: grams of beans dropped into the single-dose hopper */
     SIM_ACT_BUMP = 5,         /* value: peak transient force in g on the platform */
     SIM_ACT_PRESS = 6,        /* value: steady extra mass in g (a hand resting); 0 releases */
-    SIM_ACT_CLEAN_CHUTE = 7   /* move chute-retained grounds to m_spilled */
+    SIM_ACT_CLEAN_CHUTE = 7,  /* move chute-retained grounds to m_spilled */
+    SIM_ACT_WIPE_PLATFORM = 8 /* move grounds on the bare platform to m_spilled */
 };
 
 /* Faults. `active` 1/0; `value` meaning per fault. */
@@ -112,7 +114,7 @@ size_t plant_sizeof(void);
 void plant_init(sim_plant_t* p, uint64_t seed);                 /* defaults, empty, no cup */
 int plant_param_count(void);
 const sim_param_info_t* plant_param_info(int index);
-int plant_set_param(sim_plant_t* p, const char* name, double value); /* 0 ok, -1 unknown name */
+int plant_set_param(sim_plant_t* p, const char* name, double value); /* 0 ok, -1 unknown, -2 non-finite */
 double plant_get_param(const sim_plant_t* p, const char* name, int* ok);
 void plant_step(sim_plant_t* p, const sim_plant_inputs_t* in, double dt_s);
 void plant_get_outputs(const sim_plant_t* p, sim_plant_outputs_t* out);

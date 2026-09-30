@@ -1,0 +1,30 @@
+cmake_minimum_required(VERSION 3.16)
+project(simplant C)
+
+# Top level (standalone build) or added with add_subdirectory() from sim/host.
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+  set(SIMPLANT_TOP_LEVEL ON)
+else()
+  set(SIMPLANT_TOP_LEVEL OFF)
+endif()
+option(SIMPLANT_BUILD_TESTS "Build and register the plant unit tests" ${SIMPLANT_TOP_LEVEL})
+
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_C_EXTENSIONS OFF)
+if(SIMPLANT_TOP_LEVEL AND NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+
+add_library(simplant STATIC plant.c plant_params.c rng.c)
+target_include_directories(simplant PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/..)
+target_compile_options(simplant PRIVATE -Wall -Wextra -Wpedantic -Wshadow)
+set_target_properties(simplant PROPERTIES POSITION_INDEPENDENT_CODE ON)
+if(NOT MSVC)
+  target_link_libraries(simplant PUBLIC m)
+endif()
+
+if(SIMPLANT_BUILD_TESTS)
+  enable_testing()
+  add_subdirectory(tests)
+endif()

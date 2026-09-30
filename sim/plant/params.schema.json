@@ -1,0 +1,921 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Digital twin plant parameters",
+  "description": "Generated from sim/plant/plant_params.h by plant_paramgen. Each parameter is either a bare number or an object with at least value. x-default and the x-sweep bounds give the Monte Carlo sweep range; values outside the range are allowed for experiments.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "relay_on_latency_ms": {
+      "description": "Delay from relay command energised to contacts closed.",
+      "x-default": 10,
+      "x-sweep-min": 2,
+      "x-sweep-max": 30,
+      "x-unit": "ms",
+      "x-source": "placeholder",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "ms"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "relay_off_latency_ms": {
+      "description": "Delay from relay command released to contacts open.",
+      "x-default": 8,
+      "x-sweep-min": 2,
+      "x-sweep-max": 30,
+      "x-unit": "ms",
+      "x-source": "placeholder",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "ms"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "motor_tau_up_s": {
+      "description": "First-order spin-up time constant while the motor is powered.",
+      "x-default": 0.08,
+      "x-sweep-min": 0.03,
+      "x-sweep-max": 0.3,
+      "x-unit": "s",
+      "x-source": "placeholder",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "s"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "motor_tau_down_s": {
+      "description": "First-order coast-down time constant after power-off (burrs keep grinding while coasting).",
+      "x-default": 0.1,
+      "x-sweep-min": 0.05,
+      "x-sweep-max": 0.6,
+      "x-unit": "s",
+      "x-source": "placeholder",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "s"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "motor_stall_tau_s": {
+      "description": "Speed decay time constant while the MOTOR_STALL fault is active.",
+      "x-default": 0.02,
+      "x-sweep-min": 0.005,
+      "x-sweep-max": 0.1,
+      "x-unit": "s",
+      "x-source": "placeholder",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "s"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "motor_min_speed": {
+      "description": "Normalised speed below which the burrs produce no grounds (tuned so the shortest productive pulse is about 42-46 ms, cf. src/config/debug.h:45).",
+      "x-default": 0.4,
+      "x-sweep-min": 0.1,
+      "x-sweep-max": 0.6,
+      "x-unit": "1",
+      "x-source": "placeholder",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "1"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "flow_nominal_gps": {
+      "description": "Burr output at full speed with a full chamber: the firmware's own mock flow rate. Sweep range is the firmware's sane flow window, src/config/grind_control.h:78-79.",
+      "x-default": 1.9,
+      "x-sweep-min": 1,
+      "x-sweep-max": 3,
+      "x-unit": "g/s",
+      "x-source": "src/config/debug.h:37",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "g/s"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "grind_setting_factor": {
+      "description": "Relative flow for the burr gap (coarser > 1, finer < 1); multiplies the nominal flow.",
+      "x-default": 1,
+      "x-sweep-min": 0.5,
+      "x-sweep-max": 1.5,
+      "x-unit": "1",
+      "x-source": "placeholder",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "1"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "bean_factor": {
+      "description": "Relative flow for bean hardness/roast; multiplies the nominal flow.",
+      "x-default": 1,
+      "x-sweep-min": 0.7,
+      "x-sweep-max": 1.3,
+      "x-unit": "1",
+      "x-source": "placeholder",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "1"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "flow_noise_frac": {
+      "description": "Standard deviation of the multiplicative flow noise (fraction of flow).",
+      "x-default": 0.05,
+      "x-sweep-min": 0,
+      "x-sweep-max": 0.2,
+      "x-unit": "1",
+      "x-source": "placeholder",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "1"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "flow_noise_tau_s": {
+      "description": "Correlation time of the low-pass filtered flow noise.",
+      "x-default": 0.15,
+      "x-sweep-min": 0.02,
+      "x-sweep-max": 1,
+      "x-unit": "s",
+      "x-source": "placeholder",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "s"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "clump_rate_hz": {
+      "description": "Poisson rate of clump releases at full speed and full chamber. Mean flow is kept at nominal.",
+      "x-default": 1,
+      "x-sweep-min": 0,
+      "x-sweep-max": 5,
+      "x-unit": "1/s",
+      "x-source": "placeholder",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "1/s"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "clump_mass_g": {
+      "description": "Mean mass of a clump released at once (exponentially distributed).",
+      "x-default": 0.05,
+      "x-sweep-min": 0,
+      "x-sweep-max": 0.3,
+      "x-unit": "g",
+      "x-source": "placeholder",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "g"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "burr_taper_mass_g": {
+      "description": "Chamber mass below which flow tapers linearly towards zero.",
+      "x-default": 3,
+      "x-sweep-min": 1,
+      "x-sweep-max": 6,
+      "x-unit": "g",
+      "x-source": "placeholder",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "g"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "burr_residual_g": {
+      "description": "Mass that stays in the burr chamber and is never ground (flow reaches zero here: run-dry).",
+      "x-default": 0.3,
+      "x-sweep-min": 0,
+      "x-sweep-max": 1,
+      "x-unit": "g",
+      "x-source": "placeholder",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "g"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "burr_capacity_g": {
+      "description": "Burr chamber capacity; a single 18 g dose fits entirely inside.",
+      "x-default": 25,
+      "x-sweep-min": 18,
+      "x-sweep-max": 40,
+      "x-unit": "g",
+      "x-source": "placeholder",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "g"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "feed_rate_gps": {
+      "description": "Maximum rate at which beans fall from the hopper into free chamber space.",
+      "x-default": 30,
+      "x-sweep-min": 5,
+      "x-sweep-max": 100,
+      "x-unit": "g/s",
+      "x-source": "placeholder",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "g/s"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "chute_retention_g": {
+      "description": "Static retention capacity of the chute: grounds up to this mass stay until pushed out.",
+      "x-default": 0.25,
+      "x-sweep-min": 0,
+      "x-sweep-max": 1.5,
+      "x-unit": "g",
+      "x-source": "placeholder",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "g"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "chute_tau_s": {
+      "description": "Time constant with which grounds above the retention capacity drain out of the chute.",
+      "x-default": 0.06,
+      "x-sweep-min": 0.02,
+      "x-sweep-max": 0.5,
+      "x-unit": "s",
+      "x-source": "placeholder",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "s"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "transport_delay_s": {
+      "description": "Fixed fall/transport delay from chute exit to the cup. Hard cap 1.0 s (ring buffer of 1000 one-ms bins).",
+      "x-default": 0.32,
+      "x-sweep-min": 0.05,
+      "x-sweep-max": 0.6,
+      "x-unit": "s",
+      "x-source": "placeholder",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "s"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "drop_height_m": {
+      "description": "Free-fall height of grounds from chute exit to the cup; sets the stream impact force flow*sqrt(2*g*h)/g.",
+      "x-default": 0.1,
+      "x-sweep-min": 0.02,
+      "x-sweep-max": 0.2,
+      "x-unit": "m",
+      "x-source": "placeholder",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "m"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "cup_mass_g": {
+      "description": "Default empty cup mass used by PLACE_CUP when no value is given.",
+      "x-default": 100,
+      "x-sweep-min": 20,
+      "x-sweep-max": 300,
+      "x-unit": "g",
+      "x-source": "placeholder",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "g"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "lc_counts_per_g": {
+      "description": "HX711 counts per gram (negative: more mass gives a lower code). Default equals the firmware default calibration factor; the sweep (+-5 %) is a placeholder for sensitivity mismatch.",
+      "x-default": -7050,
+      "x-sweep-min": -7400,
+      "x-sweep-max": -6700,
+      "x-unit": "counts/g",
+      "x-source": "src/config/user.h:52",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "counts/g"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "lc_baseline_code": {
+      "description": "Signed HX711 code of the empty platform. The mock's offset-binary 0x700000 equals signed 0x700000^0x800000 = -1048576. Sweep range is a placeholder.",
+      "x-default": -1048576,
+      "x-sweep-min": -2000000,
+      "x-sweep-max": 0,
+      "x-unit": "counts",
+      "x-source": "src/config/debug.h:39",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "counts"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "lc_gain_error": {
+      "description": "Fractional gain error between true grams and counts (true sensitivity = lc_counts_per_g*(1+error)).",
+      "x-default": 0,
+      "x-sweep-min": -0.05,
+      "x-sweep-max": 0.05,
+      "x-unit": "1",
+      "x-source": "placeholder",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "1"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "lc_idle_noise_counts": {
+      "description": "Peak of the uniform per-conversion ADC noise when idle, as in the firmware mock.",
+      "x-default": 60,
+      "x-sweep-min": 0,
+      "x-sweep-max": 200,
+      "x-unit": "counts",
+      "x-source": "src/config/debug.h:40",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "counts"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "lc_vibration_noise_counts": {
+      "description": "Peak per-conversion noise from motor vibration at full speed (scales with motor speed).",
+      "x-default": 400,
+      "x-sweep-min": 0,
+      "x-sweep-max": 1200,
+      "x-unit": "counts",
+      "x-source": "src/config/debug.h:41",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "counts"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "lc_natural_freq_hz": {
+      "description": "Natural frequency of the platform/load cell second-order response.",
+      "x-default": 25,
+      "x-sweep-min": 5,
+      "x-sweep-max": 80,
+      "x-unit": "Hz",
+      "x-source": "placeholder",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "Hz"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "lc_damping": {
+      "description": "Damping ratio of the platform/load cell response (lightly damped < 1).",
+      "x-default": 0.3,
+      "x-sweep-min": 0.05,
+      "x-sweep-max": 1,
+      "x-unit": "1",
+      "x-source": "placeholder",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "1"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "lc_creep_frac": {
+      "description": "Fraction of a load change that arrives slowly (creep).",
+      "x-default": 0.0005,
+      "x-sweep-min": 0,
+      "x-sweep-max": 0.005,
+      "x-unit": "1",
+      "x-source": "placeholder",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "1"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "lc_creep_tau_s": {
+      "description": "Time constant of the creep fraction.",
+      "x-default": 30,
+      "x-sweep-min": 5,
+      "x-sweep-max": 300,
+      "x-unit": "s",
+      "x-source": "placeholder",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "s"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "lc_drift_g_per_min": {
+      "description": "Deterministic linear zero drift of the sensed mass.",
+      "x-default": 0.002,
+      "x-sweep-min": -0.02,
+      "x-sweep-max": 0.02,
+      "x-unit": "g/min",
+      "x-source": "placeholder",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "g/min"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "lc_drift_walk_g_per_rtmin": {
+      "description": "Random-walk zero drift intensity (standard deviation after 1 min is this value).",
+      "x-default": 0.001,
+      "x-sweep-min": 0,
+      "x-sweep-max": 0.01,
+      "x-unit": "g/sqrt(min)",
+      "x-source": "placeholder",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "g/sqrt(min)"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "lc_place_impact_frac": {
+      "description": "Peak of the cup placement impact transient as a fraction of the placed mass.",
+      "x-default": 0.5,
+      "x-sweep-min": 0,
+      "x-sweep-max": 3,
+      "x-unit": "1",
+      "x-source": "placeholder",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "1"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "lc_impact_tau_s": {
+      "description": "Decay time constant of placement and bump transients.",
+      "x-default": 0.03,
+      "x-sweep-min": 0.005,
+      "x-sweep-max": 0.1,
+      "x-unit": "s",
+      "x-source": "placeholder",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "s"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "hx711_sps": {
+      "description": "Output data rate: 10 (RATE pin low, the firmware setting) or 80 (RATE pin high, docs/TROUBLESHOOTING.md:113). Any value in 1..1000 is accepted and only changes the conversion period.",
+      "x-default": 10,
+      "x-sweep-min": 10,
+      "x-sweep-max": 80,
+      "x-unit": "1/s",
+      "x-source": "src/config/hardware.h:71",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "1/s"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "hx711_settle_ms_10sps": {
+      "description": "Output settling time after power-up at 10 SPS (recollection of the HX711 datasheet, unverified offline).",
+      "x-default": 400,
+      "x-sweep-min": 100,
+      "x-sweep-max": 600,
+      "x-unit": "ms",
+      "x-source": "placeholder",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "ms"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "hx711_settle_ms_80sps": {
+      "description": "Output settling time after power-up at 80 SPS (recollection of the HX711 datasheet, unverified offline).",
+      "x-default": 50,
+      "x-sweep-min": 10,
+      "x-sweep-max": 150,
+      "x-unit": "ms",
+      "x-source": "placeholder",
+      "anyOf": [
+        {"type": "number"},
+        {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "const": "ms"},
+            "source": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    }
+  }
+}
