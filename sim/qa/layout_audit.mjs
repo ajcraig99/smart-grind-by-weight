@@ -42,6 +42,7 @@ const SCREENS = [
   ['dialog-clear-warnings', [['menu'], ['tap', 'Diagnostics'], ['tap', 'Clear Warnings']]],
   ['dialog-remote-start', [['menu'], ['tap', 'Wi-Fi'], ['toggle', 'Remote']]],
   ['calibration-empty', [['state', 'CALIBRATION']]],
+  ['calibration-weight', [['state', 'CALIBRATION'], ['tap', OK], ['wait', 3000]]],
   ['ota-failed', [['state', 'OTA_UPDATE_FAILED']]],
 ];
 
@@ -184,6 +185,31 @@ async function tuneFlow(name, faultLabel, resultLabel) {
 }
 await tuneFlow('tune-success', null, 'New Motor Latency:');
 await tuneFlow('tune-failure', 'Relay stuck off', 'Using default:');
+
+// The noise-check step follows a real calibration, which needs a weight on the scale.
+async function calibrationNoiseFlow(name) {
+  try {
+    await page.evaluate(() => window.twinApp.ui('ready', 2));
+    await act('Remove cup');  // earlier flows leave a cup on the scale; tare must see it empty
+    await uiStep(name, 'state', 'CALIBRATION');
+    await uiStep(name, 'tap', OK);  // tare the empty scale
+    await waitVirtual(3000);
+    await page.fill('#actions input[aria-label="Place cup value"]', '100');  // a 100 g stand-in for the known weight
+    await act('Place cup');
+    await waitVirtual(2000);
+    await uiStep(name, 'tap', OK);  // calibrate against the weight
+    await waitForLabel(['NOISE CHECK'], 30000);
+    await page.waitForTimeout(400);
+    await audit(name);
+  } catch (err) {
+    console.log(`FAIL  ${name}: ${err.message}`);
+    failing.add(name);
+  } finally {
+    await page.evaluate(() => window.twinApp.ui('ready', 2)).catch(() => {});
+    await act('Remove cup').catch(() => {});
+  }
+}
+await calibrationNoiseFlow('calibration-noise');
 
 await browser.close();
 console.log(failing.size ? `${failing.size} screen(s) with layout defects` : 'all screens clean');

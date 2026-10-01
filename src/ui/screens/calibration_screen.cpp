@@ -23,56 +23,68 @@ void CalibrationScreen::create() {
     lv_obj_set_style_border_width(screen, 0, 0);
     lv_obj_set_style_pad_all(screen, 0, 0);
     lv_obj_set_style_pad_ver(screen, 6, 0);
+    lv_obj_clear_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_layout(screen, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(screen, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(screen, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     top_button_row = create_dual_button_row(screen, &ok_button, &cancel_button, LV_SYMBOL_OK, LV_SYMBOL_CLOSE, lv_color_hex(THEME_COLOR_SUCCESS), lv_color_hex(THEME_COLOR_NEUTRAL), 80, &lv_font_montserrat_32);
 
-    // Title label (center top)
-    title_label = lv_label_create(screen);
+    // Title, instructions and readings stack in the space between the button rows.
+    lv_obj_t* body = lv_obj_create(screen);
+    lv_obj_remove_style_all(body);
+    lv_obj_set_width(body, LV_PCT(100));
+    lv_obj_set_flex_grow(body, 1);
+    lv_obj_clear_flag(body, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_layout(body, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(body, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_row(body, 10, 0);
+
+    // Title label
+    title_label = lv_label_create(body);
     lv_label_set_text(title_label, "CALIBRATION");
     lv_obj_set_style_text_font(title_label, &lv_font_montserrat_36, 0);
     lv_obj_set_style_text_color(title_label, lv_color_hex(THEME_COLOR_SECONDARY), 0);
-    lv_obj_align(title_label, LV_ALIGN_CENTER, 0, -90);
 
     // Instruction label (center)
-    instruction_label = lv_label_create(screen);
+    instruction_label = lv_label_create(body);
     lv_label_set_text(instruction_label, "Remove all weight");
     lv_obj_set_style_text_font(instruction_label, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(instruction_label, lv_color_hex(THEME_COLOR_TEXT_SECONDARY), 0);
     lv_obj_set_style_text_align(instruction_label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(instruction_label, LV_ALIGN_CENTER, 0, -20);
+    lv_obj_set_width(instruction_label, LV_PCT(92));
+    lv_label_set_long_mode(instruction_label, LV_LABEL_LONG_WRAP);
 
     // Weight label (center) - current weight or calibration weight
-    weight_label = lv_label_create(screen);
+    weight_label = lv_label_create(body);
     lv_label_set_text(weight_label, "0");
     lv_obj_set_style_text_font(weight_label, &lv_font_montserrat_56, 0);
     lv_obj_set_style_text_color(weight_label, lv_color_hex(THEME_COLOR_TEXT_PRIMARY), 0);
-    lv_obj_align(weight_label, LV_ALIGN_CENTER, 0, 55);
 
     // Noise check information labels (hidden by default)
-    noise_status_label = lv_label_create(screen);
+    noise_status_label = lv_label_create(body);
     lv_label_set_text(noise_status_label, "Status: Checking...");
     lv_obj_set_style_text_font(noise_status_label, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(noise_status_label, lv_color_hex(THEME_COLOR_TEXT_PRIMARY), 0);
     lv_obj_set_style_text_align(noise_status_label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(noise_status_label, LV_ALIGN_CENTER, 0, 60);
     lv_obj_add_flag(noise_status_label, LV_OBJ_FLAG_HIDDEN);
 
-    noise_metric_label = lv_label_create(screen);
+    noise_metric_label = lv_label_create(body);
     lv_label_set_text(noise_metric_label, "Std Dev: --");
     lv_obj_set_style_text_font(noise_metric_label, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(noise_metric_label, lv_color_hex(THEME_COLOR_TEXT_SECONDARY), 0);
     lv_obj_set_style_text_align(noise_metric_label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(noise_metric_label, LV_ALIGN_CENTER, 0, 105);
     lv_obj_add_flag(noise_metric_label, LV_OBJ_FLAG_HIDDEN);
 
     lv_obj_t* bottom_button_row = create_dual_button_row(screen, &minus_btn, &plus_btn, LV_SYMBOL_MINUS, LV_SYMBOL_PLUS, lv_color_hex(THEME_COLOR_PRIMARY), lv_color_hex(THEME_COLOR_PRIMARY), 100, &lv_font_montserrat_32);
-    lv_obj_align(bottom_button_row, LV_ALIGN_BOTTOM_MID, 0, 0);
     lv_obj_add_flag(minus_btn, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(plus_btn, LV_OBJ_FLAG_HIDDEN);
 
     // Hidden weight input (keeping for compatibility but not used in UI)
     weight_input = lv_textarea_create(screen);
     lv_obj_set_size(weight_input, 1, 1);
+    lv_obj_add_flag(weight_input, LV_OBJ_FLAG_IGNORE_LAYOUT);
     lv_obj_add_flag(weight_input, LV_OBJ_FLAG_HIDDEN);
 
     current_step = CAL_STEP_EMPTY;
@@ -97,8 +109,7 @@ void CalibrationScreen::set_step(CalibrationStep step) {
     switch (step) {
         case CAL_STEP_EMPTY:
             lv_label_set_text(title_label, "CALIBRATION");
-            lv_label_set_text(instruction_label, "Remove all weight\nPress OK when empty");
-            lv_obj_set_style_pad_hor(top_button_row, 0, 0);
+            lv_label_set_text(instruction_label, "Remove all weight, then press " LV_SYMBOL_OK);
             lv_obj_clear_flag(cancel_button, LV_OBJ_FLAG_HIDDEN);
             lv_obj_add_flag(plus_btn, LV_OBJ_FLAG_HIDDEN);
             lv_obj_add_flag(minus_btn, LV_OBJ_FLAG_HIDDEN);
@@ -112,7 +123,7 @@ void CalibrationScreen::set_step(CalibrationStep step) {
         case CAL_STEP_WEIGHT:
             lv_label_set_text(title_label, "CALIBRATION");
             lv_label_set_text(instruction_label,
-                              "Place known weight\nAdjust weight value\n with +/- buttons");
+                              "Place a known weight and set its value with - and +");
             lv_obj_clear_flag(cancel_button, LV_OBJ_FLAG_HIDDEN);
             lv_obj_clear_flag(plus_btn, LV_OBJ_FLAG_HIDDEN);
             lv_obj_clear_flag(minus_btn, LV_OBJ_FLAG_HIDDEN);
@@ -127,8 +138,7 @@ void CalibrationScreen::set_step(CalibrationStep step) {
         case CAL_STEP_NOISE_CHECK:
             lv_label_set_text(title_label, "NOISE CHECK");
             lv_label_set_text(instruction_label,
-                              "Let vibrations settle.\nDon't touch the\ngrinder or scale.\nThis takes ~5-10s.");
-            lv_obj_set_style_pad_hor(top_button_row, 10, 0);
+                              "Let vibrations settle. Don't touch the grinder or scale. About 5-10 s.");
             lv_obj_add_flag(cancel_button, LV_OBJ_FLAG_HIDDEN);
             lv_obj_add_flag(plus_btn, LV_OBJ_FLAG_HIDDEN);
             lv_obj_add_flag(minus_btn, LV_OBJ_FLAG_HIDDEN);
@@ -143,7 +153,6 @@ void CalibrationScreen::set_step(CalibrationStep step) {
         case CAL_STEP_COMPLETE:
             lv_label_set_text(title_label, "CALIBRATION");
             lv_label_set_text(instruction_label, "Calibration complete!");
-            lv_obj_set_style_pad_hor(top_button_row, 10, 0);
             lv_obj_add_flag(cancel_button, LV_OBJ_FLAG_HIDDEN);
             lv_obj_add_flag(plus_btn, LV_OBJ_FLAG_HIDDEN);
             lv_obj_add_flag(minus_btn, LV_OBJ_FLAG_HIDDEN);
