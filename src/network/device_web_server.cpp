@@ -722,7 +722,7 @@ void DeviceWebServer::configure_routes() {
         }
         if (!update_authorization().is_granted(millis())) {
             request->send(403, "application/json",
-                          "{\"error\":\"Allow the update on the grinder first: Menu > Firmware Update > Allow Update\"}");
+                          "{\"error\":\"Allow the update on the grinder first: Menu > Firmware > Allow Update\"}");
             return;
         }
         if (FirmwareValidation::running_image_pending()) {

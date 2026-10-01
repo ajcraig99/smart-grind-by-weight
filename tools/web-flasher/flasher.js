@@ -295,7 +295,7 @@ function handleStatusUpdate(event) {
 
 function otaFailureMessage(status) {
     if (status === BLE_OTA_NOT_AUTHORIZED) {
-        return 'The grinder refused the update. On the grinder open Menu > Firmware Update ' +
+        return 'The grinder refused the update. On the grinder open Menu > Firmware ' +
                'and tap Allow Update, then try again within 2 minutes.';
     }
     if (status === BLE_OTA_VALIDATION_ERROR) {

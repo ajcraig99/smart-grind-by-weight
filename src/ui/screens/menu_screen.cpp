@@ -208,9 +208,9 @@ void MenuScreen::create_menu_ui() {
     create_separator(main_page, "Tools");
     scale_item = create_menu_item(main_page, "Scale");
     cal_button = create_menu_item(main_page, "Calibrate");
-    autotune_button = create_menu_item(main_page, "Tune Pulses");
+    autotune_button = create_menu_item(main_page, "Pulse Tune");
     motor_test_button = create_menu_item(main_page, "Motor Test");
-    firmware_item = create_menu_item(main_page, "Firmware Update");
+    firmware_item = create_menu_item(main_page, "Firmware");
 
     lv_menu_set_load_page_event(menu, scale_item, scale_page);
     lv_menu_set_load_page_event(menu, firmware_item, firmware_page);
@@ -375,6 +375,8 @@ void MenuScreen::create_bluetooth_page(lv_obj_t* parent) {
     ble_timer_label = lv_label_create(parent);
     lv_label_set_text(ble_timer_label, "");
     lv_obj_set_style_text_font(ble_timer_label, &lv_font_montserrat_24, 0);
+    lv_obj_set_width(ble_timer_label, 260);
+    lv_label_set_long_mode(ble_timer_label, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_color(ble_timer_label, lv_color_hex(THEME_COLOR_WARNING), 0);
     lv_obj_clear_flag(ble_timer_label, LV_OBJ_FLAG_SCROLLABLE);
 
@@ -426,11 +428,11 @@ void MenuScreen::create_network_page(lv_obj_t* parent) {
     lv_qrcode_set_quiet_zone(network_qr, true);
     lv_obj_add_flag(network_qr, LV_OBJ_FLAG_HIDDEN);
 
-    create_separator(parent, "Remote Control");
+    create_separator(parent, "Remote");
     create_description_label(parent, "Let the web page and Home Assistant start grinds. Stop always works remotely.");
-    create_toggle_row(parent, "Remote start", &remote_start_toggle);
+    create_toggle_row(parent, "Remote", &remote_start_toggle);
 
-    network_forget_button = create_button(parent, "FORGET NETWORK", lv_color_hex(THEME_COLOR_WARNING),
+    network_forget_button = create_button(parent, "FORGET WI-FI", lv_color_hex(THEME_COLOR_WARNING),
                                           260, 72, &lv_font_montserrat_24);
     lv_obj_set_style_margin_top(network_forget_button, 10, 0);
     lv_obj_add_flag(network_forget_button, LV_OBJ_FLAG_HIDDEN);
@@ -679,7 +681,7 @@ void MenuScreen::update_network_status() {
 void MenuScreen::create_display_page(lv_obj_t* parent) {
     setup_menu_page(parent);
 
-    create_slider_row(parent, "Brightness", &brightness_normal_label, &brightness_normal_slider);
+    create_slider_row(parent, "Normal", &brightness_normal_label, &brightness_normal_slider);
     create_slider_row(parent, "Screensaver", &brightness_screensaver_label, &brightness_screensaver_slider, lv_color_hex(THEME_COLOR_WARNING));
 
     // Register events for the sliders (done here because widgets are created lazily)
@@ -698,11 +700,11 @@ void MenuScreen::create_display_page(lv_obj_t* parent) {
     }
 
     // Custom screensaver image toggles
-    create_separator(parent, "Custom Image");
+    create_separator(parent, "Screensaver");
     create_description_label(parent, "Show uploaded image on startup or when display dims.");
     create_toggle_row(parent, "Startup", &screensaver_startup_toggle);
-    create_toggle_row(parent, "Idle Screensaver", &screensaver_sleep_toggle);
-    create_toggle_row(parent, "Turn Display Off", &display_off_toggle);
+    create_toggle_row(parent, "On idle", &screensaver_sleep_toggle);
+    create_toggle_row(parent, "Display off", &display_off_toggle);
 
     if (screensaver_startup_toggle) {
         lv_obj_add_event_cb(screensaver_startup_toggle, EventBridgeLVGL::dispatch_event, LV_EVENT_VALUE_CHANGED,
@@ -736,7 +738,7 @@ void MenuScreen::create_grind_mode_page(lv_obj_t* parent) {
     setup_menu_page(parent);
 
     // Mode Selection separator/label
-    create_separator(parent, "Mode Selection");
+    create_separator(parent, "Mode");
 
     // Radio button group for grind mode selection at top
     const char* grind_modes[] = {"Weight", "Time"};
@@ -769,7 +771,7 @@ void MenuScreen::create_grind_mode_page(lv_obj_t* parent) {
     create_toggle_row(parent, "Start", &auto_start_toggle);
     const uint32_t auto_start_min = static_cast<uint32_t>(USER_AUTO_GRIND_TRIGGER_MIN_G * kAutoStartThresholdSliderScale + 0.5f);
     const uint32_t auto_start_max = static_cast<uint32_t>(USER_AUTO_GRIND_TRIGGER_MAX_G * kAutoStartThresholdSliderScale + 0.5f);
-    create_slider_row(parent, "Cup threshold", &auto_start_threshold_label,
+    create_slider_row(parent, "Trigger", &auto_start_threshold_label,
                       &auto_start_threshold_slider, lv_color_hex(THEME_COLOR_ACCENT),
                       auto_start_min, auto_start_max);
     create_description_label(parent, "Use a value below the empty cup or portafilter weight to prevent accidental starts.");
@@ -808,23 +810,23 @@ void MenuScreen::create_grind_mode_page(lv_obj_t* parent) {
                      lv_color_hex(THEME_COLOR_ACCENT), 0, 8);  // 9 positions (0-8)
 
     // Motor response section
-    create_separator(parent, "Motor Response");
+    create_separator(parent, "Motor");
     create_description_label(parent, "Minimum run time before grounds begin to flow. Pulse Tune updates this automatically.");
 
-    create_slider_row(parent, "Motor latency", &motor_latency_label, &motor_latency_slider,
+    create_slider_row(parent, "Latency", &motor_latency_label, &motor_latency_slider,
                       lv_color_hex(THEME_COLOR_ACCENT),
                       static_cast<uint32_t>(GRIND_AUTOTUNE_LATENCY_MIN_MS),
                       static_cast<uint32_t>(GRIND_AUTOTUNE_LATENCY_MAX_MS));
     create_description_label(parent, "Adjust manually only when Pulse Tune cannot complete reliably.");
 
     // Coast Compensation section
-    create_separator(parent, "Coast Compensation");
+    create_separator(parent, "Coast");
     create_description_label(parent, "How much coast the system expects after motor stop. Higher values reduce overshoot.");
 
     // Slider for coast ratio (0.70 to 1.50 in 0.05 steps)
     const uint32_t coast_slider_min = static_cast<uint32_t>(GRIND_LATENCY_TO_COAST_RATIO_MIN * kCoastRatioSliderScale + 0.5f);
     const uint32_t coast_slider_max = static_cast<uint32_t>(GRIND_LATENCY_TO_COAST_RATIO_MAX * kCoastRatioSliderScale + 0.5f);
-    create_slider_row(parent, "Coast Ratio", &coast_ratio_label, &coast_ratio_slider,
+    create_slider_row(parent, "Coast", &coast_ratio_label, &coast_ratio_slider,
                      lv_color_hex(THEME_COLOR_ACCENT), coast_slider_min, coast_slider_max);
 
     // Register events for the toggles (done here because widgets are created lazily)
@@ -948,7 +950,6 @@ void MenuScreen::create_stats_page(lv_obj_t* parent) {
 
     create_description_label(parent, "Lifetime totals for the grinder.");
 
-    create_separator(parent, "Lifetime Statistics");
     create_data_label(parent, "Total Grinds:", &stat_total_grinds_label, true);
     create_data_label(parent, "Shots (S/D/C):", &stat_shots_label, true);
     create_data_label(parent, "Motor Runtime:", &stat_motor_runtime_label, true);
@@ -974,7 +975,7 @@ void MenuScreen::create_diagnostics_page(lv_obj_t* parent) {
     setup_menu_page(parent);
 
     // Load Cell Status separator
-    create_separator(parent, "Load Cell Status");
+    create_separator(parent, "Load Cell");
 
     // Status indicator
     create_data_label(parent, "Status:", &diag_status_label);
@@ -993,7 +994,7 @@ void MenuScreen::create_diagnostics_page(lv_obj_t* parent) {
     lv_obj_set_width(diag_info_label, 260);
     lv_obj_add_flag(diag_info_label, LV_OBJ_FLAG_HIDDEN); // Hidden by default
 
-    diag_reset_button = create_button(parent, "Reset Diagnostics", lv_color_hex(THEME_COLOR_WARNING));
+    diag_reset_button = create_button(parent, "Clear Warnings", lv_color_hex(THEME_COLOR_WARNING));
     lv_obj_set_style_margin_bottom(diag_reset_button, 10, 0);
 
     // Noise Floor separator
@@ -1014,7 +1015,7 @@ void MenuScreen::create_diagnostics_page(lv_obj_t* parent) {
     lv_obj_set_width(cal_info, 260);
 
     // Motor Response separator
-    create_separator(parent, "Motor Response");
+    create_separator(parent, "Motor");
 
     // Motor latency
     create_data_label(parent, "Motor Latency:", &diag_motor_latency_label, true);
@@ -1174,7 +1175,7 @@ void MenuScreen::update_ble_status() {
         unsigned long remaining_ms = bluetooth_manager->get_bluetooth_timeout_remaining_ms();
         unsigned long remaining_min = remaining_ms / (60 * 1000);
         char timer_text[64];
-        snprintf(timer_text, sizeof(timer_text), "Auto-disable in: %lu min", remaining_min);
+        snprintf(timer_text, sizeof(timer_text), "Off in %lu min", remaining_min);
         lv_label_set_text(ble_timer_label, timer_text);
         lv_obj_clear_flag(ble_timer_label, LV_OBJ_FLAG_HIDDEN);
     } else {
@@ -1298,7 +1299,7 @@ void MenuScreen::update_brightness_sliders() {
 void MenuScreen::update_brightness_labels(int normal_percent, int screensaver_percent) {
     if (brightness_normal_label && normal_percent >= 0) {
         char normal_text[32];
-        snprintf(normal_text, sizeof(normal_text), "Brightness: %d%%", normal_percent);
+        snprintf(normal_text, sizeof(normal_text), "Normal: %d%%", normal_percent);
         lv_label_set_text(brightness_normal_label, normal_text);
     }
 
@@ -1336,7 +1337,7 @@ void MenuScreen::update_coast_ratio_label(float ratio) {
     if (coast_ratio_label) {
         char buffer[24];
         int percent = static_cast<int>(ratio * 100.0f + 0.5f);
-        snprintf(buffer, sizeof(buffer), "Coast Ratio: %d%%", percent);
+        snprintf(buffer, sizeof(buffer), "Coast: %d%%", percent);
         lv_label_set_text(coast_ratio_label, buffer);
     }
 }
@@ -1347,7 +1348,7 @@ void MenuScreen::update_motor_latency_label(float latency_ms) {
                                      GRIND_AUTOTUNE_LATENCY_MIN_MS,
                                      GRIND_AUTOTUNE_LATENCY_MAX_MS);
     char buffer[28];
-    snprintf(buffer, sizeof(buffer), "Motor latency: %.0fms", clamped);
+    snprintf(buffer, sizeof(buffer), "Latency: %.0fms", clamped);
     lv_label_set_text(motor_latency_label, buffer);
 }
 
@@ -1357,7 +1358,7 @@ void MenuScreen::update_auto_start_threshold_label(float threshold_g) {
                                      USER_AUTO_GRIND_TRIGGER_MIN_G,
                                      USER_AUTO_GRIND_TRIGGER_MAX_G);
     char buffer[28];
-    snprintf(buffer, sizeof(buffer), "Cup threshold: %.0fg", clamped);
+    snprintf(buffer, sizeof(buffer), "Trigger: %.0fg", clamped);
     lv_label_set_text(auto_start_threshold_label, buffer);
 }
 

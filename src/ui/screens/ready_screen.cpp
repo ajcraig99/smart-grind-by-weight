@@ -217,6 +217,8 @@ void ReadyScreen::create_wifi_page(lv_obj_t* parent) {
     lv_obj_set_style_text_font(wifi_status_label, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(wifi_status_label, lv_color_hex(THEME_COLOR_TEXT_PRIMARY), 0);
     lv_obj_set_style_text_align(wifi_status_label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_width(wifi_status_label, LV_PCT(100));
+    lv_label_set_long_mode(wifi_status_label, LV_LABEL_LONG_WRAP);
 
     wifi_qr = lv_qrcode_create(parent);
     lv_qrcode_set_size(wifi_qr, 170);
@@ -251,7 +253,7 @@ void ReadyScreen::update_network_status() {
             break;
         case NetworkState::WIFI_NO_CREDENTIALS:
         case NetworkState::WIFI_SETUP_REQUIRED:
-            status = "STARTING WI-FI SETUP";
+            status = "STARTING SETUP";
             detail = "Preparing the setup network...";
             break;
         case NetworkState::WIFI_CONNECTING:

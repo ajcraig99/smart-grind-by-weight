@@ -574,7 +574,7 @@ class GrinderBLETool:
         if not await self.wait_for_ota_status(BLE_OTA_RECEIVING, timeout=15):
             if self.current_ota_status == BLE_OTA_NOT_AUTHORIZED:
                 self.safe_print("[ERROR] The grinder refused the update. On the grinder open "
-                                "Menu > Firmware Update and tap Allow Update, then run the upload "
+                                "Menu > Firmware and tap Allow Update, then run the upload "
                                 "again within 2 minutes.")
             else:
                 self.safe_print("[ERROR] The grinder did not accept the update start. Check that it is "

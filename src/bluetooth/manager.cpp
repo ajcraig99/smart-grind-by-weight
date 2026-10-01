@@ -725,7 +725,7 @@ void BluetoothManager::handle_ota_control_command(BLECharacteristic* characteris
             // Anyone in radio range can write this characteristic, so the
             // update must first be allowed on the touchscreen.
             if (!update_authorization().is_granted(millis())) {
-                log("Bluetooth OTA: Rejected; allow the update on the grinder (Menu > Firmware Update)\n");
+                log("Bluetooth OTA: Rejected; allow the update on the grinder (Menu > Firmware)\n");
                 set_ota_status(BLE_OTA_NOT_AUTHORIZED);
                 break;
             }

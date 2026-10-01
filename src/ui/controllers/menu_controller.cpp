@@ -120,7 +120,7 @@ void MenuUIController::handle_wifi_forget() {
                                        : String("Remove " + network + "?");
     message += "\n\nWith Wi-Fi on, the grinder then opens its setup network so you can join another one.";
     ui_manager_->show_confirmation(
-        "FORGET NETWORK", message.c_str(), "FORGET", lv_color_hex(THEME_COLOR_WARNING),
+        "FORGET WI-FI", message.c_str(), "FORGET", lv_color_hex(THEME_COLOR_WARNING),
         []() { network_manager.request_forget_network(); });
 }
 
@@ -140,7 +140,7 @@ void MenuUIController::handle_remote_start_toggle() {
         "REMOTE START",
         "The web page and Home Assistant will be able to start the motor.\n\n"
         "Turn this on only on a trusted network, with the grinder always ready to run.",
-        "TURN ON", lv_color_hex(THEME_COLOR_WARNING),
+        "ENABLE", lv_color_hex(THEME_COLOR_WARNING),
         []() { device_api.set_remote_start_enabled(true); });
 }
 
@@ -282,7 +282,7 @@ void MenuUIController::handle_autotune() {
     auto autotune_controller = ui_manager_->autotune_controller_.get();
     if (autotune_controller) {
         ui_manager_->show_confirmation(
-            "Auto-Tune Setup",
+            "Pulse Tune",
             "Load beans and put a cup on the scale.\n\n"
             "Takes about 1 minute.",
             "START",
@@ -309,7 +309,7 @@ void MenuUIController::handle_diagnostics_reset() {
     if (!ui_manager_) return;
 
     ui_manager_->show_confirmation(
-        "Reset Diagnostics",
+        "Clear Warnings",
         "This will clear all active diagnostic warnings.\n\nContinue?",
         "RESET",
         lv_color_hex(THEME_COLOR_WARNING),

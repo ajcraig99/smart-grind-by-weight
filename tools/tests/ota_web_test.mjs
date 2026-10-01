@@ -51,7 +51,7 @@ assert.equal(context.state.releaseChecked,false,'refresh release comparison afte
  assert.deepEqual(calls.filter(u=>u.startsWith('/api/v1/ota')),['/api/v1/ota/prepare','/api/v1/ota?token=a1b2']);
  // A refused prepare (no permission on the grinder) surfaces its reason and uploads nothing.
  calls.length=0;
- ctx.api=async url=>{calls.push(url);throw new Error('Allow the update on the grinder first: Menu > Firmware Update > Allow Update')};
+ ctx.api=async url=>{calls.push(url);throw new Error('Allow the update on the grinder first: Menu > Firmware > Allow Update')};
  assert.equal(await vm.runInContext("installFirmwareBlob(blob,'firmware.bin')",ctx),false);
  assert.deepEqual(calls,['/api/v1/ota/prepare']);
  assert.match(toasts.at(-1).m,/Allow the update on the grinder/);
