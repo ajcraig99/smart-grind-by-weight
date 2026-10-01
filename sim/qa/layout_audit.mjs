@@ -148,14 +148,17 @@ for (const [name, steps] of SCREENS) {
   if (stepsOk) await audit(name);
   await page.evaluate(() => window.twinApp.ui('ready', 2));
 }
-// Flows: screens that only exist after the firmware has done real work.
+
+// ---- Flows: screens that only exist after the firmware has done real work. ----
+const RESULT_LABELS = ['New Motor Latency:', 'Using default:'];  // success, failure
 async function tuneFlow(name, faultLabel, resultLabel) {
+  let faultOn = false;
   try {
     await page.evaluate(() => window.twinApp.ui('ready', 2));
     await act('Place cup');
     await act('Load beans');
     await act('Load beans');
-    if (faultLabel) await fault(faultLabel);
+    if (faultLabel) { await fault(faultLabel); faultOn = true; }
     await uiStep(name, 'menu');
     await uiStep(name, 'tap', 'Pulse Tune');
     await uiStep(name, 'tap', 'START');
@@ -164,7 +167,8 @@ async function tuneFlow(name, faultLabel, resultLabel) {
       await audit('tune-console');
     }
     await setSpeed(10);  // the rest of the tune is long; run it fast
-    await waitForLabel([resultLabel]);
+    const got = await waitForLabel(RESULT_LABELS);
+    if (got !== resultLabel) throw new Error(`expected "${resultLabel}", got "${got}"`);
     await page.waitForTimeout(400);
     await audit(name);
     await uiStep(name, 'tap', OK);
@@ -172,9 +176,10 @@ async function tuneFlow(name, faultLabel, resultLabel) {
     console.log(`FAIL  ${name}: ${err.message}`);
     failing.add(name);
   } finally {
-    if (faultLabel) await fault(faultLabel);  // toggles the fault off again
-    await setSpeed(1);
-    await page.evaluate(() => window.twinApp.ui('ready', 2));
+    // Cleanup must always finish, so browser.close() is reached.
+    if (faultOn) await fault(faultLabel).catch(() => {});  // toggles the fault off again
+    await setSpeed(1).catch(() => {});
+    await page.evaluate(() => window.twinApp.ui('ready', 2)).catch(() => {});
   }
 }
 await tuneFlow('tune-success', null, 'New Motor Latency:');
