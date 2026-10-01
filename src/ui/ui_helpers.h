@@ -16,6 +16,8 @@ void set_label_text_float(lv_obj_t* label, float value, const char* unit = nullp
 
 // Largest font in `fonts` (ordered largest first) in which `text` fits on one
 // line of `max_width` px; the last (smallest) font when none does.
+// `count` must be at least 1. `text` is measured as one line (no '\n'); a
+// multi-line string is judged by its widest line.
 const lv_font_t* pick_font_that_fits(const char* text, int32_t max_width,
                                      const lv_font_t* const* fonts, size_t count);
 
