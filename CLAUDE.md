@@ -17,7 +17,7 @@ python3 tools/grinder.py analyze
 **Common Commands:**
 - `tools/venv/bin/python3 tools/grinder.py build --hardware v1 --jobs 8` - Build V1 firmware
 - `tools/venv/bin/python3 tools/grinder.py build --hardware v2 --jobs 8` - Build V2 firmware
-- `python3 tools/grinder.py upload` - Upload latest firmware via BLE (first tap Menu → Firmware Update → Allow Update on the grinder; the permission lasts 2 minutes)
+- `python3 tools/grinder.py upload` - Upload latest firmware via BLE (first tap Menu → Firmware → Allow Update on the grinder; the permission lasts 2 minutes)
 - `python3 tools/grinder.py export` - Export grind data to database
 - `python3 tools/grinder.py report` - Launch Streamlit report from existing data
 - `python3 tools/grinder.py scan` - Scan for BLE devices
@@ -43,9 +43,9 @@ python3 tools/grinder.py analyze
 - **GrindController**: Multi-phase state machine with predictive flow control, 10 pulse corrections, mechanical instability detection, time mode additional pulses, and target-free manual grinding
 - **LoadCell (HX711)**: Multi-mode precision weight measurement (instant, smoothed, filtered), calibration flag, noise diagnostics
 - **DiagnosticsController**: System health monitoring (calibration status, sustained noise, mechanical instability), state persistence, hysteresis, priority-based warnings
-- **UIManager**: LVGL screen management; ready screen is a swipe-only tabview (Manual, Single, Double, Custom, Wi-Fi, Menu; tab buttons hidden) with a non-clickable page-indicator dot row above the grind button, updated from `ReadyUIController::handle_tab_change` and `ReadyScreen::set_active_tab`; menu page surfaces quick Tools (Scale view, Calibrate, Tune Pulses, Motor Test, Firmware Update) followed by Settings (Bluetooth, Wi-Fi, Display, Grind Settings) and Info sections (Diagnostics, System Info, Logs & Data, Lifetime Stats), warning icon indicator, split-button layout for time mode pulses
+- **UIManager**: LVGL screen management; ready screen is a swipe-only tabview (Manual, Single, Double, Custom, Wi-Fi, Menu; tab buttons hidden) with a non-clickable page-indicator dot row above the grind button, updated from `ReadyUIController::handle_tab_change` and `ReadyScreen::set_active_tab`; menu page surfaces quick Tools (Scale view, Calibrate, Pulse Tune, Motor Test, Firmware) followed by Settings (Bluetooth, Wi-Fi, Display, Grind Settings) and Info sections (Diagnostics, System Info, Logs & Data, Lifetime Stats), warning icon indicator, split-button layout for time mode pulses
 - **StateMachine**: Central state coordination (READY → GRINDING → GRIND_COMPLETE)
-- **Network security**: `RequestGuard` middleware (host allowlist plus same-origin check, `src/network/request_policy.h`) admits every web route and the WebSocket handshake; upload callbacks run before middleware, so upload routes call `RequestGuard::admit` themselves. Web and BLE firmware updates consume `update_authorization()`, granted at Menu → Firmware Update; remote grind starts need the on-device opt-in (`device_api.remote_start_enabled()`). Never make either permission settable over the network. See `docs/WIFI_ARCHITECTURE.md#security-model`.
+- **Network security**: `RequestGuard` middleware (host allowlist plus same-origin check, `src/network/request_policy.h`) admits every web route and the WebSocket handshake; upload callbacks run before middleware, so upload routes call `RequestGuard::admit` themselves. Web and BLE firmware updates consume `update_authorization()`, granted at Menu → Firmware; remote grind starts need the on-device opt-in (`device_api.remote_start_enabled()`). Never make either permission settable over the network. See `docs/WIFI_ARCHITECTURE.md#security-model`.
 
 **Update Intervals:** 20ms grind control, 20ms load cell polling (HX711 at 10 SPS), 16ms UI, 20ms Bluetooth, 100ms file I/O
 
@@ -80,7 +80,7 @@ python3 tools/grinder.py analyze
 **Time Mode Pulses:** Split-button completion screen (OK + PULSE), `TIME_ADDITIONAL_PULSE` phase, 100ms duration
 
 **Grind Settings:** Configurable through Menu → Grind Settings page
-- **Mode Selection**: Radio buttons for Weight/Time mode selection
+- **Mode**: Radio buttons for Weight/Time mode selection
 - **Swipe Gestures Toggle**: Enable/disable vertical swipe gestures for mode switching (default: disabled)
 - **Automation**: Start on Cup and Return on Removal toggles
 - **Purging**: Radio buttons (Prime/Purge) and Amount slider (0.1g-2.5g)

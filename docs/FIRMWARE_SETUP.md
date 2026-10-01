@@ -44,7 +44,7 @@ Before flashing, verify that the selected image matches the display generation. 
 
 2. **Future Updates (Wi-Fi Recommended)**
    - Switch Wi-Fi on at **Menu → Wi-Fi** if it is off, and join your network
-   - On the grinder, open **Menu → Firmware Update** and tap **Allow Update**.
+   - On the grinder, open **Menu → Firmware** and tap **Allow Update**.
      The permission covers one update started within 2 minutes; updates
      without it are refused over both Wi-Fi and Bluetooth
    - Open `http://smartgrind.local` (or the IP shown on the Wi-Fi page), choose
@@ -81,7 +81,7 @@ flasher is unavailable, follow
 the matching V1 or V2 target with PlatformIO.
 
 For an existing Smart Grind installation, enable Bluetooth on the grinder, tap
-**Menu → Firmware Update → Allow Update**, and within 2 minutes upload a
+**Menu → Firmware → Allow Update**, and within 2 minutes upload a
 matching image with:
 
 ```bash
@@ -120,7 +120,7 @@ heavier reference weight if it repeats.
 
 ### Auto-Tune Motor Response
 
-The auto-tune feature models your grinder's motor response behavior by measuring the physical lag between relay activation and grounds production. This accounts for hardware variations like voltage differences (110V vs 220V), relay types (solid-state vs mechanical), and burr inertia across different grinder models. The default 50ms value works well for most setups, but if you experience unreliable pulse corrections or want to minimize coffee waste through hardware-specific optimization, run auto-tune via **Menu → Tune Pulses** (Tools section). The 1-2 minute calibration process finds the minimum reliable pulse duration for your specific hardware and saves it automatically.
+The auto-tune feature models your grinder's motor response behavior by measuring the physical lag between relay activation and grounds production. This accounts for hardware variations like voltage differences (110V vs 220V), relay types (solid-state vs mechanical), and burr inertia across different grinder models. The default 50ms value works well for most setups, but if you experience unreliable pulse corrections or want to minimize coffee waste through hardware-specific optimization, run auto-tune via **Menu → Pulse Tune** (Tools section). The 1-2 minute calibration process finds the minimum reliable pulse duration for your specific hardware and saves it automatically.
 
 If Pulse Tune repeatedly cannot finish, open **Menu → Grind Settings → Motor
 Response** and set the latency manually between 30 ms and 300 ms. The web
@@ -131,7 +131,7 @@ because a value that is too short can make finishing pulses unreliable.
 
 ### Diagnostics System
 
-The system includes comprehensive load cell health monitoring accessible via **Menu → Diagnostics**. A warning icon (⚠) appears in the top-right corner when a diagnostic is active; open **Menu → Diagnostics** to see which one.
+The system includes comprehensive load cell health monitoring accessible via **Menu → Diagnostics**. A warning icon (⚠) appears in the top-right corner of the ready screen when a diagnostic is active; open **Menu → Diagnostics** to see which one.
 
 **Diagnostic Types:**
 1. **Load Cell Not Calibrated** - Appears until calibration is completed via Menu → Calibrate (Tools section)

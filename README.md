@@ -102,7 +102,7 @@ https://github.com/user-attachments/assets/e20ce3e2-417e-4a3b-bb48-05591fce9418
   is off until switched on at **Menu → Wi-Fi**, which can also forget the
   network.
 - **Firmware updates over Wi-Fi or Bluetooth**, each allowed first at
-  **Menu → Firmware Update**, plus USB recovery. One-click GitHub release
+  **Menu → Firmware**, plus USB recovery. One-click GitHub release
   updates are available as a build option (`NETWORK_RELEASE_UPDATES_ENABLED`).
 - **On-device diagnostics** with downloadable retained startup/runtime logs.
 - **Checked settings saves and stronger fault handling**, including runtime
@@ -112,7 +112,7 @@ https://github.com/user-attachments/assets/e20ce3e2-417e-4a3b-bb48-05591fce9418
 
 Network clients request a selected-profile start or stop through the same grind
 controller used by the touchscreen; they never drive the relay directly. Remote
-starts are off until **Menu → Wi-Fi → Remote start** is confirmed on the
+starts are off until **Menu → Wi-Fi → Remote** is confirmed on the
 grinder; stop always works. The firmware remains responsible for load-cell
 checks, state transitions and motor safety.
 
@@ -123,7 +123,7 @@ The responsive web interface is served directly by the grinder at
 Choose a saved dose, start or stop it with the round grind control, follow the
 current grind, review its full recorded trace, change grinder/display settings
 and install firmware from a browser on the same network. To install, tap
-**Menu → Firmware Update → Allow Update** on the grinder, then upload the V1 or
+**Menu → Firmware → Allow Update** on the grinder, then upload the V1 or
 V2 application image from **System & updates** within 2 minutes. With the
 release channel compiled in, the page and the grinder also check GitHub
 releases and offer a one-tap install. If mDNS is unavailable, use the IP

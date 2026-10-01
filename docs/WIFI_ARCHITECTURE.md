@@ -59,7 +59,7 @@ local API assumes the home network is not fully trusted. Three layers apply.
 LAN. Anything that can run the motor or replace the firmware therefore needs a
 decision made at the grinder:
 
-- Firmware updates over Wi-Fi or Bluetooth need Menu > Firmware Update > Allow
+- Firmware updates over Wi-Fi or Bluetooth need Menu > Firmware > Allow
   Update. The permission covers one update and lapses after 2 minutes. The web
   prepare step consumes it once the grinder is reserved for the update, and
   returns a single-use token that the following upload or release install must
@@ -67,7 +67,7 @@ decision made at the grinder:
   step. An upload or install sent before the update is ready does not use up
   the token.
 - Remote grind starts (`start`, `start_manual`) are off until Menu > Wi-Fi >
-  Remote start is confirmed. Even then they are accepted only while the
+  Remote is confirmed. Even then they are accepted only while the
   grinder shows its main screen (never during calibration, menus, editing or
   dialogs) and at most once every 3 seconds. Stop, dismiss and tare always
   work. Neither permission can be changed over the network.

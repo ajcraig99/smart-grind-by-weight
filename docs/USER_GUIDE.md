@@ -62,7 +62,7 @@ Access **Menu → Grind Settings** to configure:
 - **Start on Cup**: Start the active profile automatically when the scale gains the configured cup threshold (50 g by default) after a short post-boot warmup
 - **Return on Removal**: Leave the completion screen as soon as that cup weight drops back off the scale
 - **Motor Latency** *(Advanced)*: View or manually adjust the minimum reliable
-  motor pulse from 30–300 ms in 5 ms steps. Use **Menu → Tune Pulses** first;
+  motor pulse from 30–300 ms in 5 ms steps. Use **Menu → Pulse Tune** first;
   this manual control is a fallback when automatic tuning cannot complete.
 - **Purging** *(Advanced)*: Control how the grinder saturates itself before weight-mode grinding
   - **Prime mode**: Keeps the coffee used to saturate the grinder, continues immediately
@@ -74,7 +74,7 @@ Access **Menu → Grind Settings** to configure:
     so the dose is right either way. You can lift the cup as soon as the motor
     stops; the prompt appears at once. If the scale reads as if the cup were
     still off, the grinder asks you to put it back; a lighter replacement cup
-    can be confirmed. An unanswered prompt ends the grind after 5 minutes
+    can be confirmed with **RESUME**. An unanswered prompt ends the grind after 5 minutes
 
   *Explanation:* The time between motor start and grinds hitting the cup (grind latency) is used to predict the coast time (how long grinds will keep coming after the motor is disengaged). Purging clears stale coffee and saturates the grinder with fresh grounds, ensuring accurate latency detection. If you prefer to keep all coffee without manual intervention, select Prime mode.
 
@@ -146,45 +146,45 @@ Main Screen (swipe left/right between pages, shown by the dots above the round b
     +-- Tools (quick actions)
     |   |-- Scale (live weight view with Tare action)
     |   |-- Calibrate (launch calibration workflow)
-    |   |-- Tune Pulses (auto-tune motor latency)
+    |   |-- Pulse Tune (auto-tune motor latency)
     |   |-- Motor Test (1s safety pulse)
-    |   \-- Firmware Update (Allow Update: one Wi-Fi or Bluetooth update within 2 min)
+    |   \-- Firmware (Allow Update: one Wi-Fi or Bluetooth update within 2 min)
     |
     +-- Settings
     |   +-- Bluetooth
     |   |   |-- Bluetooth toggle (30m timer)
     |   |   |-- Bluetooth startup toggle (configurable auto-enable)
     |   |   |-- Connection status display
-    |   |   \-- Auto-disable timer display
+    |   |   \-- "Off in N min" timer display
     |   |
     |   +-- Wi-Fi
     |   |   |-- Wi-Fi toggle (off on a new grinder)
     |   |   |-- Connection status, address, setup QR code
-    |   |   |-- Remote start toggle (web/Home Assistant starts; confirmation required)
-    |   |   \-- Forget Network button (reopens the setup network while Wi-Fi is on)
+    |   |   |-- Remote toggle (web/Home Assistant starts; confirmation required)
+    |   |   \-- FORGET WI-FI button (reopens the setup network while Wi-Fi is on)
     |   |
 	    |   +-- Display
-	    |   |   |-- Normal brightness slider
+	    |   |   |-- "Normal" brightness slider
 	    |   |   |-- Screensaver brightness slider
-	    |   |   |-- Screensaver startup/idle toggles
-	    |   |   \-- Optional Turn Display Off toggle
+	    |   |   |-- Screensaver startup and "On idle" toggles
+	    |   |   \-- Optional "Display off" toggle
     |   |
     |   \-- Grind Settings
     |       |-- Swipe Gestures toggle (enable/disable vertical swipes)
     |       |-- Time Mode toggle (direct weight/time mode selection)
-    |       |-- Start on Cup toggle and configurable cup threshold
+    |       |-- Start on Cup toggle and configurable "Trigger" cup threshold
     |       |-- Return on Removal toggle (drop back to Ready when that weight leaves)
     |       |-- Purging (Prime/Purge radio buttons)
     |       |-- Amount slider (0.1g-2.5g for purge/prime operation)
-    |       |-- Motor latency slider (30-300ms manual Pulse Tune fallback)
-    |       \-- Coast compensation slider
+    |       |-- Latency slider (30-300ms manual Pulse Tune fallback)
+    |       \-- Coast slider
     |
     \-- Info
         +-- Diagnostics
-        |   |-- Load Cell Status (calibration flag, calibration factor)
+        |   |-- Load Cell (calibration flag, calibration factor)
         |   |-- Noise Floor (std dev g/ADC, noise level indicator)
         |   |-- Active diagnostic warnings
-        |   \-- Reset diagnostics button
+        |   \-- Clear Warnings button
         |
         +-- System Info
         |   |-- Firmware version & build number
@@ -195,7 +195,7 @@ Main Screen (swipe left/right between pages, shown by the dots above the round b
         +-- Logs & Data
         |   |-- Logging toggle (enable/disable session file writing)
         |   |-- Sessions / Events / Measurements counters
-        |   |-- Purge Logs button
+        |   |-- PURGE button (purges the logs)
         |   \-- Factory Reset button
         |
         \-- Lifetime Stats
@@ -235,16 +235,16 @@ Wi-Fi is off on a new grinder. Switch it on at **Menu → Wi-Fi**: with no saved
 network the grinder opens its secured setup network and shows its name,
 password and a QR code; join it with your phone and pick your home network.
 Afterwards the grinder is at `http://smartgrind.local` (or the IP shown on the
-Wi-Fi page). **Forget Network** removes the saved network and, with Wi-Fi on,
+Wi-Fi page). **FORGET WI-FI** removes the saved network and, with Wi-Fi on,
 reopens the setup network.
 
 The web page and Home Assistant can always stop a grind, dismiss a result or
-tare. Starting grinds from them needs **Remote start** switched on at
+tare. Starting grinds from them needs **Remote** switched on at
 **Menu → Wi-Fi**, which asks for confirmation. Remote starts are accepted only
 while the grinder shows its main screen and no more than once every 3 seconds.
-Remote start and Wi-Fi can only be changed on the grinder itself.
+Remote and Wi-Fi can only be changed on the grinder itself.
 
-Firmware updates over Wi-Fi or Bluetooth need **Menu → Firmware Update → Allow
+Firmware updates over Wi-Fi or Bluetooth need **Menu → Firmware → Allow
 Update** first. The permission covers one update started within 2 minutes; tap
 **Cancel** to withdraw it. While it is open, any device on your network or in
 Bluetooth range can use it, so allow it only when you are about to start the
@@ -252,7 +252,7 @@ update yourself.
 
 ## Bluetooth connectivity
 
-Bluetooth can be configured in **Menu → Bluetooth** with optional auto-startup (5-minute timer) or manual control (30-minute timer when manually enabled). The blue Bluetooth symbol in the top-right corner indicates when active. Bluetooth enables wireless firmware updates via BLE OTA, legacy grind-data export and device management. Grind session logging is configurable in **Menu → Data → Logging** and is enabled by default so the local web History page works immediately; disable it if you do not want sessions written to flash.
+Bluetooth can be configured in **Menu → Bluetooth** with optional auto-startup (5-minute timer) or manual control (30-minute timer when manually enabled). The blue Bluetooth symbol in the top-right corner of the ready screen indicates when active. Bluetooth enables wireless firmware updates via BLE OTA, legacy grind-data export and device management. Grind session logging is configurable in **Menu → Data → Logging** and is enabled by default so the local web History page works immediately; disable it if you do not want sessions written to flash.
 
 ---
 
@@ -276,8 +276,8 @@ grinder.
   duration in the local web app. You can optionally turn the panel fully off
   after a second delay; this is disabled by default, so the current
   always-visible screensaver behaviour is preserved after updating.
-- **Device settings**: Brightness, startup/idle screensaver and **Turn Display
-  Off** toggles remain available under **Menu → Display** and are synchronized
+- **Device settings**: Brightness, the startup and idle screensaver toggles and the **Display
+  off** toggle remain available under **Menu → Display** and are synchronized
   with the web settings. The web app controls the additional off delay.
 - **Wake behaviour**: Touching the dark panel, changing the scale load or
   starting a grind wakes it. The first wake touch is consumed so it cannot

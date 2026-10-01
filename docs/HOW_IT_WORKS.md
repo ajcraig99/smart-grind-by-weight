@@ -56,7 +56,7 @@ The motor response latency represents the physical system lag between relay acti
 - Motor inertia (110V vs 220V motors)
 - Burr spin-up characteristics (different grinder models/designs)
 
-The latency value is automatically calibrated via **Auto-Tune Motor Response** (Menu → Tune Pulses) using binary search with statistical verification, or uses a safe 50ms default. This enables universal grinder compatibility without firmware modifications.
+The latency value is automatically calibrated via **Auto-Tune Motor Response** (Menu → Pulse Tune) using binary search with statistical verification, or uses a safe 50ms default. This enables universal grinder compatibility without firmware modifications.
 
 **Key Features:**
 - Noise-resistant through multi-modal load cell measurement (instant, smoothed, filtered)

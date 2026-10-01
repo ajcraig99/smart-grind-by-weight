@@ -332,7 +332,7 @@ changes from the web page, so it cannot wait indefinitely. Start a new grind.
 ## Motor Safety Stop
 
 **Applies to:** A grind ending with "Motor safety stop", or a grind start,
-**Motor Test** or **Tune Pulses** refused with "Motor stopped".
+**Motor Test** or **Pulse Tune** refused with "Motor stopped".
 
 The grind control loop must check in with the motor driver at least once a
 second while the motor runs continuously. If it does not, a separate timer
@@ -363,7 +363,7 @@ Check **Menu → Diagnostics → "Noise Floor"** (see
 [Diagnostics System](FIRMWARE_SETUP.md#diagnostics-system) for details). If
 "Noise level: Too High" (red text) appears persistently, your load cell has
 sustained noise issues that will cause slow taring (>2 seconds). A warning icon
-(⚠) will appear in the top-right corner when sustained noise is detected.
+(⚠) will appear in the top-right corner of the ready screen when sustained noise is detected.
 
 ### Resolution
 1. **Check load cell wiring:**
@@ -373,7 +373,7 @@ sustained noise issues that will cause slow taring (>2 seconds). A warning icon
 
 2. **Check calibration factor (reference examples only):**
 
-   Calibration factors vary between individual load cells, but extreme deviations may indicate hardware issues. Check your calibration factor in **Menu → Diagnostics → Load Cell Status**. Example values from tested units:
+   Calibration factors vary between individual load cells, but extreme deviations may indicate hardware issues. Check your calibration factor in **Menu → Diagnostics → Load Cell**. Example values from tested units:
    - **1KG T70 load cell**: ±4400 (example)
    - **0.3KG Mavin Load Cell**: ±6580 (example)
 
@@ -400,7 +400,7 @@ Motor response latency mismatch between firmware settings and actual hardware ch
 
 **Recommended:** Use the Auto-Tune Motor Response feature to automatically calibrate optimal pulse duration for your hardware:
 
-1. **Access auto-tune**: Menu → Tune Pulses (Tools section)
+1. **Access auto-tune**: Menu → Pulse Tune (Tools section)
 2. **Prepare system**:
    - Ensure beans are in hopper
    - Place dosing cup on scale

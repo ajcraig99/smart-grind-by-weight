@@ -48,6 +48,13 @@ npm --prefix sim/web install && npm --prefix sim/web run build   # -> sim/dist/i
   `sim/qa/REPORT.md`, screenshots in `sim/qa/screenshots/`). Both use headless Chromium via file://
   (`PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm --prefix sim/qa install` once; set the Chromium path in the scripts).
 
+Layout audit: `node sim/qa/layout_audit.mjs` (needs `sim/dist/index.html` built; set `CHROME_PATH` to
+override the Chrome location). It walks every screen of the firmware UI plus the Pulse Tune, calibration,
+grind and warning-icon flows, and checks each piece of text and each control for these defects:
+truncated, word-split, clipped-bottom, sticks-out-sideways, sticks-out-vertically, into-padding,
+screen-edge, overlap and needs-scrolling. It takes about 5 minutes, writes PNGs to
+`sim/qa/out/layout/` and exits non-zero on any defect.
+
 ## The page
 
 Dashboard: live weight/flow/error/relay traces against the plant's truth, controller state diagram,

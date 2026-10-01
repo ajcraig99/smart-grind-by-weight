@@ -6,6 +6,27 @@ line. Earlier release history remains available in the original project's
 
 ## [Unreleased] - personal fork
 
+### Shorter on-device labels and a layout audit
+
+- Shorten labels so text fits the 280 x 456 px screen: menu entries are now
+  **Pulse Tune** and **Firmware**; the Wi-Fi page has **Remote** and
+  **FORGET WI-FI**; the Display page has **Screensaver**, **On idle**,
+  **Display off** and a **Normal** brightness slider; Grind Settings has
+  **Mode**, **Motor** and **Coast** headings with **Trigger**, **Latency** and
+  **Coast** sliders; Diagnostics has **Load Cell** and a **Clear Warnings**
+  button; the Bluetooth timer reads **Off in N min**. Dialog buttons read
+  **RESUME**, **PURGE** and **ENABLE**, and the Pulse Tune success title is
+  **Tune Complete**. The Lifetime Stats page no longer repeats its title as a
+  heading.
+- Show the Bluetooth, Wi-Fi, warning and update icons only on the ready screen.
+- Long text now ends in "..." or wraps instead of overlapping other items, long
+  page and dialog titles shrink to fit, dialog buttons keep fixed positions,
+  and screens keep an 8 px margin. Line breaks no longer fall at a full stop,
+  so a value such as "5.7g" never splits.
+- Add a layout audit to the digital twin (`node sim/qa/layout_audit.mjs`) that
+  walks every screen and flow and fails on any text or control that is cut off,
+  overlaps or leaves the screen.
+
 ### Network and Bluetooth security
 
 - Refuse web requests and WebSocket handshakes that address the grinder by any
