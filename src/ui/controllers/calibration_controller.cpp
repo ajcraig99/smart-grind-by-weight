@@ -113,8 +113,8 @@ void CalibrationUIController::handle_ok() {
                     const bool has_reading = sensor && sensor->has_recent_sample();
                     ui_manager_->show_confirmation(
                         "Tare failed",
-                        has_reading ? "The scale kept moving.\nKeep it still and empty,\nthen try again."
-                                    : "No reading from the load cell.\nCheck its wiring, then\ntry again.",
+                        has_reading ? "The scale kept moving. Keep it still and empty, then try again."
+                                    : "No reading from the load cell. Check its wiring, then try again.",
                         "OK", lv_color_hex(THEME_COLOR_WARNING), nullptr, "BACK");
                     return;
                 }
@@ -132,7 +132,7 @@ void CalibrationUIController::handle_ok() {
                 if (!calibrated) {
                     // The previous factor is kept; calibration restarts at the empty step.
                     ui_manager_->show_confirmation(
-                        "Calibration failed", "No valid reading of the\nweight. The previous\ncalibration is kept.",
+                        "Calibration failed", "No valid reading of the weight. The previous calibration is kept.",
                         "OK", lv_color_hex(THEME_COLOR_WARNING), nullptr, "BACK");
                     return;
                 }

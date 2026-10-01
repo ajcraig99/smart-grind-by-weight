@@ -183,12 +183,8 @@ void MenuUIController::handle_reset() {
 
     ui_manager_->show_confirmation(
         "FACTORY RESET",
-        "This will reset all settings to factory defaults:\n\n"
-        "• Profile weights\n"
-        "• Calibration data\n"
-        "• Grind history\n"
-        "• Lifetime statistics\n\n"
-        "This action cannot be undone.",
+        "Resets profiles, calibration, grind history and lifetime statistics.\n\n"
+        "This cannot be undone.",
         "RESET",
         lv_color_hex(THEME_COLOR_ERROR),
         [this]() { perform_factory_reset(); },
@@ -202,11 +198,9 @@ void MenuUIController::handle_purge() {
 
     ui_manager_->show_confirmation(
         "PURGE LOGS",
-        "This will remove all saved grind log files from flash.\n"
-        "Lifetime statistics will be preserved."
-        "\n\n"
-        "This action cannot be undone.",
-        "PURGE LOGS",
+        "Removes all saved grind logs. Lifetime statistics are kept.\n\n"
+        "This cannot be undone.",
+        "PURGE",
         lv_color_hex(THEME_COLOR_ERROR),
         [this]() { execute_purge_operation(); },
         "CANCEL",
@@ -275,8 +269,8 @@ void MenuUIController::show_tare_failed() {
     const bool has_reading = sensor && sensor->has_recent_sample();
     ui_manager_->show_confirmation(
         "Tare incomplete",
-        has_reading ? "The scale kept moving.\nKeep it still, then\ntap TARE again."
-                    : "No reading from the load cell.\nCheck its wiring, then\ntap TARE again.",
+        has_reading ? "The scale kept moving. Keep it still, then tap TARE again."
+                    : "No reading from the load cell. Check its wiring, then tap TARE again.",
         "OK", lv_color_hex(THEME_COLOR_WARNING), nullptr, "BACK");
 }
 
@@ -289,10 +283,8 @@ void MenuUIController::handle_autotune() {
     if (autotune_controller) {
         ui_manager_->show_confirmation(
             "Auto-Tune Setup",
-            "Before starting:\n\n"
-            "- Beans loaded\n"
-            "- Cup on scale\n\n"
-            "Process takes ~1 min.",
+            "Load beans and put a cup on the scale.\n\n"
+            "Takes about 1 minute.",
             "START",
             lv_color_hex(THEME_COLOR_ACCENT),
             [autotune_controller]() { autotune_controller->confirm_and_begin(); },

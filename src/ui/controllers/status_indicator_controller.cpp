@@ -97,7 +97,7 @@ void StatusIndicatorController::prompt_firmware_update() {
     if (!ui_manager_ || !device_web_server.firmware_update_available()) return;
     const String tag = device_web_server.latest_release_tag();
     if (tag.isEmpty()) return;
-    const String message = "Install " + tag + " now?\n\nThe grinder will restart.\nDo not remove power.";
+    const String message = "Install " + tag + " now?\n\nThe grinder will restart. Do not remove power.";
     ui_manager_->show_confirmation(
         "UPDATE READY", message.c_str(), "INSTALL", lv_color_hex(THEME_COLOR_SUCCESS),
         [this]() {

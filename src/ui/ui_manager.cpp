@@ -370,7 +370,7 @@ bool UIManager::show_motor_safety_stop_notice() {
     Grinder* grinder = hardware_manager ? hardware_manager->get_grinder() : nullptr;
     if (!grinder || !grinder->has_safety_stop()) return false;
     show_confirmation(
-        "Motor stopped", "The control loop stalled, so the\nmotor was stopped. Restart the\ngrinder to use it again.",
+        "Motor stopped", "The control loop stalled, so the motor was stopped. Restart the grinder to use it again.",
         "OK", lv_color_hex(THEME_COLOR_WARNING), nullptr, "BACK");
     return true;
 }

@@ -9,6 +9,7 @@ void ConfirmScreen::create() {
     lv_obj_set_style_bg_opa(screen, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(screen, 0, 0);
     lv_obj_set_style_pad_ver(screen, 6, 0);
+    lv_obj_set_style_pad_bottom(screen, THEME_SCREEN_MARGIN_PX, 0);
     lv_obj_set_style_pad_hor(screen, 0, 0);
     lv_obj_set_style_pad_gap(screen, 5, 0);
     
@@ -22,14 +23,17 @@ void ConfirmScreen::create() {
     lv_obj_set_style_text_font(title_label, &lv_font_montserrat_36, 0);
     lv_obj_set_style_text_align(title_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_width(title_label, LV_PCT(100));
+    lv_label_set_long_mode(title_label, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_pad_hor(title_label, THEME_SCREEN_MARGIN_PX, 0);
     // Title takes only the space it needs
     lv_obj_set_flex_grow(title_label, 0);
     
-    lv_obj_t *message_container = lv_obj_create(screen);
+    message_container = lv_obj_create(screen);
     lv_obj_set_width(message_container, LV_PCT(100));
     lv_obj_set_flex_grow(message_container, 1);
     lv_obj_set_style_bg_opa(message_container, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(message_container, 0, 0);
+    lv_obj_set_style_pad_hor(message_container, THEME_SCREEN_MARGIN_PX, 0);
 
     // Set up container to center content
     lv_obj_set_layout(message_container, LV_LAYOUT_FLEX);
@@ -49,7 +53,11 @@ void ConfirmScreen::create() {
     lv_obj_update_layout(message_container);
     lv_obj_scroll_to_y(message_container, 0, LV_ANIM_OFF);  // Scroll to top
 
-    create_dual_button_row(screen, &confirm_button, &cancel_button, "Confirm", "Cancel", lv_color_hex(THEME_COLOR_SUCCESS));
+    create_dual_button_row(screen, &confirm_button, &cancel_button, "Confirm", "Cancel",
+                           lv_color_hex(THEME_COLOR_SUCCESS), lv_color_hex(THEME_COLOR_NEUTRAL),
+                           80, &lv_font_montserrat_24);
+    lv_obj_set_style_pad_hor(confirm_button, THEME_DIALOG_BUTTON_PAD_PX, 0);
+    lv_obj_set_style_pad_hor(cancel_button, THEME_DIALOG_BUTTON_PAD_PX, 0);
     confirm_button_label = lv_obj_get_child(confirm_button, -1);
     cancel_button_label = lv_obj_get_child(cancel_button, -1);
     
@@ -62,10 +70,24 @@ void ConfirmScreen::show(const char* title, const char* message,
                         const char* cancel_text) {
     // Set title and color
     lv_label_set_text(title_label, title);
+    // One line at the largest size that fits; very long titles wrap at 28 px.
+    static const lv_font_t* const title_fonts[] = {&lv_font_montserrat_36, &lv_font_montserrat_32,
+                                                   &lv_font_montserrat_28};
+    lv_obj_update_layout(screen);
+    lv_obj_set_style_text_font(title_label,
+                               pick_font_that_fits(title, lv_obj_get_content_width(title_label), title_fonts, 3), 0);
     lv_obj_set_style_text_color(title_label, confirm_color, 0);
     
     // Set message
     lv_label_set_text(message_label, message);
+
+    // Centre a short message; a long one starts at the top so its first line
+    // is never pushed out of reach above the container.
+    lv_obj_update_layout(message_container);
+    const bool overflows = lv_obj_get_height(message_label) > lv_obj_get_content_height(message_container);
+    lv_obj_set_flex_align(message_container, overflows ? LV_FLEX_ALIGN_START : LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_scroll_to_y(message_container, 0, LV_ANIM_OFF);
     
     // Set confirm button
     lv_label_set_text(confirm_button_label, confirm_text);

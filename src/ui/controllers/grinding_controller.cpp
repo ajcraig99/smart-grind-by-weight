@@ -289,11 +289,11 @@ void GrindingUIController::show_start_failure() {
     if (weight_grind && sensor &&
         (sensor->has_hardware_fault() || !sensor->has_recent_sample())) {
         ui_manager_->show_confirmation(
-            "Scale not ready", "No reading from the load cell.\nCheck its wiring, then see\nDiagnostics in the menu.",
+            "Scale not ready", "No reading from the load cell. Check its wiring, then see Diagnostics in the menu.",
             "OK", lv_color_hex(THEME_COLOR_WARNING), nullptr, "BACK");
     } else {
         ui_manager_->show_confirmation(
-            "Could not start", "Check scale and grinder.\nAn update may be active.",
+            "Could not start", "Check the scale and grinder. An update may be running.",
             "OK", lv_color_hex(THEME_COLOR_WARNING), nullptr, "BACK");
     }
 }
@@ -369,8 +369,8 @@ void GrindingUIController::continue_after_purge(bool check_vessel) {
     switch (ui_manager_->grind_controller->continue_from_purge(check_vessel)) {
         case PurgeContinueResult::VESSEL_MISSING:
             ui_manager_->show_confirmation(
-                "Cup missing?", "The scale is lighter than at\nthe start. Put the cup back,\nor continue with this one.",
-                "CONTINUE", lv_color_hex(THEME_COLOR_WARNING),
+                "Cup missing?", "The scale is lighter than at the start. Put the cup back, or resume with this one.",
+                "RESUME", lv_color_hex(THEME_COLOR_WARNING),
                 [this]() { continue_after_purge(false); }, "BACK");
             return;
         case PurgeContinueResult::SCALE_NOT_READY:
@@ -443,7 +443,7 @@ void GrindingUIController::handle_refill_result(RefillContinueResult result) {
             // The grind keeps its zero, which includes the cup, so it can only
             // go on once that cup is back: there is nothing to continue with.
             ui_manager_->show_confirmation(
-                "Cup missing?", "The scale is lighter than at\nthe start. Put the cup back,\nthen press " LV_SYMBOL_OK " again.",
+                "Cup missing?", "The scale is lighter than at the start. Put the cup back, then press " LV_SYMBOL_OK " again.",
                 "OK", lv_color_hex(THEME_COLOR_WARNING), nullptr, "BACK");
             return;
         case RefillContinueResult::READING_MOVED: {
@@ -454,10 +454,10 @@ void GrindingUIController::handle_refill_result(RefillContinueResult result) {
                                        : 0.0f;
             char message[160];
             std::snprintf(message, sizeof(message),
-                          "The scale reads " SYS_WEIGHT_DISPLAY_FORMAT ";\nit read " SYS_WEIGHT_DISPLAY_FORMAT
-                          " when grinding\nstopped. Put the cup back,\nor continue from " SYS_WEIGHT_DISPLAY_FORMAT ".",
+                          "The scale reads " SYS_WEIGHT_DISPLAY_FORMAT "; it read " SYS_WEIGHT_DISPLAY_FORMAT
+                          " when grinding stopped. Put the cup back, or resume from " SYS_WEIGHT_DISPLAY_FORMAT ".",
                           static_cast<double>(now_g), static_cast<double>(paused_g), static_cast<double>(now_g));
-            ui_manager_->show_confirmation("Cup moved?", message, "CONTINUE", lv_color_hex(THEME_COLOR_WARNING),
+            ui_manager_->show_confirmation("Cup moved?", message, "RESUME", lv_color_hex(THEME_COLOR_WARNING),
                                            [this]() { continue_after_refill(true); }, "BACK");
             return;
         }
