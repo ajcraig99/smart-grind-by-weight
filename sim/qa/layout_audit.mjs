@@ -338,14 +338,20 @@ async function reachRefillPrompt(maxGrinds = 8) {
 const releasePressShown = () => page.evaluate(
   () => [...document.querySelectorAll('#actions button')].some((b) => b.textContent === 'Release press'));
 
-// Taps CONTINUE (the check button) until the prompt has gone, and says how many taps it took.
-async function continuePrompt(promptState) {
-  for (let tap = 1; tap <= 5; tap++) {
-    await tapPanel(200, 396);
-    await page.waitForTimeout(1200);
-    if ((await uiStateName()) !== promptState) { if (tap > 1) console.log(`note: ${promptState} needed ${tap} taps`); return; }
-  }
-  throw new Error(`${promptState} did not continue after 5 taps`);
+// The grind screen ignores a tap that starts sooner than USER_BUTTON_REARM_MS (virtual time) after
+// a button changes meaning, such as the check button appearing on a prompt. Read it from the
+// firmware so the wait follows the constant.
+const REARM_MS = Number(/#define USER_BUTTON_REARM_MS\s+(\d+)/.exec(
+  fs.readFileSync(path.join(here, '..', '..', 'src', 'config', 'user.h'), 'utf8'))?.[1]);
+if (!(REARM_MS > 0)) throw new Error('USER_BUTTON_REARM_MS not found in src/config/user.h');
+
+// Taps CONTINUE (the check button) once the re-arm time has passed since the prompt appeared
+// (call this right after waiting for the prompt), and fails if that tap is not accepted.
+async function continuePrompt(promptState, promptSeenVirtualS) {
+  await waitVirtual(Math.max(0, REARM_MS + 100 - (await page.evaluate(() => window.twinApp.state().t_s) - promptSeenVirtualS) * 1000));
+  await tapPanel(200, 396);
+  await page.waitForTimeout(1200);
+  if ((await uiStateName()) === promptState) throw new Error(`${promptState} did not continue after a tap made ${REARM_MS} ms after it appeared`);
 }
 
 async function grindFlow() {
@@ -362,9 +368,10 @@ async function grindFlow() {
     // The prompt follows the tare and the purge grind, so the state passes through GRINDING first.
     const first = await waitForUiState(['PURGE_CONFIRM', 'GRIND_COMPLETE', 'GRIND_TIMEOUT']);
     if (first === 'PURGE_CONFIRM') {
+      const seenAt = await page.evaluate(() => window.twinApp.state().t_s);
       await page.waitForTimeout(400);
       await audit('flow-purge');
-      await continuePrompt('PURGE_CONFIRM');
+      await continuePrompt('PURGE_CONFIRM', seenAt);  // waits out the re-arm time first
     } else {
       console.log(`FAIL  flow-purge: no purge prompt (went to ${first} instead); the grinder was already purged since boot`);
       failing.add('flow-purge');
