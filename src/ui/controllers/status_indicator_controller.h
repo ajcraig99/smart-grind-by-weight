@@ -1,5 +1,6 @@
 #pragma once
 #include <lvgl.h>
+#include "../../system/state_machine.h"
 
 class UIManager;
 
@@ -14,6 +15,9 @@ public:
     void update();
     void prompt_firmware_update();
 
+    // Icons show only on screens with room for them at the top.
+    void on_state_changed(UIState state);
+
 private:
     void update_ble_status_icon();
     void update_wifi_status_icon();
@@ -21,6 +25,7 @@ private:
     void update_firmware_update_icon();
 
     UIManager* ui_manager_;
+    lv_obj_t* bar_ = nullptr;  // transparent, non-clickable parent of the four icons
     lv_obj_t* ble_status_icon_ = nullptr;
     lv_obj_t* wifi_status_icon_ = nullptr;
     lv_obj_t* warning_icon_ = nullptr;

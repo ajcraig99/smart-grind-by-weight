@@ -353,6 +353,10 @@ void UIManager::switch_to_state(UIState new_state) {
         grinding_controller_->on_state_changed(new_state);
         grinding_controller_->update_grind_button_icon();
     }
+
+    if (status_indicator_controller_) {
+        status_indicator_controller_->on_state_changed(new_state);
+    }
 }
 
 void UIManager::show_confirmation(const char* title, const char* message, 

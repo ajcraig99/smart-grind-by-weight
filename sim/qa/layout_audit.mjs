@@ -132,23 +132,87 @@ async function waitForLabel(labels, timeoutMs = 120000) {
   throw new Error(`none of ${JSON.stringify(labels)} appeared within ${timeoutMs / 1000} s`);
 }
 
-const failing = new Set();
-for (const [name, steps] of SCREENS) {
-  let stepsOk = true;
-  for (const [cmd, arg = ''] of steps) {
-    if (cmd === 'wait') { await waitVirtual(Number(arg)); continue; }
-    const ok = await page.evaluate(([c, a]) => window.twinApp.ui(c, a), [cmd, String(arg)]);
-    await page.waitForTimeout(400);  // let the firmware loop lay out and draw
-    if (!ok) {
-      console.log(`FAIL  ${name}: step ${cmd} "${arg}" found nothing`);
-      failing.add(name);
-      stepsOk = false;
-      break;
-    }
-  }
-  if (stepsOk) await audit(name);
-  await page.evaluate(() => window.twinApp.ui('ready', 2));
+// ---- Reading the device screen: the warning icon and the ready-screen tab dots. ----
+// Both read the canvas pixels. Panel coordinates are 280 x 456.
+async function readCanvas(fn, arg) {
+  return page.evaluate(async ([src, a]) => {
+    const img = new Image();
+    img.src = document.getElementById('screen').toDataURL('image/png');
+    await img.decode();
+    const c = document.createElement('canvas');
+    c.width = img.width; c.height = img.height;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    return new Function('ctx', 'img', 'a', src)(ctx, img, a);
+  }, [fn, arg]);
 }
+// Warning-orange pixels (THEME_COLOR_WARNING 0xCC8800) in the icon strip: the
+// warning icon sits left of the Bluetooth and Wi-Fi icons, top right.
+const warningPixels = () => readCanvas(`
+  const sx = img.width / 280, sy = img.height / 456;
+  const d = ctx.getImageData(Math.floor(130 * sx), 0, Math.floor(110 * sx), Math.floor(50 * sy)).data;
+  let n = 0;
+  for (let i = 0; i < d.length; i += 4) if (d[i] > 150 && d[i + 1] > 90 && d[i + 1] < 180 && d[i + 2] < 60) n++;
+  return n;`);
+// Left edge (panel px) of the wide white pill in the page-indicator dot row.
+const tabPillLeft = () => readCanvas(`
+  const sx = img.width / 280, sy = img.height / 456;
+  const d = ctx.getImageData(0, Math.floor(330 * sy), img.width, 1).data;
+  let run = 0;
+  for (let x = 0; x < img.width; x++) {
+    if (d[x * 4] > 200 && d[x * 4 + 1] > 200 && d[x * 4 + 2] > 200) { if (++run > 14 * sx) return (x - run + 1) / sx; }
+    else run = 0;
+  }
+  return -1;`);
+
+// Mouse input on the device screen, in panel coordinates.
+async function panelPoint(x, y) {
+  await page.locator('#screen').scrollIntoViewIfNeeded();
+  const b = await page.locator('#screen').boundingBox();
+  return { x: b.x + (x / 280) * b.width, y: b.y + (y / 456) * b.height };
+}
+async function tapPanel(x, y, holdMs = 250) {
+  const p = await panelPoint(x, y);
+  await page.mouse.move(p.x, p.y);
+  await page.mouse.down();
+  await page.waitForTimeout(holdMs);
+  await page.mouse.up();
+}
+async function swipePanel(x0, x1, y) {
+  const a = await panelPoint(x0, y);
+  const b = await panelPoint(x1, y);
+  await page.mouse.move(a.x, a.y);
+  await page.mouse.down();
+  for (let i = 1; i <= 14; i++) { await page.mouse.move(a.x + ((b.x - a.x) * i) / 14, a.y); await page.waitForTimeout(100); }
+  await page.mouse.up();
+  await page.waitForTimeout(800);
+}
+
+const failing = new Set();
+// Visits each [name, steps] screen. `after(name)` runs once the screen is audited.
+async function visitScreens(list, namePrefix = '', after = null) {
+  for (const [rawName, steps] of list) {
+    const name = namePrefix + rawName;
+    let stepsOk = true;
+    for (const [cmd, arg = ''] of steps) {
+      if (cmd === 'wait') { await waitVirtual(Number(arg)); continue; }
+      const ok = await page.evaluate(([c, a]) => window.twinApp.ui(c, a), [cmd, String(arg)]);
+      await page.waitForTimeout(400);  // let the firmware loop lay out and draw
+      if (!ok) {
+        console.log(`FAIL  ${name}: step ${cmd} "${arg}" found nothing`);
+        failing.add(name);
+        stepsOk = false;
+        break;
+      }
+    }
+    if (stepsOk) {
+      await audit(name);
+      if (after) await after(rawName, name);
+    }
+    await page.evaluate(() => window.twinApp.ui('ready', 2));
+  }
+}
+await visitScreens(SCREENS);
 
 // ---- Flows: screens that only exist after the firmware has done real work. ----
 const RESULT_LABELS = ['New Motor Latency:', 'Using default:'];  // success, failure
@@ -187,6 +251,7 @@ await tuneFlow('tune-success', null, 'New Motor Latency:');
 await tuneFlow('tune-failure', 'Relay stuck off', 'Using default:');
 
 // The noise-check step follows a real calibration, which needs a weight on the scale.
+// Must run after the tune flows, at 1x speed (it waits in virtual time for the tare).
 async function calibrationNoiseFlow(name) {
   try {
     await page.evaluate(() => window.twinApp.ui('ready', 2));
@@ -207,9 +272,93 @@ async function calibrationNoiseFlow(name) {
   } finally {
     await page.evaluate(() => window.twinApp.ui('ready', 2)).catch(() => {});
     await act('Remove cup').catch(() => {});
+    await page.fill('#actions input[aria-label="Place cup value"]', '').catch(() => {});  // later flows place the default cup
   }
 }
 await calibrationNoiseFlow('calibration-noise');
+
+// The warning icon is drawn only on the ready screen. The mechanical-instability
+// warning needs three weight drops of 0.4 g or more (200 ms apart) while the motor
+// runs (GRIND_MECHANICAL_*). A 10 g "Bump scale" decays within a few control ticks, so
+// bumps while the motor runs count as drops. The Manual tab grinds without a target, so
+// the bumps cannot end the grind early (on a weight tab they push the reading past the target).
+const WARNING_SCREENS = ['ready-double', 'edit', 'menu', 'calibration-empty', 'dialog-motor-test'];
+async function raiseMechanicalWarning(name) {
+  await page.fill('#actions input[aria-label="Bump scale value"]', '50');
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    await page.evaluate(() => window.twinApp.ui('ready', 0));
+    await page.waitForTimeout(600);
+    await tapPanel(140, 396);  // the grind button
+    let bumps = 0;
+    const deadline = Date.now() + 90000;
+    while (Date.now() < deadline && bumps < 12) {
+      await page.waitForTimeout(200);
+      const s = await page.evaluate(() => window.twinApp.state());
+      if (s.phase_name === 'PURGE_CONFIRM') { await tapPanel(200, 396); continue; }  // CONTINUE
+      if (s.ui_state_name === 'GRIND_COMPLETE' || s.phase_name === 'IDLE') break;
+      if (s.motor_speed > 0.05) { await page.click(`#actions button:text-is("Bump scale")`); bumps++; }
+    }
+    await tapPanel(140, 396);  // the same button stops a grind that is still running
+    await page.waitForTimeout(800);
+    await page.evaluate(() => window.twinApp.ui('ready', 0));
+    await page.waitForTimeout(800);
+    if ((await warningPixels()) > 0) return;
+    console.log(`${name}: attempt ${attempt} (${bumps} bumps) did not raise the warning`);
+  }
+  throw new Error('the warning icon never appeared on the ready screen');
+}
+
+async function warningIconFlow(name) {
+  try {
+    await page.evaluate(() => window.twinApp.ui('ready', 2));
+    await act('Place cup');
+    await act('Load beans');
+    await act('Load beans');
+    await page.waitForTimeout(2500);
+
+    // With the icon container on screen a swipe still changes tab, and the grind button still starts a grind.
+    const before = await tabPillLeft();
+    await swipePanel(220, 60, 200);
+    const after = await tabPillLeft();
+    if (!(before >= 0 && after > before)) throw new Error(`swipe did not change tab (dot pill ${before} -> ${after})`);
+    await swipePanel(60, 220, 200);
+    if (Math.abs((await tabPillLeft()) - before) > 1) throw new Error('swipe back did not return to the first tab');
+
+    await raiseMechanicalWarning(name);
+    const shown = new Map();
+    await visitScreens(SCREENS.filter(([n]) => WARNING_SCREENS.includes(n)), 'warning-', async (raw, full) => {
+      const px = await warningPixels();
+      shown.set(raw, px);
+      const onReady = raw.startsWith('ready');
+      if (onReady ? px === 0 : px !== 0) {
+        console.log(`FAIL  ${full}: warning icon ${onReady ? 'missing on' : 'drawn over'} this screen (${px} px)`);
+        failing.add(full);
+      }
+    });
+    console.log(`warning-icon pixels by screen: ${[...shown].map(([k, v]) => `${k}=${v}`).join(', ')}`);
+  } catch (err) {
+    console.log(`FAIL  ${name}: ${err.message}`);
+    await savePng(`${name}-failed.png`).catch(() => {});
+    failing.add(name);
+  } finally {
+    // Leave no warning, cup or open screen behind for the flows after this one.
+    await page.evaluate(() => window.twinApp.ui('ready', 2)).catch(() => {});
+    await act('Remove cup').catch(() => {});
+    await page.evaluate(() => window.twinApp.ui('menu', '')).catch(() => {});
+    await page.waitForTimeout(400);
+    for (const label of ['Diagnostics', 'Clear Warnings', 'CLEAR']) {
+      await page.evaluate((t) => window.twinApp.ui('tap', t), label).catch(() => {});
+      await page.waitForTimeout(400);
+    }
+    await page.evaluate(() => window.twinApp.ui('ready', 2)).catch(() => {});
+    await page.waitForTimeout(600);
+    if ((await warningPixels().catch(() => 0)) !== 0) {
+      console.log(`FAIL  ${name}: warning icon still shown after Clear Warnings`);
+      failing.add(name);
+    }
+  }
+}
+await warningIconFlow('warning-icon');
 
 await browser.close();
 console.log(failing.size ? `${failing.size} screen(s) with layout defects` : 'all screens clean');

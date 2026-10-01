@@ -19,8 +19,17 @@ void StatusIndicatorController::build() {
         return;
     }
 
+    // One full-screen, non-clickable parent so the icons can be shown or hidden
+    // together. A non-clickable object never takes a touch itself (lv_obj_hit_test),
+    // so touches and swipes still reach the screens beneath it.
+    bar_ = lv_obj_create(lv_scr_act());
+    lv_obj_remove_style_all(bar_);
+    lv_obj_set_size(bar_, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(bar_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_clear_flag(bar_, LV_OBJ_FLAG_SCROLLABLE);
+
     // Create BLE status icon (rightmost)
-    ble_status_icon_ = lv_label_create(lv_scr_act());
+    ble_status_icon_ = lv_label_create(bar_);
     lv_label_set_text(ble_status_icon_, LV_SYMBOL_BLUETOOTH);
     lv_obj_set_style_text_font(ble_status_icon_, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(ble_status_icon_, lv_color_hex(THEME_COLOR_ACCENT), 0);
@@ -29,7 +38,7 @@ void StatusIndicatorController::build() {
     lv_obj_clear_flag(ble_status_icon_, LV_OBJ_FLAG_CLICKABLE);
 
     // Wi-Fi is grey while enabled but offline/setup, white when connected.
-    wifi_status_icon_ = lv_label_create(lv_scr_act());
+    wifi_status_icon_ = lv_label_create(bar_);
     lv_label_set_text(wifi_status_icon_, LV_SYMBOL_WIFI);
     lv_obj_set_style_text_font(wifi_status_icon_, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(wifi_status_icon_, lv_color_hex(THEME_COLOR_TEXT_SECONDARY), 0);
@@ -38,7 +47,7 @@ void StatusIndicatorController::build() {
     lv_obj_clear_flag(wifi_status_icon_, LV_OBJ_FLAG_CLICKABLE);
 
     // Create warning icon (left of the connection icons)
-    warning_icon_ = lv_label_create(lv_scr_act());
+    warning_icon_ = lv_label_create(bar_);
     lv_label_set_text(warning_icon_, LV_SYMBOL_WARNING);
     lv_obj_set_style_text_font(warning_icon_, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(warning_icon_, lv_color_hex(THEME_COLOR_WARNING), 0);
@@ -49,7 +58,7 @@ void StatusIndicatorController::build() {
     // A refresh glyph appears only when the background check has found a
     // newer stable release for this exact hardware revision. It is also a
     // generous touch target for starting the update from the grinder.
-    firmware_update_icon_ = lv_label_create(lv_scr_act());
+    firmware_update_icon_ = lv_label_create(bar_);
     lv_label_set_text(firmware_update_icon_, LV_SYMBOL_REFRESH);
     lv_obj_set_style_text_font(firmware_update_icon_, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(firmware_update_icon_, lv_color_hex(THEME_COLOR_SUCCESS), 0);
@@ -176,5 +185,15 @@ void StatusIndicatorController::update_warning_icon() {
         if (last_warning_state_ == 0) return;
         last_warning_state_ = 0;
         lv_obj_add_flag(warning_icon_, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+void StatusIndicatorController::on_state_changed(UIState state) {
+    if (!bar_) return;
+    // Only the ready screen has an empty strip at the top.
+    if (state == UIState::READY) {
+        lv_obj_clear_flag(bar_, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(bar_, LV_OBJ_FLAG_HIDDEN);
     }
 }
