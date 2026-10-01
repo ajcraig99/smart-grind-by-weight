@@ -56,6 +56,7 @@
 #define THEME_SWITCH_HEIGHT_PX 34
 #define THEME_DIALOG_BUTTON_GAP_PX 24                                         // Between the two buttons of a dialog; a tap aimed at one must not land on the other
 #define THEME_DIALOG_BUTTON_PAD_PX 6                                          // Side padding inside dialog buttons
+#define THEME_ROW_WIDTH_PX 260                                                // Width of menu rows, buttons and choice groups
 #define THEME_PAGE_BOTTOM_PAD_PX 16                                           // Below the last control of a scrolling page
 #define THEME_SEPARATOR_LABEL_MAX_PCT 75                                      // Widest a section heading may be (percent of the row, its own side padding included), so a line stays visible each side
 

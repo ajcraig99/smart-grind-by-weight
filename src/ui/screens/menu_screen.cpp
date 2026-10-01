@@ -32,6 +32,7 @@ static void back_event_handler(lv_event_t * e)
 }
 
 // One line high, so LV_LABEL_LONG_DOT ends a too-long label in dots instead of wrapping it.
+// Call once the label's font is final.
 static void keep_to_one_line(lv_obj_t* label) {
     lv_obj_set_height(label, lv_font_get_line_height(lv_obj_get_style_text_font(label, LV_PART_MAIN)));
     lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
@@ -1459,7 +1460,7 @@ lv_obj_t* MenuScreen::create_menu_item(lv_obj_t* parent, const char* text) {
     lv_obj_t* label = lv_label_create(cont);
     lv_label_set_text(label, text);
     // Take the space left of the chevron; a label that is still too long ends
-    // in dots instead of running under the chevron (the layout audit flags it).
+    // in dots instead of running under the chevron
     lv_obj_set_flex_grow(label, 1);
     keep_to_one_line(label);
 
@@ -1484,7 +1485,7 @@ lv_obj_t* MenuScreen::create_toggle_row(lv_obj_t* parent, const char* text, lv_o
     lv_obj_t* label = lv_label_create(row_container);
     lv_label_set_text(label, text);
     // Take the space left of the switch; a label that is still too long ends
-    // in dots instead of running under the switch (the layout audit flags it).
+    // in dots instead of running under the switch
     lv_obj_set_flex_grow(label, 1);
     keep_to_one_line(label);
 
@@ -1507,7 +1508,6 @@ lv_obj_t* MenuScreen::create_slider_row(lv_obj_t* parent, const char* text, lv_o
     lv_obj_set_flex_align(row_container, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_gap(row_container, 14, 0);
     lv_obj_set_style_pad_ver(row_container, 20, 0);
-    lv_obj_set_style_pad_hor(row_container, THEME_ROW_PAD_HOR_PX, 0);
 
     *label = lv_label_create(row_container);
     lv_label_set_text(*label, text);

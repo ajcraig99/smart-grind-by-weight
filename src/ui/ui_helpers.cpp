@@ -266,7 +266,7 @@ lv_obj_t* create_radio_button_group(
     if (layout == LV_FLEX_FLOW_ROW) {
         lv_obj_set_flex_align(group_container, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
         lv_obj_set_style_pad_column(group_container, 10, 0);
-        lv_obj_set_size(group_container, 260, LV_SIZE_CONTENT);
+        lv_obj_set_size(group_container, THEME_ROW_WIDTH_PX, LV_SIZE_CONTENT);
     } else {
         lv_obj_set_flex_align(group_container, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
         lv_obj_set_style_pad_row(group_container, 10, 0);
@@ -284,13 +284,14 @@ lv_obj_t* create_radio_button_group(
     // Calculate button width if auto
     int32_t actual_button_width = button_width;
     if (layout == LV_FLEX_FLOW_ROW && button_width == -1) {
-        actual_button_width = (260 - (option_count - 1) * 10) / option_count;
+        actual_button_width = (THEME_ROW_WIDTH_PX - (option_count - 1) * 10) / option_count;
     }
     
     // Create buttons
     for (int i = 0; i < option_count; i++) {
         lv_color_t color = (i == initial_selection) ? lv_color_hex(THEME_COLOR_PRIMARY) : lv_color_hex(THEME_COLOR_NEUTRAL);
         data->buttons[i] = create_button(group_container, options[i], color, actual_button_width, button_height, &lv_font_montserrat_24);
+        lv_obj_set_style_pad_hor(data->buttons[i], THEME_DIALOG_BUTTON_PAD_PX, 0);
         
         // Add event handler
         lv_obj_add_event_cb(data->buttons[i], radio_button_event_handler, LV_EVENT_CLICKED, nullptr);
