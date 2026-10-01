@@ -21,15 +21,15 @@ void OtaUpdateFailedScreen::create() {
     // Title label - warning icon and text
     title_label = lv_label_create(screen);
     lv_label_set_text(title_label, "Update Failed");
-    static const lv_font_t* const title_fonts[] = {&lv_font_montserrat_36, &lv_font_montserrat_32};
-    lv_obj_set_style_text_font(title_label,
-        pick_font_that_fits("Update Failed", lv_display_get_horizontal_resolution(lv_display_get_default()) -
-                                          2 * THEME_SCREEN_MARGIN_PX, title_fonts, 2), 0);
     lv_obj_set_style_text_color(title_label, lv_color_hex(THEME_COLOR_WARNING), 0);
-    lv_obj_set_width(title_label, LV_PCT(90));
+    lv_obj_set_width(title_label, LV_PCT(100));
     lv_label_set_long_mode(title_label, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_align(title_label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_label_set_long_mode(title_label, LV_LABEL_LONG_WRAP);
+    // Fit the font to the label's real width (the full content width inside the screen padding).
+    static const lv_font_t* const title_fonts[] = {&lv_font_montserrat_36, &lv_font_montserrat_32};
+    lv_obj_update_layout(screen);
+    lv_obj_set_style_text_font(title_label,
+        pick_font_that_fits("Update Failed", lv_obj_get_content_width(title_label), title_fonts, 2), 0);
 
     // Main message
     message_label = lv_label_create(screen);
