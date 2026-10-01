@@ -177,7 +177,7 @@ void OtaDataExportController::poll_data_export() {
     int percent = static_cast<int>(progress);
 
     ui_manager_->ota_screen.update_progress(percent);
-    ui_manager_->ota_screen.update_status("Sending data....");
+    ui_manager_->ota_screen.update_status("Sending data...");
 }
 
 void OtaDataExportController::stop_data_export_ui() {

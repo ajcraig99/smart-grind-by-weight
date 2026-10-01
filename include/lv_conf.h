@@ -676,7 +676,9 @@
 #define LV_TXT_ENC LV_TXT_ENC_UTF8
 
 /** While rendering text strings, break (wrap) text on these chars. */
-#define LV_TXT_BREAK_CHARS " ,;:-_)]}"   /* no '.': "5.7g" must not split into "5." and "7g" */
+#define LV_TXT_BREAK_CHARS " ,;:-_)]}"   /* no '.': "5.7g" must not split into "5." and "7g".
+                                     Long unbroken tokens (e.g. a hostname URL over ~25 characters) can no longer
+                                     wrap at '.'; LV_TXT_LINE_BREAK_LONG_LEN is 0. */
 
 /** If a word is at least this long, will break wherever "prettiest".
  * To disable, set to a value <= 0. */

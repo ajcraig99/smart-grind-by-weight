@@ -47,7 +47,7 @@ void OTAScreen::create() {
     
     // Status label below the arc
     status_label = lv_label_create(screen);
-    lv_label_set_text(status_label, "Receiving update....");
+    lv_label_set_text(status_label, "Receiving update...");
     lv_obj_set_style_text_font(status_label, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(status_label, lv_color_hex(THEME_COLOR_TEXT_SECONDARY), 0);
     lv_obj_set_style_text_align(status_label, LV_TEXT_ALIGN_CENTER, 0);
@@ -89,7 +89,7 @@ void OTAScreen::show_ota_mode() {
     lv_obj_align(screen, LV_ALIGN_TOP_MID, 0, 0);
     
     update_title("Updating");
-    update_status("Receiving update....");
+    update_status("Receiving update...");
     update_progress(0);
     show();
 }

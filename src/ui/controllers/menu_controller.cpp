@@ -183,7 +183,7 @@ void MenuUIController::handle_reset() {
 
     ui_manager_->show_confirmation(
         "FACTORY RESET",
-        "Resets profiles, calibration, grind history and lifetime statistics.\n\n"
+        "Erases all settings, including Wi-Fi and calibration, plus grind history and lifetime statistics.\n\n"
         "This cannot be undone.",
         "RESET",
         lv_color_hex(THEME_COLOR_ERROR),
