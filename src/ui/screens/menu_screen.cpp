@@ -296,9 +296,15 @@ void MenuScreen::fit_header_title() {
                           2 * lv_obj_get_style_pad_column(header, LV_PART_MAIN);
     static const lv_font_t* const fonts[] = {&lv_font_montserrat_36, &lv_font_montserrat_32,
                                              &lv_font_montserrat_28, &lv_font_montserrat_24};
-    lv_obj_set_style_text_font(header_title,
-                               pick_font_that_fits(lv_label_get_text(header_title), space, fonts, 4), 0);
+    const lv_font_t* font = pick_font_that_fits(lv_label_get_text(header_title), space, fonts, 4);
+    lv_obj_set_style_text_font(header_title, font, 0);
     lv_obj_set_width(header_title, space);
+    // Keep the label as tall as at the largest font and centre the text in it,
+    // so the header does not change height or jump between pages.
+    const int32_t target_height = (lv_font_get_line_height(&lv_font_montserrat_36) * 3) / 2;
+    const int32_t pad = (target_height - lv_font_get_line_height(font)) / 2;
+    lv_obj_set_style_pad_top(header_title, pad, 0);
+    lv_obj_set_style_pad_bottom(header_title, pad, 0);
 }
 
 void MenuScreen::setup_menu_page(lv_obj_t* page) {
