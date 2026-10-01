@@ -29,7 +29,7 @@
 // REMOTE GRIND START
 //------------------------------------------------------------------------------
 // Starting the motor from the web page or Home Assistant is off until enabled
-// on the grinder (Menu > Wi-Fi > Remote start). Stop, dismiss and tare remain
+// on the grinder (Menu > Wi-Fi > Remote). Stop, dismiss and tare remain
 // available remotely.
 #define NETWORK_REMOTE_START_DEFAULT_ENABLED false                             // Factory default for remote starts
 #define NETWORK_REMOTE_START_MIN_INTERVAL_MS 3000UL                            // Minimum time between accepted remote starts
