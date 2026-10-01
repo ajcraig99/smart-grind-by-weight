@@ -2,7 +2,7 @@
 #include "../../config/build_info.h"
 #include <Arduino.h>
 #include "../../config/constants.h"
-#include "../../config/build_info.h"
+#include "../ui_helpers.h"
 
 void OtaUpdateFailedScreen::create() {
     screen = lv_obj_create(lv_scr_act());
@@ -16,12 +16,15 @@ void OtaUpdateFailedScreen::create() {
     lv_obj_set_layout(screen, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(screen, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(screen, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(screen, 20, 0);
+    lv_obj_set_style_pad_gap(screen, 12, 0);
 
     // Title label - warning icon and text
     title_label = lv_label_create(screen);
     lv_label_set_text(title_label, "Update Failed");
-    lv_obj_set_style_text_font(title_label, &lv_font_montserrat_36, 0);
+    static const lv_font_t* const title_fonts[] = {&lv_font_montserrat_36, &lv_font_montserrat_32};
+    lv_obj_set_style_text_font(title_label,
+        pick_font_that_fits("Update Failed", lv_display_get_horizontal_resolution(lv_display_get_default()) -
+                                          2 * THEME_SCREEN_MARGIN_PX, title_fonts, 2), 0);
     lv_obj_set_style_text_color(title_label, lv_color_hex(THEME_COLOR_WARNING), 0);
     lv_obj_set_width(title_label, LV_PCT(90));
     lv_label_set_long_mode(title_label, LV_LABEL_LONG_WRAP);
@@ -30,7 +33,7 @@ void OtaUpdateFailedScreen::create() {
 
     // Main message
     message_label = lv_label_create(screen);
-    lv_label_set_text(message_label, "The firmware update failed.\nThe device is still running the previous version.");
+    lv_label_set_text(message_label, "The update failed. The previous version is still running.");
     lv_obj_set_style_text_font(message_label, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(message_label, lv_color_hex(THEME_COLOR_TEXT_PRIMARY), 0);
     lv_obj_set_style_text_align(message_label, LV_TEXT_ALIGN_CENTER, 0);
@@ -39,7 +42,7 @@ void OtaUpdateFailedScreen::create() {
 
     // Details label (build numbers)
     details_label = lv_label_create(screen);
-    lv_obj_set_style_text_font(details_label, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(details_label, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_color(details_label, lv_color_hex(THEME_COLOR_TEXT_SECONDARY), 0);
     lv_obj_set_style_text_align(details_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_width(details_label, LV_PCT(90));

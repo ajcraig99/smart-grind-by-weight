@@ -34,7 +34,7 @@ void GrindingUIController::build_controls() {
     grind_icon_ = lv_img_create(grind_button_);
     lv_img_set_src(grind_icon_, LV_SYMBOL_PLAY);
     lv_obj_center(grind_icon_);
-    lv_obj_set_style_text_font(grind_icon_, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(grind_icon_, &lv_font_montserrat_32, 0);
 
     pulse_button_ = lv_btn_create(lv_scr_act());
     lv_obj_set_size(pulse_button_, 100, 100);

@@ -87,11 +87,14 @@ void RefillConfirmScreen::update_weight(float weight_g) {
 
 void RefillConfirmScreen::set_status(const char* status) {
     if (!status_label) return;
-    if (!status || !status[0]) {
-        lv_label_set_text(status_label, "");
+    const bool show = status && status[0];
+    lv_label_set_text(status_label, show ? status : "");
+    // The status replaces the instruction; both at once do not fit above the buttons.
+    if (show) {
+        lv_obj_clear_flag(status_label, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(message_label, LV_OBJ_FLAG_HIDDEN);
+    } else {
         lv_obj_add_flag(status_label, LV_OBJ_FLAG_HIDDEN);
-        return;
+        lv_obj_clear_flag(message_label, LV_OBJ_FLAG_HIDDEN);
     }
-    lv_label_set_text(status_label, status);
-    lv_obj_clear_flag(status_label, LV_OBJ_FLAG_HIDDEN);
 }

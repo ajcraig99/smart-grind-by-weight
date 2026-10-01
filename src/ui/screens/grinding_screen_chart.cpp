@@ -29,7 +29,7 @@ void GrindingScreenChart::create() {
 
     // Create chart - use full screen width
     chart = lv_chart_create(screen);
-    lv_obj_set_size(chart, LV_PCT(100), 140);
+    lv_obj_set_size(chart, lv_display_get_horizontal_resolution(lv_display_get_default()) - 2 * THEME_SCREEN_MARGIN_PX, 140);
     lv_chart_set_type(chart, LV_CHART_TYPE_LINE);
     lv_chart_set_point_count(chart, MAX_CHART_POINTS);
     lv_chart_set_div_line_count(chart, 0, 0);  // No grid lines for clean look

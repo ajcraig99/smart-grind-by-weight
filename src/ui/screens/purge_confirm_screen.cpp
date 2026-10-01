@@ -25,7 +25,10 @@ void PurgeConfirmScreen::create() {
     // Title label
     title_label = lv_label_create(screen);
     lv_label_set_text(title_label, "Grinder Purged");
-    lv_obj_set_style_text_font(title_label, &lv_font_montserrat_36, 0);
+    static const lv_font_t* const title_fonts[] = {&lv_font_montserrat_36, &lv_font_montserrat_32};
+    lv_obj_set_style_text_font(title_label,
+        pick_font_that_fits("Grinder Purged", lv_display_get_horizontal_resolution(lv_display_get_default()) -
+                                          2 * THEME_SCREEN_MARGIN_PX, title_fonts, 2), 0);
     lv_obj_set_style_text_color(title_label, lv_color_hex(THEME_COLOR_WARNING), 0);
     lv_obj_set_style_text_align(title_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_width(title_label, LV_PCT(100));
@@ -37,6 +40,7 @@ void PurgeConfirmScreen::create() {
     lv_obj_set_flex_grow(message_container, 1);
     lv_obj_set_style_bg_opa(message_container, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(message_container, 0, 0);
+    lv_obj_set_style_pad_all(message_container, 0, 0);
     lv_obj_set_layout(message_container, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(message_container, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(message_container, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
