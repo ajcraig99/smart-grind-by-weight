@@ -22,6 +22,9 @@ private:
     lv_obj_t* diagnostics_page;
     lv_obj_t* scale_page;
     lv_obj_t* firmware_page;
+    lv_obj_t* header_title = nullptr;
+    lv_obj_t* header_back = nullptr;
+    void fit_header_title();
 
     // Info tab elements
     lv_obj_t* info_label;

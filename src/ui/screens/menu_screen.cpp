@@ -128,8 +128,10 @@ void MenuScreen::create_menu_ui() {
 
     // Get the header label
     lv_obj_t* header_label = lv_obj_get_child(header, -1);
+    header_title = header_label;
     if (header_label) {
         lv_obj_set_style_text_align(header_label, LV_TEXT_ALIGN_CENTER, 0);
+        lv_label_set_long_mode(header_label, LV_LABEL_LONG_DOT);
         lv_obj_set_style_text_font(header_label, &lv_font_montserrat_36, 0);
         lv_obj_set_style_text_color(header_label, lv_color_hex(THEME_COLOR_TEXT_SECONDARY), 0);
         lv_obj_set_style_min_height(header_label, title_target_height, 0);
@@ -138,6 +140,7 @@ void MenuScreen::create_menu_ui() {
     }
     // Get and style the chevron first
     lv_obj_t* back_chevron = lv_menu_get_main_header_back_button(menu);
+    header_back = back_chevron;
     lv_obj_set_style_text_font(back_chevron, &lv_font_montserrat_32, 0);
     lv_obj_set_ext_click_area(back_chevron, 200);
     lv_obj_set_style_text_color(back_chevron, lv_color_hex(THEME_COLOR_TEXT_SECONDARY), 0);
@@ -254,12 +257,14 @@ void MenuScreen::create_menu_ui() {
 
     // Set main page as active (menu will be the landing page)
     lv_menu_set_page(menu, main_page);
+    fit_header_title();
 
     // Refresh lifetime/log statistics whenever the Data or Stats page is displayed
     auto changing_page_callback = [](lv_event_t * e) {
         MenuScreen * self = static_cast<MenuScreen*>(lv_event_get_user_data(e));
         lv_obj_t * menu = static_cast<lv_obj_t *>(lv_event_get_target(e));
         lv_obj_t * cur = lv_menu_get_cur_main_page(menu);
+        self->fit_header_title();
         if (cur == self->data_page || cur == self->stats_page) {
             self->refresh_statistics();
         }
@@ -279,6 +284,21 @@ void MenuScreen::create_menu_ui() {
     lv_obj_add_event_cb(menu, changing_page_callback, LV_EVENT_VALUE_CHANGED, this);
 
     LOG_BLE("[%lums MENU] Menu UI created successfully\n", millis());
+}
+
+// The title sits between the back chevron and a spacer of the same width.
+// Use the largest title font in which the page name fits there.
+void MenuScreen::fit_header_title() {
+    if (!header_title || !header_back) return;
+    lv_obj_t* header = lv_menu_get_main_header(menu);
+    lv_obj_update_layout(header);
+    const int32_t space = lv_obj_get_content_width(header) - 2 * lv_obj_get_width(header_back) -
+                          2 * lv_obj_get_style_pad_column(header, LV_PART_MAIN);
+    static const lv_font_t* const fonts[] = {&lv_font_montserrat_36, &lv_font_montserrat_32,
+                                             &lv_font_montserrat_28, &lv_font_montserrat_24};
+    lv_obj_set_style_text_font(header_title,
+                               pick_font_that_fits(lv_label_get_text(header_title), space, fonts, 4), 0);
+    lv_obj_set_width(header_title, space);
 }
 
 void MenuScreen::setup_menu_page(lv_obj_t* page) {
