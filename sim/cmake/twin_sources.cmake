@@ -24,6 +24,8 @@ set(TWIN_CORE_SRC
   "${SIM_DIR}/core/trace.cpp"
   "${SIM_DIR}/core/operator.cpp"
   "${SIM_DIR}/core/firmware_access.cpp"
+  "${SIM_DIR}/core/layout_audit.cpp"
+  "${SIM_DIR}/core/ui_probe.cpp"
 )
 
 file(GLOB_RECURSE TWIN_LVGL_SRC CONFIGURE_DEPENDS "${LVGL_DIR}/src/*.c")

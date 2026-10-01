@@ -591,6 +591,9 @@ window.twinApp = {
   traceRows: () => app.trace.n,
   perf: () => ({ ...app.perf }),
   get scene3d() { return app.gui.scene3d; },
+  // Layout regression hooks: drive the firmware UI and audit what LVGL laid out.
+  ui: (cmd, arg) => app.twin.ui(cmd, arg),
+  layoutAudit: () => app.twin.layoutAudit(),
 };
 
 main().catch(fatal);

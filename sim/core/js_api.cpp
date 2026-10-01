@@ -4,6 +4,8 @@
 #include "runtime.h"
 #include "scheduler.h"
 #include "world.h"
+#include "layout_audit.h"
+#include "ui_probe.h"
 
 #include <cmath>
 #include <cstdio>
@@ -225,3 +227,10 @@ TWIN_EXPORT void twin_begin_post_reset(double observe_s) {
 // esp_reset_reason_t code of the pending restart (1 power-on, 3 software, 6 task watchdog).
 TWIN_EXPORT int twin_restart_reason() { return sim::world_restart_reason(); }
 TWIN_EXPORT int twin_operator_active() { return g_operator_running && !sim::operator_finished() ? 1 : 0; }
+
+// Layout regression hooks (sim/qa/layout_audit.mjs).
+TWIN_EXPORT int twin_ui(const char* cmd, const char* arg) { return sim::ui_command(cmd, arg ? arg : ""); }
+TWIN_EXPORT const char* twin_layout_audit() {
+    g_out = sim::layout_audit_json();
+    return g_out.c_str();
+}

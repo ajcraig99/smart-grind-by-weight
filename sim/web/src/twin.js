@@ -55,6 +55,8 @@ export class Twin {
       traceSuppressHeader: c('trace_suppress_header', null, []),
       restartReason: c('restart_reason', 'number', []),
       operatorActive: c('operator_active', 'number', []),
+      ui: c('ui', 'number', ['string', 'string']),
+      layoutAudit: c('layout_audit', 'string', []),
     };
   }
 
@@ -77,6 +79,8 @@ export class Twin {
   operatorStart() { this.f.operatorStart(); }
   restartReason() { return this.f.restartReason(); }
   operatorActive() { return this.f.operatorActive() !== 0; }
+  ui(cmd, arg = '') { return this.f.ui(cmd, String(arg)); }
+  layoutAudit() { return JSON.parse(this.f.layoutAudit()); }
   restartRequested() { return this.f.restartRequested() !== 0; }
   traceHeader() { return this.f.traceHeader(); }
   traceSuppressHeader() { this.f.traceSuppressHeader(); }
