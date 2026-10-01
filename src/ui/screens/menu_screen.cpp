@@ -274,15 +274,18 @@ void MenuScreen::create_menu_ui() {
     LOG_BLE("[%lums MENU] Menu UI created successfully\n", millis());
 }
 
+void MenuScreen::setup_menu_page(lv_obj_t* page) {
+    lv_obj_set_layout(page, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(page, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(page, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_scroll_dir(page, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(page, LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_set_style_pad_bottom(page, THEME_PAGE_BOTTOM_PAD_PX, 0);
+}
+
 void MenuScreen::create_info_page(lv_obj_t* parent) {
-    lv_obj_set_layout(parent, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(parent, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(parent, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_all(parent, 0, 0);
-    
-    // Enable vertical scrolling for the info page content
-    lv_obj_set_scroll_dir(parent, LV_DIR_VER);
-    lv_obj_set_scrollbar_mode(parent, LV_SCROLLBAR_MODE_AUTO);
+    setup_menu_page(parent);
 
     char build_info[64];
     snprintf(build_info, sizeof(build_info), "#%d", BUILD_NUMBER);
@@ -306,13 +309,7 @@ void MenuScreen::create_info_page(lv_obj_t* parent) {
 
 
 void MenuScreen::create_bluetooth_page(lv_obj_t* parent) {
-    lv_obj_set_layout(parent, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(parent, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(parent, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-    // Enable vertical scrolling on the menu page
-    lv_obj_set_scroll_dir(parent, LV_DIR_VER);
-    lv_obj_set_scrollbar_mode(parent, LV_SCROLLBAR_MODE_AUTO);
+    setup_menu_page(parent);
 
     create_toggle_row(parent, "Enabled", &ble_toggle);
     create_toggle_row(parent, "Startup", &ble_startup_toggle);
@@ -357,11 +354,7 @@ String escape_wifi_qr_value(const String& value) {
 }
 
 void MenuScreen::create_network_page(lv_obj_t* parent) {
-    lv_obj_set_layout(parent, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(parent, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(parent, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_scroll_dir(parent, LV_DIR_VER);
-    lv_obj_set_scrollbar_mode(parent, LV_SCROLLBAR_MODE_AUTO);
+    setup_menu_page(parent);
 
     create_toggle_row(parent, "Wi-Fi", &wifi_toggle);
 
@@ -439,11 +432,7 @@ void MenuScreen::update_network_toggles() {
 }
 
 void MenuScreen::create_firmware_page(lv_obj_t* parent) {
-    lv_obj_set_layout(parent, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(parent, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(parent, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_scroll_dir(parent, LV_DIR_VER);
-    lv_obj_set_scrollbar_mode(parent, LV_SCROLLBAR_MODE_AUTO);
+    setup_menu_page(parent);
 
     char build_info[16];
     snprintf(build_info, sizeof(build_info), "#%d", BUILD_NUMBER);
@@ -638,12 +627,7 @@ void MenuScreen::update_network_status() {
 }
 
 void MenuScreen::create_display_page(lv_obj_t* parent) {
-    lv_obj_set_layout(parent, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(parent, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(parent, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    // Enable vertical scrolling on the menu page
-    lv_obj_set_scroll_dir(parent, LV_DIR_VER);
-    lv_obj_set_scrollbar_mode(parent, LV_SCROLLBAR_MODE_AUTO);
+    setup_menu_page(parent);
 
     create_slider_row(parent, "Brightness", &brightness_normal_label, &brightness_normal_slider);
     create_slider_row(parent, "Screensaver", &brightness_screensaver_label, &brightness_screensaver_slider, lv_color_hex(THEME_COLOR_WARNING));
@@ -699,13 +683,7 @@ static void grinder_purge_mode_callback(int selected_index, void* user_data) {
 }
 
 void MenuScreen::create_grind_mode_page(lv_obj_t* parent) {
-    lv_obj_set_layout(parent, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(parent, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(parent, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-    // Enable vertical scrolling on the grind mode page
-    lv_obj_set_scroll_dir(parent, LV_DIR_VER);
-    lv_obj_set_scrollbar_mode(parent, LV_SCROLLBAR_MODE_AUTO);
+    setup_menu_page(parent);
 
     // Mode Selection separator/label
     create_separator(parent, "Mode Selection");
@@ -718,7 +696,7 @@ void MenuScreen::create_grind_mode_page(lv_obj_t* parent) {
         2,
         LV_FLEX_FLOW_ROW,
         0,  // Weight initially selected
-        135, 100,  // Width, Height
+        -1, 100,  // Auto width, height
         grind_mode_callback,
         this
     );
@@ -760,7 +738,7 @@ void MenuScreen::create_grind_mode_page(lv_obj_t* parent) {
         2,
         LV_FLEX_FLOW_ROW,
         1,  // Purge initially selected (index 1)
-        135, 100,  // Width, Height
+        -1, 100,  // Auto width, height
         grinder_purge_mode_callback,
         this
     );
@@ -880,13 +858,7 @@ void MenuScreen::create_scale_page(lv_obj_t* parent) {
 }
 
 void MenuScreen::create_data_page(lv_obj_t* parent) {
-    lv_obj_set_layout(parent, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(parent, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(parent, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    
-    // Enable vertical scrolling on the reset page
-    lv_obj_set_scroll_dir(parent, LV_DIR_VER);
-    lv_obj_set_scrollbar_mode(parent, LV_SCROLLBAR_MODE_AUTO);
+    setup_menu_page(parent);
 
     create_description_label(parent, "Saved grind logs stored on the grinder for export/analysis.");
 
@@ -922,12 +894,7 @@ void MenuScreen::create_data_page(lv_obj_t* parent) {
 }
 
 void MenuScreen::create_stats_page(lv_obj_t* parent) {
-    lv_obj_set_layout(parent, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(parent, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(parent, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-    lv_obj_set_scroll_dir(parent, LV_DIR_VER);
-    lv_obj_set_scrollbar_mode(parent, LV_SCROLLBAR_MODE_AUTO);
+    setup_menu_page(parent);
 
     create_description_label(parent, "Lifetime totals for the grinder.");
 
@@ -953,14 +920,8 @@ void MenuScreen::create_stats_page(lv_obj_t* parent) {
 }
 
 void MenuScreen::create_diagnostics_page(lv_obj_t* parent) {
-    lv_obj_set_layout(parent, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(parent, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(parent, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_all(parent, 0, 0);
-
-    // Enable vertical scrolling
-    lv_obj_set_scroll_dir(parent, LV_DIR_VER);
-    lv_obj_set_scrollbar_mode(parent, LV_SCROLLBAR_MODE_AUTO);
+    setup_menu_page(parent);
 
     // Load Cell Status separator
     create_separator(parent, "Load Cell Status");
@@ -1426,6 +1387,9 @@ lv_obj_t* MenuScreen::create_separator(lv_obj_t* parent, const char* text) {
     lv_obj_set_style_text_color(separator_label, lv_color_hex(THEME_COLOR_TEXT_SECONDARY), 0);
     lv_obj_set_style_pad_left(separator_label, 10, 0);
     lv_obj_set_style_pad_right(separator_label, 10, 0);
+    // Keep both lines visible: a heading wider than this ends in dots.
+    lv_obj_set_style_max_width(separator_label, LV_PCT(THEME_SEPARATOR_LABEL_MAX_PCT), 0);
+    lv_label_set_long_mode(separator_label, LV_LABEL_LONG_DOT);
 
     // Create right line
     lv_obj_t* right_line = lv_obj_create(separator_container);
@@ -1484,9 +1448,14 @@ lv_obj_t* MenuScreen::create_menu_item(lv_obj_t* parent, const char* text) {
     lv_obj_set_layout(cont, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(cont, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(cont, THEME_ROW_GAP_PX, 0);
 
     lv_obj_t* label = lv_label_create(cont);
     lv_label_set_text(label, text);
+    // Take the space left of the chevron; a label that is still too long ends
+    // in dots instead of running under the chevron (the layout audit flags it).
+    lv_obj_set_flex_grow(label, 1);
+    lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
 
     lv_obj_t* chevron = lv_label_create(cont);
     lv_label_set_text(chevron, LV_SYMBOL_RIGHT);
@@ -1504,12 +1473,17 @@ lv_obj_t* MenuScreen::create_toggle_row(lv_obj_t* parent, const char* text, lv_o
     lv_obj_set_layout(row_container, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(row_container, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(row_container, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(row_container, THEME_ROW_GAP_PX, 0);
 
     lv_obj_t* label = lv_label_create(row_container);
     lv_label_set_text(label, text);
+    // Take the space left of the switch; a label that is still too long ends
+    // in dots instead of running under the switch (the layout audit flags it).
+    lv_obj_set_flex_grow(label, 1);
+    lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
 
     *out_toggle = lv_switch_create(row_container);
-    lv_obj_set_size(*out_toggle, 80, 40);
+    lv_obj_set_size(*out_toggle, THEME_SWITCH_WIDTH_PX, THEME_SWITCH_HEIGHT_PX);
     lv_obj_set_ext_click_area(*out_toggle, 20);
     
     return row_container;
@@ -1526,13 +1500,17 @@ lv_obj_t* MenuScreen::create_slider_row(lv_obj_t* parent, const char* text, lv_o
     lv_obj_set_flex_flow(row_container, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(row_container, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_gap(row_container, 14, 0);
-    lv_obj_set_style_pad_all(row_container, 20, 0);
+    lv_obj_set_style_pad_ver(row_container, 20, 0);
+    lv_obj_set_style_pad_hor(row_container, THEME_ROW_PAD_HOR_PX, 0);
 
     *label = lv_label_create(row_container);
     lv_label_set_text(*label, text);
+    lv_obj_set_width(*label, LV_PCT(100));
+    lv_obj_set_style_text_align(*label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_long_mode(*label, LV_LABEL_LONG_DOT);
 
     *slider = lv_slider_create(row_container);
-    lv_obj_set_size(*slider, 220, 40);
+    lv_obj_set_size(*slider, LV_PCT(100), 40);
     lv_obj_set_ext_click_area(*slider, 20);
     lv_slider_set_range(*slider, min, max);
     lv_obj_set_style_bg_color(*slider, lv_color_hex(THEME_COLOR_BACKGROUND), LV_PART_MAIN);
