@@ -1,12 +1,14 @@
 // Controller state diagram (SVG). Phases and transitions are taken from
-// src/controllers/grind_controller.cpp (update(), continue_from_purge(), stop_grind(), return_to_idle(),
-// start_additional_pulse()) and src/controllers/weight_grind_strategy.cpp / time_grind_strategy.cpp.
+// src/controllers/grind_controller.cpp (update(), continue_from_purge(), end_or_pause_dry_run(),
+// resume_after_refill(), stop_grind(), return_to_idle(), start_additional_pulse()) and
+// src/controllers/weight_grind_strategy.cpp / time_grind_strategy.cpp.
 // The diagram only presents the phase the firmware reports; it contains no controller logic.
 
 export const PHASE_NAMES = [
   'IDLE', 'INITIALIZING', 'SETUP', 'TARING', 'TARE_CONFIRM', 'PREDICTIVE', 'PULSE_DECISION',
   'PULSE_EXECUTE', 'PULSE_SETTLING', 'FINAL_SETTLING', 'TIME_GRINDING', 'MANUAL_GRINDING',
   'TIME_ADDITIONAL_PULSE', 'COMPLETED', 'TIMEOUT', 'PRIME', 'PRIME_SETTLING', 'PURGE_CONFIRM',
+  'REFILL_CONFIRM',
 ];
 
 const W = 124, H = 30, SW = 128, SH = 24;
@@ -29,6 +31,7 @@ const NODES = {
   MANUAL_GRINDING: { x: 780, y: 170, small: true },
   TIME_GRINDING: { x: 780, y: 230, small: true },
   TIME_ADDITIONAL_PULSE: { x: 170, y: 360, small: true },
+  REFILL_CONFIRM: { x: 620, y: 280 },
 };
 const ANY = { x: 320, y: 400, w: 300, h: 26 };
 
@@ -60,6 +63,13 @@ const EDGES = [
   { key: 'SETUP>TIME_GRINDING', dashed: true, pts: [[940, 182], [940, 242], [908, 242]] },
   { key: 'TIME_GRINDING>FINAL_SETTLING', pts: [[844, 254], [844, 338], [232, 338], [232, 310]], label: 'time elapsed', lx: 560, ly: 334 },
   { key: 'ANY>TIMEOUT', dashed: true, pts: [[320, 413], [80, 413], [80, 390]] },
+  // Out of beans: a dry run pauses at the refill prompt; CONTINUE resumes where it stopped,
+  // or goes straight to the corrections when the dose is already within the stop offset.
+  { key: 'PREDICTIVE>REFILL_CONFIRM', both: true, pts: [[580, 230], [640, 280]], label: 'out of beans', lx: 640, ly: 252, anchor: 'start' },
+  { key: 'REFILL_CONFIRM>PREDICTIVE', pts: null },
+  { key: 'PRIME>REFILL_CONFIRM', both: true, dashed: true, pts: [[730, 150], [730, 280]], label: 'no beans', lx: 736, ly: 270, anchor: 'start' },
+  { key: 'REFILL_CONFIRM>PRIME', pts: null },
+  { key: 'REFILL_CONFIRM>PULSE_SETTLING', dashed: true, pts: [[620, 290], [604, 290], [604, 252], [452, 252], [452, 222], [444, 222]] },
 ];
 
 // XML namespace identifier (not a network address); assembled so the page contains no URL literals.
@@ -147,6 +157,8 @@ export class StateDiagram {
     this.seenNodes.add(to);
     let key = from + '>' + to;
     if (key === 'TIME_ADDITIONAL_PULSE>COMPLETED') key = 'COMPLETED>TIME_ADDITIONAL_PULSE';
+    if (key === 'REFILL_CONFIRM>PREDICTIVE') key = 'PREDICTIVE>REFILL_CONFIRM';
+    if (key === 'REFILL_CONFIRM>PRIME') key = 'PRIME>REFILL_CONFIRM';
     if (!this.edgeEls[key]) key = to === 'TIMEOUT' ? 'ANY>TIMEOUT' : null;
     if (key) this.seenEdges.add(key);
   }

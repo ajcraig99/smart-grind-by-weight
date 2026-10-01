@@ -9,7 +9,7 @@ class WeightSensor;
 class Grinder;
 
 // Buffer settings (PSRAM staging area) - Dynamic calculation based on actual timing
-#define MAX_EVENTS_PER_GRIND 50                             // Max discrete events per session (phases, pulses, etc.)
+#define MAX_EVENTS_PER_GRIND 100                            // Max discrete events per session (phases, pulses, etc.); a grind resumed after a refill has two sets of pulses
 
 // Core 0 synchronized logging frequency matches the control loop interval
 // Example: 30s * 50Hz = 1500 measurements when control interval is 20ms
@@ -46,7 +46,8 @@ struct TimeSeriesSessionHeader {
 enum GrindEventFlags : uint8_t {
     GRIND_EVENT_FLAG_TIME_MODE   = 1 << 0,  // Event recorded while grinding by time
     GRIND_EVENT_FLAG_MOTOR_ACTIVE = 1 << 1, // Phase kept the motor running
-    GRIND_EVENT_FLAG_PULSE_PHASE = 1 << 2   // Phase represents a pulse or settling after a pulse
+    GRIND_EVENT_FLAG_PULSE_PHASE = 1 << 2,  // Phase represents a pulse or settling after a pulse
+    GRIND_EVENT_FLAG_AFTER_REFILL = 1 << 3  // Phase began after the grind resumed from running out of beans
 };
 
 // Discrete, low-frequency events summarizing a phase.
@@ -125,7 +126,11 @@ struct GrindSession {
     uint8_t  max_pulse_attempts;      // Configured max pulse attempts
     uint8_t  pulse_count;             // Pulses executed
     uint8_t  termination_reason;      // See GrindTerminationReason
-    uint8_t  reserved[3];             // Alignment + future expansion
+    // Resumes after running out of beans. This was a reserved byte, always
+    // written as zero, so older files read as "never refilled" and the
+    // schema version is unchanged (a new version would invalidate them).
+    uint8_t  refill_count;
+    uint8_t  reserved[2];             // Alignment + future expansion
     char     result_status[16];       // Null-terminated status string
 
     GrindSession() {
@@ -174,7 +179,7 @@ public:
     // Session management
     void start_grind_session(const GrindSessionDescriptor& descriptor, float start_weight);
     void end_grind_session(const char* final_result, float final_weight, uint8_t pulse_count,
-                           uint32_t completed_at_ms);
+                           uint32_t completed_at_ms, uint8_t refill_count = 0);
     void discard_current_session();         // Discard current session without saving
     
     // Logging methods

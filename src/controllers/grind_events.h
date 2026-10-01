@@ -21,7 +21,8 @@ enum class GrindPhase {
     TIMEOUT,
     PRIME,
     PRIME_SETTLING,
-    PURGE_CONFIRM
+    PURGE_CONFIRM,
+    REFILL_CONFIRM   // Motor off: out of beans, waiting for the user to add beans and continue
 };
 
 // Event types that GrindController can emit to UIManager

@@ -230,7 +230,7 @@ void FileIOTask::process_flash_operation(const FlashOpRequest& request) {
             LOG_BLE("[%lums FLASH_OP] Processing END_GRIND_SESSION: %s, %.2fg, %d pulses\n", 
                     millis(), request.result_string, request.final_weight, request.pulse_count);
             grind_logger.end_grind_session(request.result_string, request.final_weight, request.pulse_count,
-                                           request.completed_at_ms);
+                                           request.completed_at_ms, request.refill_count);
             break;
             
         default:

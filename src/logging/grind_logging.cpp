@@ -147,7 +147,7 @@ void GrindLogger::start_grind_session(const GrindSessionDescriptor& descriptor, 
 
 
 void GrindLogger::end_grind_session(const char* final_result, float final_weight, uint8_t pulse_count,
-                                   uint32_t completed_at_ms) {
+                                   uint32_t completed_at_ms, uint8_t refill_count) {
     if (!current_session || !logging_active) {
         return;
     }
@@ -156,6 +156,7 @@ void GrindLogger::end_grind_session(const char* final_result, float final_weight
     current_session->error_grams = current_session->target_weight - final_weight;
     current_session->total_time_ms = completed_at_ms - session_start_time;
     current_session->pulse_count = pulse_count;
+    current_session->refill_count = refill_count;
     strncpy(current_session->result_status, final_result, sizeof(current_session->result_status) - 1);
 
     // Finalize motor time tracking - if motor is still on, count the final period
@@ -187,12 +188,15 @@ void GrindLogger::end_grind_session(const char* final_result, float final_weight
 
     if (is_successful_grind) {
         bool is_weight_mode = (mode == GrindMode::WEIGHT);
+        // A grind resumed after a refill ran in two stretches with extra
+        // pulses, so it would skew the accuracy and pulse averages.
         statistics_manager.update_grind_session(
             final_weight,
             current_session->error_grams,
             pulse_count,
             is_weight_mode,
-            current_session->total_motor_on_time_ms
+            current_session->total_motor_on_time_ms,
+            refill_count == 0
         );
     }
 

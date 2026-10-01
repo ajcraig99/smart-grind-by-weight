@@ -24,14 +24,15 @@ class GrindStartFeedbackTest(unittest.TestCase):
 #define THEME_COLOR_WARNING 0
 int lv_color_hex(int color) { return color; }
 enum class GrindMode { WEIGHT, TIME, MANUAL };
-enum class UIState { READY, MENU, GRINDING, GRIND_COMPLETE, GRIND_TIMEOUT, PURGE_CONFIRM };
+enum class UIState { READY, MENU, GRINDING, GRIND_COMPLETE, GRIND_TIMEOUT, PURGE_CONFIRM, REFILL_CONFIRM };
 struct ReadyScreen { enum { MENU_TAB_INDEX=5, WIFI_TAB_INDEX=4, MANUAL_TAB_INDEX=0 }; };
 struct State { UIState current=UIState::READY; bool is_state(UIState s) { return current==s; } };
 struct Controller {
-    bool accept=false; int calls=0, stops=0;
+    bool accept=false; int calls=0, stops=0, declines=0;
     void set_grind_profile_id(int) {}
     bool start_grind(float, uint32_t, GrindMode) { ++calls; return accept; }
     void stop_grind() { ++stops; }
+    bool decline_refill() { ++declines; return true; }
     void return_to_idle() {}
 };
 struct Profile {
@@ -103,6 +104,15 @@ int main() {
     UIManager ui{&state, &control, &profile}; // no hardware manager: generic notice
     GrindingUIController handler{&ui}; handler.handle_grind_button();
     assert(ui.notices==1 && std::strcmp(ui.last_title, "Could not start")==0);
+
+    // STOP on the refill prompt ends the grind as "No beans?" (kept on
+    // record) rather than discarding it as on the purge prompt.
+    { State refill; refill.current=UIState::REFILL_CONFIRM; Controller c; Profile p;
+      UIManager u{&refill, &c, &p}; GrindingUIController h{&u}; h.handle_grind_button();
+      assert(c.declines==1 && c.stops==0 && c.calls==0); }
+    { State purge; purge.current=UIState::PURGE_CONFIRM; Controller c; Profile p;
+      UIManager u{&purge, &c, &p}; GrindingUIController h{&u}; h.handle_grind_button();
+      assert(c.stops==1 && c.declines==0); }
 }
 '''
         with tempfile.TemporaryDirectory() as directory:

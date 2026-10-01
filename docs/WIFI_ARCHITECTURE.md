@@ -231,6 +231,9 @@ The public `phase` value is deliberately independent of internal controller
 state names. API v1 publishes one of `IDLE`, `PREPARING`, `PRIMING`,
 `GRINDING`, `PAUSED`, `COASTING`, `FINAL_SETTLING`, `COMPLETED`, or `TIMEOUT`,
 so clients remain compatible if the firmware state machine is refined.
+`PAUSED` covers a paused time grind and a weight grind waiting at the
+out-of-beans prompt (motor off). A `stop` command ends either; continuing after
+a refill is only possible on the grinder's touchscreen, never over the API.
 
 Commands may include a numeric `rid`. Firmware echoes it in the acknowledgement,
 allowing a client to correlate concurrent requests without confusing a delayed

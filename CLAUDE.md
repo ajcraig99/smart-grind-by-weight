@@ -53,17 +53,29 @@ python3 tools/grinder.py analyze
 - Standard phases: IDLE, INITIALIZING, SETUP, TARING, TARE_CONFIRM, PRIME, PRIME_SETTLING, PREDICTIVE, PULSE_DECISION, PULSE_EXECUTE, PULSE_SETTLING, FINAL_SETTLING, TIME_GRINDING, MANUAL_GRINDING, COMPLETED, TIMEOUT
 - `TIME_ADDITIONAL_PULSE` - Dedicated phase for post-completion additional grinding pulses in time mode
 - `PURGE_CONFIRM` - Pauses after chute operation (in Purge mode) to allow user to discard grinds before continuing to main grind
+- `REFILL_CONFIRM` - Motor off: a weight grind ran out of beans and waits for the user to add beans and continue (see Out of Beans below)
 - **Timeouts**: Targeted grinds stop after 60 seconds; target-free Manual mode has its own 30-second safety cutoff
 
 **Grinder Purge/Prime:**
 - **Always runs** before weight-mode grinding to saturate the grinder for accurate latency detection
 - **Prime mode**: Keeps coffee, continues immediately to PREDICTIVE phase
 - **Purge mode** (default): Shows confirmation popup, waits for user to discard stale grinds, then resumes in PREDICTIVE. CONTINUE keeps the pre-purge zero (kept grounds count as dose) unless the cup was lifted or its reading moved more than `GRIND_PURGE_RETARE_THRESHOLD_G`; then it re-tares (TARING → TARE_CONFIRM) first. Lifting the cup in PRIME_SETTLING shows the prompt at once; an unanswered prompt ends after `GRIND_PAUSE_MAX_MS`
-- **Dry run**: PRIME or PREDICTIVE gaining under `GRIND_DRY_RUN_MIN_PROGRESS_G` in `GRIND_DRY_RUN_TIMEOUT_MS` stops with "No beans?"
+- **Dry run**: PRIME or PREDICTIVE gaining under `GRIND_DRY_RUN_MIN_PROGRESS_G` in `GRIND_DRY_RUN_TIMEOUT_MS` pauses at the refill prompt (Out of Beans below); it stops with "No beans?" only when the refill limit is used up or the stretch since the last refill gained nothing
 - **Configurable amount**: 0.1g-2.5g (default 1.0g)
 - **Purge popup**: its checkbox switches the mode from Purge to Prime in preferences
 - **Logging disabled** during PURGE_CONFIRM phase to avoid capturing data while paused
 - **Preferences**: `grinder_mode` (int: 0=Prime, 1=Purge, default=1), `purge_amount_g` (float: 0.1-2.5, default=1.0). NVS keys must be 15 characters or fewer.
+
+**Out of Beans (refill and resume):**
+- **Trigger**: the dry-run rule in PRIME or PREDICTIVE stops the motor and enters `REFILL_CONFIRM` instead of ending the grind. Title "No beans" when nothing was ground yet (PRIME), otherwise "Out of beans"; the prompt shows the dose so far against the target
+- **Buttons**: STOP (left) ends the grind as before ("No beans?", record kept in history); ✓ (right) continues. ✓ needs a deliberate tap (`USER_BUTTON_REARM_MS`) and is greyed while a press waits for the scale
+- **CONTINUE compares settled readings only**: the reference is the settled reading after the motor stopped; on ✓ the controller uses `check_settling_complete` and, if the scale is moving, waits with the motor off for up to `GRIND_REFILL_SETTLE_TIMEOUT_MS`, then drops the press ("Scale not steady") without starting the motor. A cup lift while waiting also drops it
+- **Zero kept**: grounds in the cup count toward the dose. A settled reading within `GRIND_REFILL_MOVED_THRESHOLD_G` of the reference continues, even after a lift; otherwise "Cup moved?" asks the user to put the cup back or continue from the current reading. With no cup on the scale (reading at or below the removal threshold), "Cup missing?" only asks for the cup back; nothing can continue without it
+- **Resume**: PREDICTIVE (PRIME if it ran out in PRIME), no re-prime. Flow start and latency are measured again; the stop offset starts from the larger of `GRIND_UNDERSHOOT_TARGET_G` and the peak offset seen on healthy flow, and correction pulses start from the peak healthy flow (the running-dry taper reads low). If the remaining dose is already within the stop offset, it resumes straight into the correction pulses
+- **Limits**: each resumed stretch has its own `GRIND_TIMEOUT_SEC`; pause time never counts. At most `GRIND_REFILL_MAX_RESUMES` resumes; a resumed stretch that gains nothing (jam, open relay, stuck reading) ends the grind. An unanswered prompt ends after `GRIND_PAUSE_MAX_MS` as "No beans?"
+- **Not covered yet**: running out during correction pulses still ends "COMPLETE - MAX PULSES" (planned milestone 3)
+- **Remote**: the web API reports the prompt as `PAUSED` and can STOP it; continuing is on-device only
+- **Data**: logging pauses at the prompt; the session record stores `refill_count` (formerly a reserved byte, so older files read 0); events after a resume carry `GRIND_EVENT_FLAG_AFTER_REFILL`; resumed grinds are left out of the lifetime accuracy and pulse averages
 
 **Time Mode Pulses:** Split-button completion screen (OK + PULSE), `TIME_ADDITIONAL_PULSE` phase, 100ms duration
 

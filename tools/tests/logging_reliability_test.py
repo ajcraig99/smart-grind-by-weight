@@ -47,6 +47,7 @@ class LoggingReliabilityTest(unittest.TestCase):
 #include <algorithm>
 #include <cassert>
 #include <cstdarg>
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -91,7 +92,10 @@ struct Preferences {
 };
 unsigned long millis() { return 1000; }
 struct Statistics {
-    void update_grind_session(float, float, uint8_t, bool, uint32_t) {}
+    int calls = 0; bool last_in_averages = true;
+    void update_grind_session(float, float, uint8_t, bool, uint32_t, bool in_averages = true) {
+        ++calls; last_in_averages = in_averages;
+    }
 } statistics_manager;
 struct Node {
     std::string name;
@@ -196,6 +200,17 @@ int main() {
         assert((messages.find("(saved)") != std::string::npos) == saved);
         assert((messages.find("not saved - storage failure") != std::string::npos) == !saved);
     }
+
+    // A grind resumed after a refill is recorded with its refill count and
+    // counted, but kept out of the accuracy and pulse averages.
+    for (uint8_t refills : {uint8_t(0), uint8_t(2)}) {
+        statistics_manager.calls = 0;
+        grind_logger.start_grind_session(GrindSessionDescriptor{}, 0);
+        grind_logger.end_grind_session("COMPLETE", 18, 4, 1000, refills);
+        assert(grind_logger.current_session->refill_count == refills);
+        assert(statistics_manager.calls == 1 && statistics_manager.last_in_averages == (refills == 0));
+    }
+    static_assert(offsetof(GrindSession, refill_count) == 61, "tools/ble/grinder-ble.py reads offset 61");
 
     write_session(1);
     assert(grind_logger.validate_stored_session(1));

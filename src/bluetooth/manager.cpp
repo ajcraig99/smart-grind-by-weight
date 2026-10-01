@@ -1933,13 +1933,13 @@ void BluetoothManager::generate_diagnostic_report() {
                                 "\n--- Session #%lu ---\n"
                                 "  Mode: %s | Profile: %u | Status: %.16s\n"
                                 "  Target: %.1fg | Final: %.1fg | Error: %+.2fg\n"
-                                "  Total Time: %.1fs | Motor Time: %.1fs | Pulses: %u\n"
+                                "  Total Time: %.1fs | Motor Time: %.1fs | Pulses: %u | Refills: %u\n"
                                 "  Termination: %s\n",
                                 session.session_id,
                                 mode_name, session.profile_id, session.result_status,
                                 session.target_weight, session.final_weight, session.error_grams,
                                 session.total_time_ms / 1000.0f, session.total_motor_on_time_ms / 1000.0f, session.pulse_count,
-                                term_name
+                                session.refill_count, term_name
                             );
                             send_chunk(buf);
 
@@ -1948,13 +1948,18 @@ void BluetoothManager::generate_diagnostic_report() {
                                 snprintf(buf, sizeof(buf), "  Events (%u):\n", header.event_count);
                                 send_chunk(buf);
 
+                                // Indexed by GrindPhase value (src/controllers/grind_events.h).
                                 static const char* const phase_names[] = {
                                     "IDLE", "INITIALIZING", "SETUP", "TARING", "TARE_CONFIRM",
                                     "PREDICTIVE", "PULSE_DECISION", "PULSE_EXECUTE", "PULSE_SETTLING",
-                                    "FINAL_SETTLING", "TIME_GRINDING", "TIME_ADDITIONAL_PULSE", "COMPLETED", "TIMEOUT",
-                                    "PRIME", "PRIME_SETTLING", "PURGE_CONFIRM"
+                                    "FINAL_SETTLING", "TIME_GRINDING", "MANUAL_GRINDING", "TIME_ADDITIONAL_PULSE",
+                                    "COMPLETED", "TIMEOUT", "PRIME", "PRIME_SETTLING", "PURGE_CONFIRM",
+                                    "REFILL_CONFIRM"
                                 };
                                 const size_t phase_name_count = sizeof(phase_names) / sizeof(phase_names[0]);
+                                static_assert(sizeof(phase_names) / sizeof(phase_names[0]) ==
+                                                  static_cast<size_t>(GrindPhase::REFILL_CONFIRM) + 1,
+                                              "phase_names must list every GrindPhase in order");
 
                                 for (uint16_t e = 0; e < header.event_count; e++) {
                                     GrindEvent event;
@@ -1993,8 +1998,8 @@ void BluetoothManager::generate_diagnostic_report() {
                                         static char metrics_str[256];
                                         metrics_str[0] = '\0';
 
-                                        switch (event.phase_id) {
-                                            case 5: // PREDICTIVE
+                                        switch (static_cast<GrindPhase>(event.phase_id)) {
+                                            case GrindPhase::PREDICTIVE:
                                                 if (event.grind_latency_ms > 0 || event.pulse_flow_rate > 0 || event.motor_stop_target_weight > 0) {
                                                     snprintf(metrics_str, sizeof(metrics_str), " | Latency: %lums, Flow: %.1fg/s, Target: %.1fg",
                                                         event.grind_latency_ms,
@@ -2004,7 +2009,7 @@ void BluetoothManager::generate_diagnostic_report() {
                                                 }
                                                 break;
 
-                                            case 7: // PULSE_EXECUTE
+                                            case GrindPhase::PULSE_EXECUTE:
                                                 if (event.pulse_flow_rate > 0 || event.motor_stop_target_weight > 0) {
                                                     snprintf(metrics_str, sizeof(metrics_str), " | Flow: %.1fg/s, Target: %.1fg",
                                                         event.pulse_flow_rate,
@@ -2013,7 +2018,7 @@ void BluetoothManager::generate_diagnostic_report() {
                                                 }
                                                 break;
 
-                                            case 8: // PULSE_SETTLING
+                                            case GrindPhase::PULSE_SETTLING:
                                                 if (event.settling_duration_ms > 0 || event.motor_stop_target_weight > 0) {
                                                     snprintf(metrics_str, sizeof(metrics_str), " | Settled: %lums, Target: %.1fg",
                                                         event.settling_duration_ms,
@@ -2022,7 +2027,7 @@ void BluetoothManager::generate_diagnostic_report() {
                                                 }
                                                 break;
 
-                                            case 9: // FINAL_SETTLING
+                                            case GrindPhase::FINAL_SETTLING:
                                                 if (event.settling_duration_ms > 0) {
                                                     snprintf(metrics_str, sizeof(metrics_str), " | Settled: %lums",
                                                         event.settling_duration_ms
@@ -2030,7 +2035,7 @@ void BluetoothManager::generate_diagnostic_report() {
                                                 }
                                                 break;
 
-                                            case 10: // TIME_GRINDING
+                                            case GrindPhase::TIME_GRINDING:
                                                 if (event.pulse_flow_rate > 0) {
                                                     snprintf(metrics_str, sizeof(metrics_str), " | Flow: %.1fg/s",
                                                         event.pulse_flow_rate
@@ -2038,12 +2043,15 @@ void BluetoothManager::generate_diagnostic_report() {
                                                 }
                                                 break;
 
-                                            case 11: // TIME_ADDITIONAL_PULSE
+                                            case GrindPhase::TIME_ADDITIONAL_PULSE:
                                                 if (event.pulse_flow_rate > 0) {
                                                     snprintf(metrics_str, sizeof(metrics_str), " | Flow: %.1fg/s",
                                                         event.pulse_flow_rate
                                                     );
                                                 }
+                                                break;
+
+                                            default:
                                                 break;
                                         }
 

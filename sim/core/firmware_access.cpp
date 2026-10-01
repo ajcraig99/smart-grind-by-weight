@@ -3,6 +3,7 @@
 #include "controllers/grind_controller.h"
 #include "hardware/hardware_manager.h"
 #include "system/state_machine.h"
+#include "ui/ui_manager.h"
 
 // Globals and entry points defined in src/main.cpp.
 extern HardwareManager hardware_manager;
@@ -60,6 +61,7 @@ const char* firmware_phase_name(int phase) {
         case GrindPhase::PRIME: return "PRIME";
         case GrindPhase::PRIME_SETTLING: return "PRIME_SETTLING";
         case GrindPhase::PURGE_CONFIRM: return "PURGE_CONFIRM";
+        case GrindPhase::REFILL_CONFIRM: return "REFILL_CONFIRM";
     }
     return "UNKNOWN";
 }
@@ -67,6 +69,18 @@ const char* firmware_phase_name(int phase) {
 const char* firmware_ui_state_name(int state) {
     if (state < 0) return "BOOT";
     return state_machine.get_state_name(static_cast<UIState>(state));
+}
+
+bool firmware_confirm_button_center(bool confirm, int* x, int* y) {
+    UIManager* ui = UIManager::get_instance();
+    if (!ui || !ui->confirm_screen.is_visible()) return false;
+    lv_obj_t* button = confirm ? ui->confirm_screen.get_confirm_button() : ui->confirm_screen.get_cancel_button();
+    if (!button) return false;
+    lv_area_t area;
+    lv_obj_get_coords(button, &area);
+    *x = (area.x1 + area.x2) / 2;
+    *y = (area.y1 + area.y2) / 2;
+    return true;
 }
 
 void firmware_setup() {

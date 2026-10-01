@@ -95,6 +95,7 @@ public:
     template<class... Args> void queue_log_message(Args...) {}
     void switch_phase(GrindPhase next, const GrindLoopData& = {}) { phase = next; }
     bool dry_run_detected(const GrindLoopData&) { return false; }
+    void end_or_pause_dry_run(const GrindLoopData&) {}
     void abort_session(GrindSessionResult, const char*, const GrindLoopData&) {}
     void stop_grind();
     void return_to_idle() { phase = GrindPhase::IDLE; }
@@ -191,6 +192,9 @@ int main() {
             "bool GrindController::start_grind(", "void GrindController::update()",
             "void GrindController::stop_grind()", "void GrindController::return_to_idle()",
             "PurgeContinueResult GrindController::continue_from_purge(", "void GrindController::pause_grind()",
+            "RefillContinueResult GrindController::continue_from_refill(", "bool GrindController::decline_refill()",
+            "RefillContinueResult GrindController::take_refill_outcome()",
+            "RefillPromptInfo GrindController::get_refill_prompt_info() const",
             "void GrindController::resume_grind()", "void GrindController::start_additional_pulse()",
             "void GrindController::process_queued_flash_operations()",
             "void GrindController::ui_acknowledge_phase_transition()",

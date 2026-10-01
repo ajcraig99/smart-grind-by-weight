@@ -28,6 +28,7 @@ constexpr int kPhasePulseExecute = 7;
 constexpr int kPhaseCompleted = 13;
 constexpr int kPhaseTimeout = 14;
 constexpr int kPhasePurgeConfirm = 17;
+constexpr int kPhaseRefillConfirm = 18;
 
 bool g_created = false;
 bool g_booted = false;
@@ -60,6 +61,7 @@ void on_phase_change(int from, int to, double t_s, const sim_plant_outputs_t& ou
     if (!rec) return;
     if (to == kPhasePulseExecute) ++rec->pulses;
     if (to == kPhasePurgeConfirm) ++rec->purge_prompts;
+    if (to == kPhaseRefillConfirm) ++rec->refill_prompts;
     if (to == kPhaseTaring) ++rec->tares;
     if ((to == kPhaseCompleted || to == kPhaseTimeout) && rec->terminal_phase < 0) {
         rec->terminal_phase = to;
@@ -95,6 +97,7 @@ void account_motor(const sim_plant_outputs_t& out, double dt) {
     if (!g_view.has_recent_sample) rec->motor_no_sample_s += dt;
     if (rec->terminal_phase >= 0) rec->motor_after_end_s += dt;
     if (!out.cup_present) rec->motor_no_cup_s += dt;
+    if (g_view.phase == kPhaseRefillConfirm) rec->motor_refill_pause_s += dt;
 }
 
 void on_frame(uint64_t boundary_us) {

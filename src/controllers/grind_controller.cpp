@@ -237,6 +237,20 @@ bool GrindController::start_grind(float target, uint32_t time_ms, GrindMode grin
     resume_after_purge_ = false;
     post_purge_weight_ = 0.0f;
     vessel_lifted_since_purge_ = false;
+    refill_resume_count_ = 0;
+    refill_resume_phase_ = GrindPhase::PREDICTIVE;
+    refill_no_beans_at_start_ = false;
+    refill_pause_weight_ = 0.0f;
+    refill_reference_settled_ = false;
+    refill_vessel_lifted_ = false;
+    refill_continue_pending_ = false;
+    refill_continue_requested_ms_ = 0;
+    refill_outcome_ = RefillContinueResult::NONE;
+    refill_leg_resumed_ = false;
+    refill_leg_start_weight_ = 0.0f;
+    session_pulse_total_ = 0;
+    peak_healthy_stop_offset_g_ = 0.0f;
+    peak_healthy_flow_gps_ = 0.0f;
 
     if (diagnostics_controller_) {
         diagnostics_controller_->reset_diagnostic(DiagnosticCode::MECHANICAL_INSTABILITY);
@@ -400,6 +414,74 @@ PurgeContinueResult GrindController::continue_from_purge(bool check_vessel) {
     return PurgeContinueResult::CONTINUED;
 }
 
+RefillContinueResult GrindController::continue_from_refill(bool accept_current_reading) {
+    const auto control_lock = lock_control();
+    if (phase != GrindPhase::REFILL_CONFIRM) return RefillContinueResult::NOT_WAITING;
+    // The control loop will show the scale error; never restart from stale data.
+    if (!weight_sensor || !weight_sensor->has_recent_sample()) return RefillContinueResult::SCALE_NOT_READY;
+
+    GrindLoopData loop_data = {};
+    loop_data.now = millis();
+    loop_data.timestamp_ms = loop_data.now - start_time;
+    loop_data.current_weight = weight_sensor->get_weight_low_latency();
+
+    if (accept_current_reading) {
+        // The user has seen the reading in a cup dialog and chose to go on from
+        // it, but the cup may have been taken away since the dialog opened.
+        if (loop_data.current_weight <= net_weight_removal_guard_.removal_threshold_g()) {
+            return RefillContinueResult::VESSEL_MISSING;
+        }
+        LOG_BLE("[%lums CONTROLLER] Refill continue: user accepted the current reading %.2fg\n",
+                millis(), loop_data.current_weight);
+        resume_after_refill(loop_data);
+        return RefillContinueResult::CONTINUED;
+    }
+    if (refill_continue_pending_) return RefillContinueResult::WAITING_FOR_SETTLE;
+
+    // Pouring beans or touching the grinder moves the reading; compare only a
+    // settled one. If it is not settled yet, the control loop keeps checking
+    // with the motor off and gives up after GRIND_REFILL_SETTLE_TIMEOUT_MS.
+    float settled_weight = 0.0f;
+    if (weight_sensor->check_settling_complete(GRIND_SCALE_PRECISION_SETTLING_TIME_MS, &settled_weight)) {
+        return evaluate_refill_continue(settled_weight, loop_data);
+    }
+    refill_continue_pending_ = true;
+    refill_continue_requested_ms_ = loop_data.now;
+    refill_outcome_ = RefillContinueResult::NONE;
+    LOG_BLE("[%lums CONTROLLER] Refill continue: waiting for the scale to settle\n", millis());
+    return RefillContinueResult::WAITING_FOR_SETTLE;
+}
+
+bool GrindController::decline_refill() {
+    const auto control_lock = lock_control();
+    if (phase != GrindPhase::REFILL_CONFIRM) return false;
+    GrindLoopData loop_data = {};
+    loop_data.now = millis();
+    loop_data.timestamp_ms = loop_data.now - start_time;
+    loop_data.current_weight = weight_sensor ? weight_sensor->get_weight_low_latency() : 0.0f;
+    refill_continue_pending_ = false;
+    queue_log_message("[CONTROLLER] Refill declined at %.2fg; grind ended\n", loop_data.current_weight);
+    abort_session(GrindSessionResult::ERROR, "No beans?", loop_data);
+    return true;
+}
+
+RefillContinueResult GrindController::take_refill_outcome() {
+    const auto control_lock = lock_control();
+    const RefillContinueResult outcome = refill_outcome_;
+    refill_outcome_ = RefillContinueResult::NONE;
+    return outcome;
+}
+
+RefillPromptInfo GrindController::get_refill_prompt_info() const {
+    const auto control_lock = lock_control();
+    RefillPromptInfo info = {};
+    info.no_beans_at_start = refill_no_beans_at_start_;
+    info.waiting_for_settle = refill_continue_pending_;
+    info.pause_weight_g = refill_pause_weight_;
+    info.target_weight_g = target_weight;
+    return info;
+}
+
 void GrindController::pause_grind() {
     const auto control_lock = lock_control();
     if (phase != GrindPhase::TIME_GRINDING || grind_paused_) return;
@@ -480,15 +562,28 @@ void GrindController::update() {
     }
 
     if (control_loop_paused_) {
-        // The purge prompt holds the operation interlock, so it cannot wait forever.
+        // A prompt holds the operation interlock, so it cannot wait forever.
         if (loop_data.now - phase_start_time >= GRIND_PAUSE_MAX_MS) {
-            abort_session(GrindSessionResult::TIMEOUT, "Paused too long", loop_data);
-            queue_log_message("[CONTROLLER] Purge prompt unanswered for %lums; grind ended\n", GRIND_PAUSE_MAX_MS);
+            if (phase == GrindPhase::REFILL_CONFIRM) {
+                // The dose is short for the same reason as when STOP is pressed.
+                abort_session(GrindSessionResult::ERROR, "No beans?", loop_data);
+                queue_log_message("[CONTROLLER] Refill prompt unanswered for %lums; grind ended\n", GRIND_PAUSE_MAX_MS);
+            } else {
+                abort_session(GrindSessionResult::TIMEOUT, "Paused too long", loop_data);
+                queue_log_message("[CONTROLLER] Purge prompt unanswered for %lums; grind ended\n", GRIND_PAUSE_MAX_MS);
+            }
             return;
         }
-        // Lifting the cup to tip out the purge is expected here.
+        // Lifting the cup, to tip out the purge or to get it out of the way of
+        // a refill, is expected here and does not end the grind.
         float lift_weight = 0.0f;
-        if (vessel_removal_confirmed(&lift_weight)) vessel_lifted_since_purge_ = true;
+        const bool lifted = vessel_removal_confirmed(&lift_weight);
+        if (phase == GrindPhase::REFILL_CONFIRM) {
+            refill_pause_tick(loop_data, lifted);
+            if (phase != GrindPhase::REFILL_CONFIRM) return;  // a pending CONTINUE resumed the grind
+        } else if (lifted) {
+            vessel_lifted_since_purge_ = true;
+        }
 
         emit_progress_update(loop_data);
 
@@ -580,9 +675,7 @@ void GrindController::update() {
 
         case GrindPhase::PRIME: {
             if (dry_run_detected(loop_data)) {
-                abort_session(GrindSessionResult::ERROR, "No beans?", loop_data);
-                queue_log_message("[GRINDER] Dry run: under %.1fg in %dms of priming\n",
-                                  GRIND_DRY_RUN_MIN_PROGRESS_G, GRIND_DRY_RUN_TIMEOUT_MS);
+                end_or_pause_dry_run(loop_data);
                 return;
             }
             if (!grinder->is_grinding()) {
@@ -634,12 +727,11 @@ void GrindController::update() {
             break;
         }
 
-        case GrindPhase::PURGE_CONFIRM: {
-            // This phase waits for UI confirmation
-            // The UI will call a method to acknowledge and continue to PREDICTIVE
-            // For now, this case just holds the state
+        case GrindPhase::PURGE_CONFIRM:
+        case GrindPhase::REFILL_CONFIRM:
+            // Prompts are handled by the paused branch above, which returns
+            // before this switch; the UI continues them.
             break;
-        }
 
         case GrindPhase::TIME_GRINDING:
             // A pause holds the operation interlock, so it cannot last forever.
@@ -660,9 +752,7 @@ void GrindController::update() {
 
         case GrindPhase::PREDICTIVE:
             if (dry_run_detected(loop_data)) {
-                abort_session(GrindSessionResult::ERROR, "No beans?", loop_data);
-                queue_log_message("[GRINDER] Dry run: under %.1fg gained in %dms of grinding\n",
-                                  GRIND_DRY_RUN_MIN_PROGRESS_G, GRIND_DRY_RUN_TIMEOUT_MS);
+                end_or_pause_dry_run(loop_data);
                 return;
             }
             if (mode == GrindMode::WEIGHT && active_strategy) {
@@ -785,7 +875,8 @@ void GrindController::update() {
         switch_phase(GrindPhase::TIMEOUT, loop_data);
     }
     // Only check timeout during active grinding phases, not during completion states or user confirmation
-    else if (phase != GrindPhase::COMPLETED && phase != GrindPhase::TIMEOUT && phase != GrindPhase::PURGE_CONFIRM && check_timeout()) {
+    else if (phase != GrindPhase::COMPLETED && phase != GrindPhase::TIMEOUT && phase != GrindPhase::PURGE_CONFIRM &&
+             phase != GrindPhase::REFILL_CONFIRM && check_timeout()) {
         timeout_phase = phase;
         const uint32_t manual_runtime_ms =
             (mode == GrindMode::MANUAL && time_grind_start_ms > 0)
@@ -860,6 +951,154 @@ bool GrindController::dry_run_detected(const GrindLoopData& loop_data) {
         return false;
     }
     return loop_data.now - dry_run_reference_ms_ >= GRIND_DRY_RUN_TIMEOUT_MS;
+}
+
+// A dry run usually means the hopper is empty, so the grind waits for beans.
+// It ends as "No beans?" instead once GRIND_REFILL_MAX_RESUMES is used up, or
+// when the stretch since the last refill gained nothing: fresh beans should
+// have produced grounds, so that points to a jam, an open relay or a stuck
+// reading, and restarting the motor again would not help.
+void GrindController::end_or_pause_dry_run(const GrindLoopData& loop_data) {
+    const bool nothing_since_refill = refill_leg_resumed_ &&
+        loop_data.current_weight - refill_leg_start_weight_ < GRIND_DRY_RUN_MIN_PROGRESS_G;
+    if (refill_resume_count_ < GRIND_REFILL_MAX_RESUMES && !nothing_since_refill) {
+        queue_log_message("[GRINDER] Dry run in %s at %.2fg: under %.1fg in %dms; waiting for beans\n",
+                          get_phase_name(), loop_data.current_weight,
+                          GRIND_DRY_RUN_MIN_PROGRESS_G, GRIND_DRY_RUN_TIMEOUT_MS);
+        enter_refill_pause(loop_data);
+        return;
+    }
+    queue_log_message("[GRINDER] Dry run in %s: under %.1fg in %dms (%s); grind ended\n",
+                      get_phase_name(), GRIND_DRY_RUN_MIN_PROGRESS_G, GRIND_DRY_RUN_TIMEOUT_MS,
+                      nothing_since_refill ? "no progress since the refill" : "refill limit reached");
+    abort_session(GrindSessionResult::ERROR, "No beans?", loop_data);
+}
+
+void GrindController::enter_refill_pause(const GrindLoopData& loop_data) {
+    if (grinder) grinder->stop();
+    refill_resume_phase_ = phase == GrindPhase::PRIME ? GrindPhase::PRIME : GrindPhase::PREDICTIVE;
+    refill_no_beans_at_start_ = phase == GrindPhase::PRIME && refill_resume_count_ == 0 &&
+                                loop_data.current_weight < GRIND_DRY_RUN_MIN_PROGRESS_G;
+    // Provisional reference; refill_pause_tick replaces it with a settled reading.
+    refill_pause_weight_ = weight_sensor ? weight_sensor->get_weight_high_latency() : loop_data.current_weight;
+    refill_reference_settled_ = false;
+    refill_vessel_lifted_ = false;
+    refill_continue_pending_ = false;
+    refill_outcome_ = RefillContinueResult::NONE;
+
+    // Paused ticks are not logged, so record the motor stopping now; otherwise
+    // the logger would count the whole pause as motor-on time.
+    if (should_log_measurements()) {
+        grind_logger.log_continuous_measurement(loop_data.timestamp_ms, loop_data.current_weight,
+                                                loop_data.weight_delta, loop_data.flow_rate, 0,
+                                                loop_data.phase_id, motor_stop_target_weight);
+        last_logged_weight = loop_data.current_weight;
+        last_logged_time = loop_data.now;
+    }
+
+    timeout_pause_start = loop_data.now;  // excluded from the grind timeout
+    switch_phase(GrindPhase::REFILL_CONFIRM, loop_data);
+}
+
+// Runs each control tick while the refill prompt is up. The motor stays off
+// throughout: the only start is in resume_after_refill().
+void GrindController::refill_pause_tick(const GrindLoopData& loop_data, bool vessel_lifted) {
+    if (vessel_lifted) refill_vessel_lifted_ = true;
+
+    float settled_weight = 0.0f;
+    const bool settled = weight_sensor &&
+        weight_sensor->check_settling_complete(GRIND_SCALE_PRECISION_SETTLING_TIME_MS, &settled_weight);
+
+    // Take the reference once the scale settles after the motor stopped, but
+    // only from the untouched cup and only early in the pause.
+    if (!refill_reference_settled_ && !refill_vessel_lifted_ && settled &&
+        loop_data.now - phase_start_time < GRIND_SCALE_SETTLING_TIMEOUT_MS) {
+        refill_pause_weight_ = settled_weight;
+        refill_reference_settled_ = true;
+    }
+
+    if (!refill_continue_pending_) return;
+    if (vessel_lifted) {
+        // A lift after CONTINUE means the user is not ready: never start the
+        // motor when the cup comes back; ask for CONTINUE again.
+        refill_continue_pending_ = false;
+        refill_outcome_ = RefillContinueResult::CUP_LIFTED;
+        queue_log_message("[CONTROLLER] Refill continue dropped: cup lifted while settling\n");
+    } else if (settled) {
+        refill_continue_pending_ = false;
+        refill_outcome_ = evaluate_refill_continue(settled_weight, loop_data);
+    } else if (loop_data.now - refill_continue_requested_ms_ >= GRIND_REFILL_SETTLE_TIMEOUT_MS) {
+        refill_continue_pending_ = false;
+        refill_outcome_ = RefillContinueResult::SETTLE_TIMEOUT;
+        queue_log_message("[CONTROLLER] Refill continue dropped: scale not settled within %lums\n",
+                          GRIND_REFILL_SETTLE_TIMEOUT_MS);
+    }
+}
+
+// Compares a settled reading with the reading at the pause. Grounds already
+// in the cup count toward the dose, so a cup put back where it was keeps the
+// zero even if it was lifted; anything else needs the user's confirmation.
+RefillContinueResult GrindController::evaluate_refill_continue(float settled_weight,
+                                                               const GrindLoopData& loop_data) {
+    refill_continue_pending_ = false;
+    if (settled_weight <= net_weight_removal_guard_.removal_threshold_g()) {
+        return RefillContinueResult::VESSEL_MISSING;
+    }
+    const float moved_g = fabsf(settled_weight - refill_pause_weight_);
+    if (moved_g > GRIND_REFILL_MOVED_THRESHOLD_G) {
+        queue_log_message("[CONTROLLER] Refill continue held: reading %.2fg, %.2fg at the pause\n",
+                          settled_weight, refill_pause_weight_);
+        return RefillContinueResult::READING_MOVED;
+    }
+    resume_after_refill(loop_data);
+    return RefillContinueResult::CONTINUED;
+}
+
+// Restarts grinding from the existing zero. Flow and latency were measured
+// as the burrs ran dry, so PREDICTIVE measures them again. A resumed stretch
+// is often too short to re-measure the stop offset, so it starts from the
+// larger of the default and the peak offset measured on healthy flow (the
+// running-dry taper reads low, which would stop too late).
+void GrindController::resume_after_refill(const GrindLoopData& loop_data) {
+    refill_continue_pending_ = false;
+    // Each stretch gets a full GRIND_TIMEOUT_SEC; the pause itself is never counted.
+    timeout_offset_ms = loop_data.now - start_time;
+    timeout_pause_start = 0;
+
+    refill_resume_count_++;
+    refill_leg_resumed_ = true;
+    refill_leg_start_weight_ = loop_data.current_weight;
+    session_pulse_total_ += pulse_attempts;
+    pulse_attempts = 0;
+    motor_stop_target_weight = std::max(GRIND_UNDERSHOOT_TARGET_G, peak_healthy_stop_offset_g_);
+    // Pulses straight after the refill have no flow measured since; start from full flow.
+    pulse_flow_rate = std::max(static_cast<float>(pulse_flow_rate), peak_healthy_flow_gps_);
+
+    // With the dose already within the stop offset, PREDICTIVE could only
+    // stop once the motor has settled, and would deliver that whole run on
+    // top. Go straight to the corrections it would hand over to.
+    GrindPhase next_phase = refill_resume_phase_;
+    if (next_phase == GrindPhase::PREDICTIVE &&
+        target_weight - loop_data.current_weight <= motor_stop_target_weight) {
+        next_phase = GrindPhase::PULSE_SETTLING;
+    }
+    // PREDICTIVE measures flow start and latency again. The corrections keep
+    // the latency measured when this grind started, while beans were flowing:
+    // their settling wait needs it to cover grounds still on their way down.
+    if (next_phase != GrindPhase::PULSE_SETTLING) {
+        flow_start_confirmed = false;
+        grind_latency_ms = 0;
+    }
+
+    queue_log_message("[CONTROLLER] Refill %u: resuming %s at %.2fg of %.1fg (stop offset %.2fg)\n",
+                      static_cast<unsigned>(refill_resume_count_), get_phase_name(next_phase),
+                      loop_data.current_weight, target_weight, static_cast<float>(motor_stop_target_weight));
+    if (next_phase != GrindPhase::PULSE_SETTLING) {
+        // Corrections drive the motor themselves, as timed pulses.
+        if (grinder) grinder->start();
+        time_grind_start_ms = loop_data.now;
+    }
+    switch_phase(next_phase, loop_data);
 }
 
 // Stops the motor and ends the session on the error screen with `message`.
@@ -980,7 +1219,7 @@ void GrindController::switch_phase(GrindPhase new_phase, const GrindLoopData& lo
     
     // Update phase state
     phase = new_phase;
-    control_loop_paused_ = (phase == GrindPhase::PURGE_CONFIRM);
+    control_loop_paused_ = (phase == GrindPhase::PURGE_CONFIRM || phase == GrindPhase::REFILL_CONFIRM);
     phase_start_time = now;
     if (phase == GrindPhase::PRIME || phase == GrindPhase::PREDICTIVE) {
         dry_run_reference_weight_ = weight_sensor ? weight_sensor->get_weight_low_latency() : 0.0f;
@@ -1003,6 +1242,9 @@ void GrindController::switch_phase(GrindPhase new_phase, const GrindLoopData& lo
 
         if (session_descriptor.mode == GrindMode::TIME) {
             event_in_progress.event_flags |= GRIND_EVENT_FLAG_TIME_MODE;
+        }
+        if (refill_resume_count_ > 0) {
+            event_in_progress.event_flags |= GRIND_EVENT_FLAG_AFTER_REFILL;
         }
 
         switch (new_phase) {
@@ -1101,7 +1343,8 @@ void GrindController::switch_phase(GrindPhase new_phase, const GrindLoopData& lo
 
 
 bool GrindController::check_timeout() const {
-    // Calculate elapsed time excluding paused states (PURGE_CONFIRM and TIME mode pause)
+    // Calculate elapsed time excluding paused states (prompts and TIME mode pause).
+    // A resume after a refill sets timeout_offset_ms so each stretch starts at zero.
     unsigned long elapsed_ms = millis() - start_time;
     unsigned long current_pause_ms = (grind_paused_ && pause_start_ms_ > 0)
                                    ? (millis() - pause_start_ms_) : 0;
@@ -1157,6 +1400,7 @@ const char* GrindController::get_phase_name(GrindPhase p) const {
         case GrindPhase::PRIME: return "PRIME";
         case GrindPhase::PRIME_SETTLING: return "PRIME_SETTLING";
         case GrindPhase::PURGE_CONFIRM: return "PURGE_CONFIRM";
+        case GrindPhase::REFILL_CONFIRM: return "REFILL_CONFIRM";
         case GrindPhase::PREDICTIVE: return "PREDICTIVE";
         case GrindPhase::PULSE_DECISION: return "PULSE_DECISION";
         case GrindPhase::PULSE_EXECUTE: return "PULSE_EXECUTE";
@@ -1235,7 +1479,8 @@ bool GrindController::should_log_measurements() const {
         && phase != GrindPhase::SETUP
         && phase != GrindPhase::COMPLETED
         && phase != GrindPhase::TIMEOUT
-        && phase != GrindPhase::PURGE_CONFIRM;  // Don't log while waiting for user to confirm purge
+        && phase != GrindPhase::PURGE_CONFIRM   // Don't log while waiting for the user at a prompt
+        && phase != GrindPhase::REFILL_CONFIRM;
 }
 
 void GrindController::process_queued_ui_events() {
@@ -1264,7 +1509,8 @@ bool GrindController::queue_terminal_session() {
     else if (last_session_result_ == GrindSessionResult::MAX_PULSES) result = "COMPLETE - MAX PULSES";
     strncpy(request.result_string, result, sizeof(request.result_string) - 1);
     request.final_weight = final_weight;
-    request.pulse_count = pulse_attempts;
+    request.pulse_count = static_cast<uint8_t>(std::min(session_pulse_total_ + pulse_attempts, 255));
+    request.refill_count = refill_resume_count_;
     // The terminal phase timestamp survives queue-full retries and UI delays.
     request.completed_at_ms = static_cast<uint32_t>(phase_start_time);
     session_end_flash_queued = queue_flash_operation(request);
@@ -1314,7 +1560,7 @@ void GrindController::process_queued_flash_operations() {
                 LOG_BLE("[%lums FLASH_OP] Processing END_GRIND_SESSION on Core 1: %s, %.2fg, %d pulses\n", 
                         millis(), request.result_string, request.final_weight, request.pulse_count);
                 grind_logger.end_grind_session(request.result_string, request.final_weight, request.pulse_count,
-                                               request.completed_at_ms);
+                                               request.completed_at_ms, request.refill_count);
                 break;
 
             case FlashOpRequest::UPDATE_MANUAL_RUNTIME:

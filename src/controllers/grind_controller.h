@@ -34,6 +34,7 @@ struct FlashOpRequest {
     float start_weight;      // For START_GRIND_SESSION (pre-tare snapshot)
     float final_weight;      // For END_GRIND_SESSION
     uint8_t pulse_count;     // For END_GRIND_SESSION
+    uint8_t refill_count;    // For END_GRIND_SESSION: resumes after running out of beans
     uint32_t completed_at_ms; // Absolute clock at terminal phase entry, not save time
     uint32_t motor_runtime_ms; // For UPDATE_MANUAL_RUNTIME
 };
@@ -67,6 +68,29 @@ enum class PurgeContinueResult {
     VESSEL_MISSING,   // Still waiting: the scale reads as if the cup were off
     SCALE_NOT_READY,  // Still waiting: no fresh scale reading
     NOT_WAITING       // The session has already left the purge prompt
+};
+
+// Outcome of CONTINUE on the refill prompt. A press on an unsettled scale
+// returns WAITING_FOR_SETTLE; the control loop then finishes it and leaves
+// the outcome for take_refill_outcome().
+enum class RefillContinueResult {
+    NONE,                // Nothing new to report
+    CONTINUED,           // Grinding on from the existing zero
+    WAITING_FOR_SETTLE,  // Motor off until the reading settles, at most GRIND_REFILL_SETTLE_TIMEOUT_MS
+    VESSEL_MISSING,      // Still waiting: the settled reading looks as if the cup were off
+    READING_MOVED,       // Still waiting: the settled reading moved more than GRIND_REFILL_MOVED_THRESHOLD_G
+    SETTLE_TIMEOUT,      // Still waiting: the reading never settled, so CONTINUE was dropped
+    CUP_LIFTED,          // Still waiting: the cup was lifted while waiting to settle, so CONTINUE was dropped
+    SCALE_NOT_READY,     // Still waiting: no fresh scale reading
+    NOT_WAITING          // The session has already left the refill prompt
+};
+
+// What the refill prompt shows.
+struct RefillPromptInfo {
+    bool no_beans_at_start;  // Nothing was ground yet: the hopper was empty from the start
+    bool waiting_for_settle; // CONTINUE is pending a settled reading
+    float pause_weight_g;    // Reading when grinding stopped (settled once the scale allowed)
+    float target_weight_g;
 };
 
 
@@ -195,6 +219,27 @@ private:
     float post_purge_weight_ = 0.0f;
     bool vessel_lifted_since_purge_ = false;
 
+    // Out of beans. A dry run pauses at REFILL_CONFIRM with the motor off;
+    // CONTINUE resumes in refill_resume_phase_ from the existing zero.
+    uint8_t refill_resume_count_ = 0;          // Resumes so far in this grind
+    GrindPhase refill_resume_phase_ = GrindPhase::PREDICTIVE;
+    bool refill_no_beans_at_start_ = false;    // Prompt reached before anything was ground
+    float refill_pause_weight_ = 0.0f;         // Reference reading for the moved-cup check
+    bool refill_reference_settled_ = false;    // refill_pause_weight_ is a settled reading
+    bool refill_vessel_lifted_ = false;        // Cup lifted at some point during this pause
+    bool refill_continue_pending_ = false;     // CONTINUE waits for a settled reading
+    unsigned long refill_continue_requested_ms_ = 0;
+    RefillContinueResult refill_outcome_ = RefillContinueResult::NONE;  // Result of a pending CONTINUE
+    // The current stretch began with a resume, from this weight. A resumed
+    // stretch that gains nothing points to a jam or open relay, not beans.
+    bool refill_leg_resumed_ = false;
+    float refill_leg_start_weight_ = 0.0f;
+    int session_pulse_total_ = 0;              // Pulses of earlier stretches; pulse_attempts counts this one
+    // Largest PREDICTIVE stop offset computed from flow in the sane band. A
+    // resumed stretch is often too short to measure its own, so it starts from this.
+    float peak_healthy_stop_offset_g_ = 0.0f;
+    float peak_healthy_flow_gps_ = 0.0f;       // Largest PREDICTIVE flow in the sane band, for resumed pulses
+
     DiagnosticsController* diagnostics_controller_ = nullptr;
 
     // Motor response latency - runtime configurable
@@ -229,6 +274,16 @@ public:
     // first if the cup was emptied or swapped. With check_vessel set it keeps
     // waiting while the scale reads as if the vessel were still off.
     PurgeContinueResult continue_from_purge(bool check_vessel = true);
+    // Called by UI for CONTINUE on the refill prompt. Compares a settled
+    // reading with the one at the pause, waiting for the scale to settle if
+    // needed. accept_current_reading skips the cup checks after the user has
+    // confirmed the reading in a "Cup missing?" or "Cup moved?" dialog.
+    RefillContinueResult continue_from_refill(bool accept_current_reading = false);
+    // STOP on the refill prompt: ends the grind as "No beans?". False if not waiting.
+    bool decline_refill();
+    // Result of a CONTINUE the control loop finished; NONE if nothing new.
+    RefillContinueResult take_refill_outcome();
+    RefillPromptInfo get_refill_prompt_info() const;
     void update(); // Core 0 main control method - runs at fixed RTOS interval
     
     // Time mode pulse functionality
@@ -324,6 +379,11 @@ private:
     bool grounds_are_stale() const;
     bool vessel_removal_confirmed(float* sample_weight);
     bool dry_run_detected(const GrindLoopData& loop_data);
+    void end_or_pause_dry_run(const GrindLoopData& loop_data);
+    void enter_refill_pause(const GrindLoopData& loop_data);
+    void refill_pause_tick(const GrindLoopData& loop_data, bool vessel_lifted);
+    RefillContinueResult evaluate_refill_continue(float settled_weight, const GrindLoopData& loop_data);
+    void resume_after_refill(const GrindLoopData& loop_data);
     void abort_session(GrindSessionResult result, const char* message, const GrindLoopData& loop_data);
     uint8_t get_current_phase_id() const;
     

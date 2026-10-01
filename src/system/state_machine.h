@@ -12,7 +12,8 @@ enum class UIState {
     PURGE_CONFIRM,
     AUTOTUNING,
     OTA_UPDATE,
-    OTA_UPDATE_FAILED
+    OTA_UPDATE_FAILED,
+    REFILL_CONFIRM
 };
 
 class StateMachine {

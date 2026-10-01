@@ -27,6 +27,7 @@ const char* StateMachine::get_state_name(UIState state) const {
         case UIState::AUTOTUNING: return "AUTOTUNING";
         case UIState::OTA_UPDATE: return "OTA_UPDATE";
         case UIState::OTA_UPDATE_FAILED: return "OTA_UPDATE_FAILED";
+        case UIState::REFILL_CONFIRM: return "REFILL_CONFIRM";
         default: return "UNKNOWN";
     }
 }

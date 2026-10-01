@@ -32,6 +32,7 @@ struct GrindRecord {
     double loaded_g = 0;
     int pulses = 0;                // PULSE_EXECUTE entries
     int purge_prompts = 0;         // PURGE_CONFIRM entries
+    int refill_prompts = 0;        // REFILL_CONFIRM entries (out of beans)
     int tares = 0;                 // TARING entries
     double motor_on_s = 0;         // relay contact closed during the session
     double motor_on_max_run_s = 0; // longest continuous contact closure
@@ -39,6 +40,7 @@ struct GrindRecord {
     double motor_no_sample_s = 0;  // contact closed while the firmware had no fresh sample
     double motor_after_end_s = 0;  // contact closed after the terminal phase
     double motor_no_cup_s = 0;     // contact closed while no cup was on the platform
+    double motor_refill_pause_s = 0; // contact closed while the controller was at the refill prompt
     float latency_ms = 0;
     float stop_offset_g = 0;
     bool open = true;

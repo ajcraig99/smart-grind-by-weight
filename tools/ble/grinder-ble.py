@@ -736,11 +736,13 @@ class GrinderBLETool:
         if len(file_data) < (24 + SESSION_STRUCT_SIZE):
             raise ValueError(f"File data too small: {len(file_data)} bytes")
 
+        # Must match enum class GrindPhase in src/controllers/grind_events.h.
         PHASE_NAMES = {
             0: "IDLE", 1: "INITIALIZING", 2: "SETUP", 3: "TARING", 4: "TARE_CONFIRM",
             5: "PREDICTIVE", 6: "PULSE_DECISION", 7: "PULSE_EXECUTE", 8: "PULSE_SETTLING",
-            9: "FINAL_SETTLING", 10: "TIME_GRINDING", 11: "TIME_ADDITIONAL_PULSE", 12: "COMPLETED", 13: "TIMEOUT",
-            14: "PRIME", 15: "PRIME_SETTLING", 16: "PURGE_CONFIRM",
+            9: "FINAL_SETTLING", 10: "TIME_GRINDING", 11: "MANUAL_GRINDING", 12: "TIME_ADDITIONAL_PULSE",
+            13: "COMPLETED", 14: "TIMEOUT", 15: "PRIME", 16: "PRIME_SETTLING", 17: "PURGE_CONFIRM",
+            18: "REFILL_CONFIRM",
         }
         
         offset = 0
@@ -782,6 +784,8 @@ class GrinderBLETool:
         max_pulse_attempts = struct.unpack_from('<B', session_bytes, 58)[0]
         pulse_count = struct.unpack_from('<B', session_bytes, 59)[0]
         termination_reason = struct.unpack_from('<B', session_bytes, 60)[0]
+        # Formerly reserved and written as zero, so older files read as 0.
+        refill_count = struct.unpack_from('<B', session_bytes, 61)[0]
 
         result_bytes = session_bytes[64:80]
 
@@ -811,6 +815,7 @@ class GrinderBLETool:
             'pulse_count': pulse_count,
             'max_pulse_attempts': max_pulse_attempts,
             'termination_reason': termination_reason,
+            'refill_count': refill_count,
             'latency_to_coast_ratio': latency_to_coast_ratio,
             'flow_rate_threshold': flow_rate_threshold,
             'schema_version': schema_version,
@@ -955,6 +960,7 @@ class GrinderBLETool:
                     pulse_count INTEGER,
                     max_pulse_attempts INTEGER,
                     termination_reason INTEGER,
+                    refill_count INTEGER,
                     latency_to_coast_ratio REAL,
                     flow_rate_threshold REAL,
                     schema_version INTEGER,
@@ -988,14 +994,15 @@ class GrinderBLETool:
             # Insert data
             
             # Build placeholders dynamically to match column count
-            _cols_sessions = """session_id, session_timestamp, profile_id, grind_mode, target_weight, target_time_ms, tolerance, final_weight, start_weight, error_grams, time_error_ms, total_time_ms, total_motor_on_time_ms, pulse_count, max_pulse_attempts, termination_reason, latency_to_coast_ratio, flow_rate_threshold, schema_version, result_status, checksum, session_size_bytes"""
+            _cols_sessions = """session_id, session_timestamp, profile_id, grind_mode, target_weight, target_time_ms, tolerance, final_weight, start_weight, error_grams, time_error_ms, total_time_ms, total_motor_on_time_ms, pulse_count, max_pulse_attempts, termination_reason, refill_count, latency_to_coast_ratio, flow_rate_threshold, schema_version, result_status, checksum, session_size_bytes"""
             _params_sessions = [
                     (
                         s['session_id'], s['session_timestamp'], s['profile_id'], s.get('grind_mode', 0),
                         s['target_weight'], s.get('target_time_ms', 0), s['tolerance'],
                         s['final_weight'], s.get('start_weight', 0.0), s['error_grams'], s.get('time_error_ms', 0),
                         s['total_time_ms'], s['total_motor_on_time_ms'], s['pulse_count'], s.get('max_pulse_attempts', 0),
-                        s.get('termination_reason', 255), s.get('latency_to_coast_ratio', 0.0), s.get('flow_rate_threshold', 0.0),
+                        s.get('termination_reason', 255), s.get('refill_count', 0),
+                        s.get('latency_to_coast_ratio', 0.0), s.get('flow_rate_threshold', 0.0),
                         s.get('schema_version', LOG_SCHEMA_VERSION),
                         s['result_status'], s.get('checksum', 0), s.get('session_size_bytes', 0)
                     )

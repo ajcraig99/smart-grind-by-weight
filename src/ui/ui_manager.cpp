@@ -103,6 +103,7 @@ void UIManager::create_ui() {
     calibration_screen.create();
     confirm_screen.create();
     purge_confirm_screen.create();
+    refill_confirm_screen.create();
     autotune_screen.create();
     ota_screen.create();
     ota_update_failed_screen.create();
@@ -237,6 +238,7 @@ void UIManager::switch_to_state(UIState new_state) {
     calibration_screen.hide();
     confirm_screen.hide();
     purge_confirm_screen.hide();
+    refill_confirm_screen.hide();
     autotune_screen.hide();
     ota_screen.hide();
     ota_update_failed_screen.hide();
@@ -319,6 +321,15 @@ void UIManager::switch_to_state(UIState new_state) {
 
             purge_confirm_screen.set_message(message_buffer);
             purge_confirm_screen.show();
+            break;
+        }
+
+        case UIState::REFILL_CONFIRM: {
+            const RefillPromptInfo info = grind_controller ? grind_controller->get_refill_prompt_info()
+                                                           : RefillPromptInfo{};
+            WeightSensor* sensor = hardware_manager ? hardware_manager->get_weight_sensor() : nullptr;
+            refill_confirm_screen.show(info.no_beans_at_start, info.target_weight_g,
+                                       sensor ? sensor->get_display_weight() : info.pause_weight_g);
             break;
         }
 

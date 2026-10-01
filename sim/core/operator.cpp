@@ -20,7 +20,9 @@ constexpr int kUiReady = 0;
 constexpr int kUiGrinding = 1;
 constexpr int kUiComplete = 2;
 constexpr int kUiTimeout = 3;
+constexpr int kUiConfirm = 7;
 constexpr int kUiPurgeConfirm = 8;
+constexpr int kUiRefillConfirm = 12;
 // GrindPhase values (src/controllers/grind_events.h).
 constexpr int kPhaseIdle = 0;
 constexpr int kPhaseCompleted = 13;
@@ -58,6 +60,17 @@ struct Scenario {
     int grinds = 1;
     double settle_after_s = 3.0;
     double tap_hold_s = 0.1;
+    // Out-of-beans prompt (REFILL_CONFIRM). "stop" taps STOP (the firmware's old outcome,
+    // the default so existing scenarios keep their results), "continue" adds refill_g of
+    // beans and taps CONTINUE, "ignore" leaves the prompt to time out.
+    std::string refill_action = "stop";
+    double refill_g = 10.0;
+    int refill_max = 10;              // prompts answered with "continue"; later ones get STOP
+    int refill_lift_cup = 0;          // lift the cup and put it back before continuing
+    int refill_empty_cup = 0;         // lift the cup, tip it out, put it back
+    std::string refill_moved_action = "continue";  // answer to "Cup moved?"/"Cup missing?": continue | stop
+    double refill_jiggle_s = 0;       // knock the platform while pouring; CONTINUE pressed mid-way
+    double refill_jiggle_g = 3.0;     // size of each knock (plant "bump" impact)
     std::vector<Event> events;
 };
 
@@ -147,6 +160,100 @@ void fire(Event& e) {
     }
 }
 
+// Answers the purge prompt as the scenario says.
+void handle_purge_prompt() {
+    g_status = "purge prompt";
+    wait_s(g_sc.reaction_s);
+    if (g_sc.purge_action == "discard") {
+        plant_action(plant(), SIM_ACT_REMOVE_CUP, 0);
+        wait_s(0.8);
+        plant_action(plant(), SIM_ACT_EMPTY_CUP, 0);
+        wait_s(0.8);
+        plant_action(plant(), SIM_ACT_PLACE_CUP, 0);
+        wait_s(g_sc.reaction_s);
+    }
+    if (ui() == kUiPurgeConfirm) {
+        tap(kButtonRightX, kButtonY);
+        g_anchor_continue = now_s();
+    }
+    g_status = "grinding";
+}
+
+// Taps a button of the confirm dialog ("Cup moved?" / "Cup missing?").
+void answer_cup_dialog() {
+    g_status = "cup dialog";
+    wait_s(g_sc.reaction_s);
+    int x = 0, y = 0;
+    const bool go_on = g_sc.refill_moved_action == "continue";
+    if (firmware_confirm_button_center(go_on, &x, &y)) tap(x, y);
+    if (!go_on) {
+        // BACK returns to the prompt; end the grind there.
+        wait_until([] { return ui() == kUiRefillConfirm; }, 2.0);
+        wait_s(g_sc.reaction_s);
+        if (ui() == kUiRefillConfirm) tap(kButtonLeftX, kButtonY);
+    }
+}
+
+// Answers one out-of-beans prompt. CONTINUE is retried when the firmware dropped it
+// (scale never settled, or the cup was lifted while waiting).
+void handle_refill_prompt(int prompt_number) {
+    g_status = "refill prompt";
+    wait_s(g_sc.reaction_s);
+    if (g_sc.refill_action == "ignore") {
+        wait_until([] { return ui() != kUiRefillConfirm; }, g_sc.grind_timeout_s);
+        return;
+    }
+    if (g_sc.refill_action != "continue" || prompt_number > g_sc.refill_max) {
+        if (ui() == kUiRefillConfirm) tap(kButtonLeftX, kButtonY);
+        wait_until([] { return ui() != kUiRefillConfirm; }, 3.0);
+        return;
+    }
+    if (g_sc.refill_lift_cup || g_sc.refill_empty_cup) {
+        plant_action(plant(), SIM_ACT_REMOVE_CUP, 0);
+        wait_s(0.8);
+        if (g_sc.refill_empty_cup) {
+            plant_action(plant(), SIM_ACT_EMPTY_CUP, 0);
+            wait_s(0.8);
+        }
+        plant_action(plant(), SIM_ACT_PLACE_CUP, 0);
+        wait_s(0.5);
+    }
+    g_status = "refilling";
+    plant_action(plant(), SIM_ACT_LOAD_BEANS, g_sc.refill_g);
+    if (g_sc.refill_jiggle_s > 0) {
+        // Knock the platform while pouring and press CONTINUE half-way through, so the
+        // firmware has to wait for the reading to settle before it compares.
+        const double end = now_s() + g_sc.refill_jiggle_s;
+        const double press_at = now_s() + g_sc.refill_jiggle_s / 2;
+        bool pressed = false;
+        while (now_s() < end) {
+            plant_action(plant(), SIM_ACT_BUMP, g_sc.refill_jiggle_g);
+            if (!pressed && now_s() >= press_at && ui() == kUiRefillConfirm) {
+                tap(kButtonRightX, kButtonY);
+                pressed = true;
+            }
+            wait_s(0.15);
+        }
+        if (!pressed && ui() == kUiRefillConfirm) tap(kButtonRightX, kButtonY);
+    } else {
+        wait_s(g_sc.reaction_s);
+        if (ui() == kUiRefillConfirm) tap(kButtonRightX, kButtonY);
+    }
+    g_status = "refill continue";
+    for (int attempt = 0; attempt < 5; ++attempt) {
+        // The firmware waits up to 5 s (GRIND_REFILL_SETTLE_TIMEOUT_MS) for a settled reading.
+        wait_until([] { return ui() != kUiRefillConfirm; }, 7.0);
+        if (ui() == kUiConfirm) {
+            answer_cup_dialog();
+            continue;
+        }
+        if (ui() != kUiRefillConfirm || terminal()) break;
+        wait_s(g_sc.reaction_s);
+        if (ui() == kUiRefillConfirm) tap(kButtonRightX, kButtonY);
+    }
+    g_status = "grinding";
+}
+
 void operator_task(void*) {
     g_status = "waiting for boot";
     if (g_sc.cup_at_boot) plant_action(plant(), SIM_ACT_PLACE_CUP, g_sc.cup_mass_g);
@@ -177,31 +284,24 @@ void operator_task(void*) {
             g_status = "start refused";
             break;
         }
+        // Answer prompts until the grind ends. The timeout runs from START; prompts the
+        // operator is answering extend it by the time spent at them.
         bool purge_handled = false;
-        const bool done = wait_until(
-            [&purge_handled] {
-                if (!purge_handled && ui() == kUiPurgeConfirm) return true;
-                return terminal();
-            },
-            g_sc.grind_timeout_s);
-        if (done && !purge_handled && ui() == kUiPurgeConfirm) {
-            purge_handled = true;
-            g_status = "purge prompt";
-            wait_s(g_sc.reaction_s);
-            if (g_sc.purge_action == "discard") {
-                plant_action(plant(), SIM_ACT_REMOVE_CUP, 0);
-                wait_s(0.8);
-                plant_action(plant(), SIM_ACT_EMPTY_CUP, 0);
-                wait_s(0.8);
-                plant_action(plant(), SIM_ACT_PLACE_CUP, 0);
-                wait_s(g_sc.reaction_s);
+        int refill_prompts = 0;
+        double deadline = now_s() + g_sc.grind_timeout_s;
+        while (!terminal() && now_s() < deadline) {
+            if (!purge_handled && ui() == kUiPurgeConfirm) {
+                const double t0 = now_s();
+                handle_purge_prompt();
+                purge_handled = true;
+                deadline += now_s() - t0;
+            } else if (ui() == kUiRefillConfirm) {
+                const double t0 = now_s();
+                handle_refill_prompt(++refill_prompts);
+                deadline += now_s() - t0;
+            } else {
+                block(now_us() + 1000);
             }
-            if (ui() == kUiPurgeConfirm) {
-                tap(kButtonRightX, kButtonY);
-                g_anchor_continue = now_s();
-            }
-            g_status = "grinding";
-            wait_until([] { return terminal(); }, g_sc.grind_timeout_s);
         }
         if (!terminal()) {
             g_status = "grind did not finish";
@@ -270,6 +370,18 @@ bool operator_load_scenario_json(const std::string& text, std::string* error) {
     sc.grind_timeout_s = root.num("grind_timeout_s", sc.grind_timeout_s);
     sc.grinds = static_cast<int>(root.num("grinds", sc.grinds));
     sc.settle_after_s = root.num("settle_after_s", sc.settle_after_s);
+    sc.refill_action = root.str("refill_action", sc.refill_action);
+    sc.refill_g = root.num("refill_g", sc.refill_g);
+    sc.refill_max = static_cast<int>(root.num("refill_max", sc.refill_max));
+    sc.refill_lift_cup = root.num("refill_lift_cup", 0) != 0;
+    sc.refill_empty_cup = root.num("refill_empty_cup", 0) != 0;
+    sc.refill_moved_action = root.str("refill_moved_action", sc.refill_moved_action);
+    sc.refill_jiggle_s = root.num("refill_jiggle_s", sc.refill_jiggle_s);
+    sc.refill_jiggle_g = root.num("refill_jiggle_g", sc.refill_jiggle_g);
+    if (sc.refill_action != "stop" && sc.refill_action != "continue" && sc.refill_action != "ignore") {
+        if (error) *error = "refill_action must be stop, continue or ignore";
+        return false;
+    }
     if (const Json* events = root.get("events")) {
         for (const Json& ej : events->a) {
             Event e;

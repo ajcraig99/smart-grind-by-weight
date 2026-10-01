@@ -107,6 +107,17 @@ void WeightGrindStrategy::run_predictive_phase(GrindController& controller,
             if (current_flow_rate > GRIND_FLOW_DETECTION_THRESHOLD_GPS) {
                 controller.motor_stop_target_weight = ((controller.grind_latency_ms * controller.get_coast_ratio()) /
                                                        (float)SYS_MS_PER_SECOND) * current_flow_rate;
+                // The largest offset and flow seen in the sane band are kept for a
+                // resume after running out of beans. A knock on the cup reads above
+                // the band; the taper as the burrs run dry only lowers both, so the
+                // peaks are the full-flow values.
+                if (current_flow_rate >= GRIND_FLOW_RATE_MIN_SANE_GPS &&
+                    current_flow_rate <= GRIND_FLOW_RATE_MAX_SANE_GPS) {
+                    controller.peak_healthy_stop_offset_g_ =
+                        max(static_cast<float>(controller.peak_healthy_stop_offset_g_),
+                            static_cast<float>(controller.motor_stop_target_weight));
+                    controller.peak_healthy_flow_gps_ = max(controller.peak_healthy_flow_gps_, current_flow_rate);
+                }
             }
         }
     }
@@ -116,7 +127,12 @@ void WeightGrindStrategy::run_predictive_phase(GrindController& controller,
         loop_data.current_weight >= (controller.target_weight - controller.motor_stop_target_weight)) {
         controller.grinder->stop();
         controller.predictive_end_weight = loop_data.current_weight;
-        controller.pulse_flow_rate = controller.weight_sensor->get_flow_rate_95th_percentile(2500);
+        float pulse_flow = controller.weight_sensor->get_flow_rate_95th_percentile(2500);
+        // A stretch resumed after a refill is often shorter than that window, which then
+        // reaches back into the motor-off pause and reads low: pulses sized from it
+        // overshoot. Use the full-flow rate measured earlier when it is higher.
+        if (controller.refill_leg_resumed_) pulse_flow = max(pulse_flow, controller.peak_healthy_flow_gps_);
+        controller.pulse_flow_rate = pulse_flow;
         controller.switch_phase(GrindPhase::PULSE_SETTLING, loop_data);
     }
 }
