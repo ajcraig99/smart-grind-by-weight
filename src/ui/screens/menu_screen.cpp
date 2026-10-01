@@ -165,7 +165,7 @@ void MenuScreen::create_menu_ui() {
     lv_obj_clear_flag(spacer, LV_OBJ_FLAG_SCROLLABLE);
 
     // Create main page last
-    lv_obj_t* main_page = lv_menu_page_create(menu, "Menu");
+    lv_obj_t* main_page = create_page("Menu");
     lv_obj_set_layout(main_page, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(main_page, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_all(main_page, 0, 0);
@@ -174,34 +174,34 @@ void MenuScreen::create_menu_ui() {
     lv_obj_set_scrollbar_mode(main_page, LV_SCROLLBAR_MODE_AUTO);
 
     // Create sub-pages with titles
-    info_page = lv_menu_page_create(menu, "Info");
+    info_page = create_page("Info");
     create_info_page(info_page);
 
-    bluetooth_page = lv_menu_page_create(menu, "Bluetooth");
+    bluetooth_page = create_page("Bluetooth");
     create_bluetooth_page(bluetooth_page);
 
-    network_page = lv_menu_page_create(menu, "Wi-Fi");
+    network_page = create_page("Wi-Fi");
     create_network_page(network_page);
 
-    display_page = lv_menu_page_create(menu, "Display");
+    display_page = create_page("Display");
     create_display_page(display_page);
     
-    grind_mode_page = lv_menu_page_create(menu, "Grind Settings");
+    grind_mode_page = create_page("Grind Settings");
     create_grind_mode_page(grind_mode_page);
     
-    scale_page = lv_menu_page_create(menu, "Scale");
+    scale_page = create_page("Scale");
     create_scale_page(scale_page);
 
-    firmware_page = lv_menu_page_create(menu, "Firmware");
+    firmware_page = create_page("Firmware");
     create_firmware_page(firmware_page);
 
-    data_page = lv_menu_page_create(menu, "Logs & Data");
+    data_page = create_page("Logs & Data");
     create_data_page(data_page);
 
-    stats_page = lv_menu_page_create(menu, "Lifetime Stats");
+    stats_page = create_page("Lifetime Stats");
     create_stats_page(stats_page);
 
-    diagnostics_page = lv_menu_page_create(menu, "Diagnostics");
+    diagnostics_page = create_page("Diagnostics");
     create_diagnostics_page(diagnostics_page);
 
     // Create menu items grouped with separators
@@ -291,20 +291,27 @@ void MenuScreen::create_menu_ui() {
     LOG_BLE("[%lums MENU] Menu UI created successfully\n", millis());
 }
 
+// Pages keep their own title (a string literal, so the pointer stays valid) because
+// LVGL cuts the header label's text to dots in place when it does not fit.
+lv_obj_t* MenuScreen::create_page(const char* title) {
+    lv_obj_t* page = lv_menu_page_create(menu, title);
+    lv_obj_set_user_data(page, const_cast<char*>(title));
+    return page;
+}
+
 // The title sits between the back chevron and a spacer of the same width.
 // Use the largest title font in which the page name fits there.
 void MenuScreen::fit_header_title() {
     if (!header_title || !header_back) return;
+    const char* title = static_cast<const char*>(lv_obj_get_user_data(lv_menu_get_cur_main_page(menu)));
+    if (!title) return;
     lv_obj_t* header = lv_menu_get_main_header(menu);
-    // A long title was already cut to dots when LVGL set its text, and the label
-    // returns the cut text. Free the width and lay out again to restore the full name.
-    lv_obj_set_width(header_title, LV_SIZE_CONTENT);
     lv_obj_update_layout(header);
     const int32_t space = lv_obj_get_content_width(header) - 2 * lv_obj_get_width(header_back) -
                           2 * lv_obj_get_style_pad_column(header, LV_PART_MAIN);
     static const lv_font_t* const fonts[] = {&lv_font_montserrat_36, &lv_font_montserrat_32,
                                              &lv_font_montserrat_28, &lv_font_montserrat_24};
-    const lv_font_t* font = pick_font_that_fits(lv_label_get_text(header_title), space, fonts, 4);
+    const lv_font_t* font = pick_font_that_fits(title, space, fonts, 4);
     lv_obj_set_style_text_font(header_title, font, 0);
     lv_obj_set_width(header_title, space);
     // Keep the label as tall as at the largest font and centre the text in it,
@@ -315,6 +322,9 @@ void MenuScreen::fit_header_title() {
     const int32_t pad = (target_height - lv_font_get_line_height(font)) / 2;
     lv_obj_set_style_pad_top(header_title, pad, 0);
     lv_obj_set_style_pad_bottom(header_title, pad, 0);
+    // Show the full name again; LVGL may have cut it to dots against the previous page's size.
+    lv_label_set_text(header_title, title);
+    lv_obj_update_layout(header);
 }
 
 void MenuScreen::setup_menu_page(lv_obj_t* page) {

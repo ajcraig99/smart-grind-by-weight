@@ -25,6 +25,7 @@ private:
     lv_obj_t* header_title = nullptr;
     lv_obj_t* header_back = nullptr;
     void fit_header_title();
+    lv_obj_t* create_page(const char* title);
 
     // Info tab elements
     lv_obj_t* info_label;
