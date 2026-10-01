@@ -31,6 +31,12 @@ static void back_event_handler(lv_event_t * e)
     }
 }
 
+// One line high, so LV_LABEL_LONG_DOT ends a too-long label in dots instead of wrapping it.
+static void keep_to_one_line(lv_obj_t* label) {
+    lv_obj_set_height(label, lv_font_get_line_height(lv_obj_get_style_text_font(label, LV_PART_MAIN)));
+    lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
+}
+
 void MenuScreen::create(BluetoothManager* bluetooth, GrindController* grind_ctrl, GrindingScreen* grind_screen, class HardwareManager* hw_mgr, DiagnosticsController* diag_ctrl) {
     bluetooth_manager = bluetooth;
     grind_controller = grind_ctrl;
@@ -1389,7 +1395,7 @@ lv_obj_t* MenuScreen::create_separator(lv_obj_t* parent, const char* text) {
     lv_obj_set_style_pad_right(separator_label, 10, 0);
     // Keep both lines visible: a heading wider than this ends in dots.
     lv_obj_set_style_max_width(separator_label, LV_PCT(THEME_SEPARATOR_LABEL_MAX_PCT), 0);
-    lv_label_set_long_mode(separator_label, LV_LABEL_LONG_DOT);
+    keep_to_one_line(separator_label);
 
     // Create right line
     lv_obj_t* right_line = lv_obj_create(separator_container);
@@ -1455,7 +1461,7 @@ lv_obj_t* MenuScreen::create_menu_item(lv_obj_t* parent, const char* text) {
     // Take the space left of the chevron; a label that is still too long ends
     // in dots instead of running under the chevron (the layout audit flags it).
     lv_obj_set_flex_grow(label, 1);
-    lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
+    keep_to_one_line(label);
 
     lv_obj_t* chevron = lv_label_create(cont);
     lv_label_set_text(chevron, LV_SYMBOL_RIGHT);
@@ -1480,7 +1486,7 @@ lv_obj_t* MenuScreen::create_toggle_row(lv_obj_t* parent, const char* text, lv_o
     // Take the space left of the switch; a label that is still too long ends
     // in dots instead of running under the switch (the layout audit flags it).
     lv_obj_set_flex_grow(label, 1);
-    lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
+    keep_to_one_line(label);
 
     *out_toggle = lv_switch_create(row_container);
     lv_obj_set_size(*out_toggle, THEME_SWITCH_WIDTH_PX, THEME_SWITCH_HEIGHT_PX);
@@ -1507,7 +1513,7 @@ lv_obj_t* MenuScreen::create_slider_row(lv_obj_t* parent, const char* text, lv_o
     lv_label_set_text(*label, text);
     lv_obj_set_width(*label, LV_PCT(100));
     lv_obj_set_style_text_align(*label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_label_set_long_mode(*label, LV_LABEL_LONG_DOT);
+    keep_to_one_line(*label);
 
     *slider = lv_slider_create(row_container);
     lv_obj_set_size(*slider, LV_PCT(100), 40);
