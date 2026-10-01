@@ -86,6 +86,7 @@ struct GrindController {
     template <class... Args> void queue_log_message(Args...) {}
     void set_error_message(const char* message) { error = message; }
     void emit_progress_update(const GrindLoopData&) {}
+    void refill_pause_tick(const GrindLoopData&, bool) {}  // covered by refill_flow_test
     void switch_phase(GrindPhase next, const GrindLoopData& data = {}) {
         phase = next; last_switch = data; phase_start_time = data.now;
     }

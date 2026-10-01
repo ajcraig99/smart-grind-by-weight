@@ -135,7 +135,7 @@ const char* kSummaryHeader =
     "seed,scenario,grind,target_g,loaded_g,terminal,result,error,fw_final_g,true_cup_end_g,true_cup_g,"
     "err_true_g,err_fw_g,fw_minus_true_g,pulses,purge_prompts,tares,grind_time_s,motor_on_s,motor_max_run_s,"
     "motor_invalid_signal_s,motor_no_sample_s,motor_after_end_s,motor_no_cup_s,latency_ms,stop_offset_g,"
-    "burr_left_g,chute_g,platform_g,spilled_g,operator_status\n";
+    "burr_left_g,chute_g,platform_g,spilled_g,operator_status,refill_prompts,motor_refill_pause_s\n";
 
 std::string summary_rows(const Options& o, const std::string& scenario_name) {
     std::string rows;
@@ -147,7 +147,7 @@ std::string summary_rows(const Options& o, const std::string& scenario_name) {
         const double err_true = true_final - r.target_g;
         const double err_fw = r.fw_final_seen ? r.fw_final_g - r.target_g : NAN;
         std::snprintf(line, sizeof(line),
-                      "%llu,%s,%u,%.3f,%.3f,%s,%s,%s,%.3f,%.3f,%.3f,%.4f,%.4f,%.4f,%d,%d,%d,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%.4f,%.3f,%.3f,%.3f,%.3f,%s\n",
+                      "%llu,%s,%u,%.3f,%.3f,%s,%s,%s,%.3f,%.3f,%.3f,%.4f,%.4f,%.4f,%d,%d,%d,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%.4f,%.3f,%.3f,%.3f,%.3f,%s,%d,%.3f\n",
                       static_cast<unsigned long long>(o.seed), csv_escape(scenario_name).c_str(), r.index,
                       r.target_g, r.loaded_g, ended ? sim::firmware_phase_name(r.terminal_phase) : "NONE",
                       ended ? result_name(r.result) : "NONE", csv_escape(r.error).c_str(), r.fw_final_g,
@@ -155,11 +155,12 @@ std::string summary_rows(const Options& o, const std::string& scenario_name) {
                       r.pulses, r.purge_prompts, r.tares, ended ? r.t_end_s - r.t_start_s : -1.0, r.motor_on_s,
                       r.motor_on_max_run_s, r.motor_invalid_signal_s, r.motor_no_sample_s, r.motor_after_end_s,
                       r.motor_no_cup_s, r.latency_ms, r.stop_offset_g, r.burr_left_g, r.chute_g,
-                      r.true_platform_closed_g, r.spilled_g, csv_escape(sim::operator_status()).c_str());
+                      r.true_platform_closed_g, r.spilled_g, csv_escape(sim::operator_status()).c_str(),
+                      r.refill_prompts, r.motor_refill_pause_s);
         rows += line;
     }
     if (records.empty()) {
-        std::snprintf(line, sizeof(line), "%llu,%s,-1,%.3f,0,NONE,NONE,\"\",NAN,0,0,NAN,NAN,NAN,0,0,0,-1,0,0,0,0,0,0,0,0,0,0,0,0,%s\n",
+        std::snprintf(line, sizeof(line), "%llu,%s,-1,%.3f,0,NONE,NONE,\"\",NAN,0,0,NAN,NAN,NAN,0,0,0,-1,0,0,0,0,0,0,0,0,0,0,0,0,%s,0,0\n",
                       static_cast<unsigned long long>(o.seed), csv_escape(scenario_name).c_str(), o.target,
                       csv_escape(sim::operator_status()).c_str());
         rows += line;

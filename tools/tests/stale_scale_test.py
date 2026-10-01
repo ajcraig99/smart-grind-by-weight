@@ -58,6 +58,7 @@ int main() {
             "GrindTerminationReason classify_termination_reason", 1)[1].split(
             "\n}\n", 1)[0] + "\n}\n"
         code = r'''
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <cstring>
@@ -65,7 +66,7 @@ int main() {
 ''' + reason_enum + classify + r'''
 struct FlashOpRequest {
  enum { END_GRIND_SESSION }; int operation_type;
- char result_string[32]; float final_weight; uint8_t pulse_count;
+ char result_string[32]; float final_weight; uint8_t pulse_count; uint8_t refill_count;
  uint32_t completed_at_ms;
 };
 struct Logger { bool is_logging_active() { return true; } } grind_logger;
@@ -76,7 +77,8 @@ struct Controller {
  bool accept=false;
  bool session_end_flash_queued=false;
  uint32_t phase_start_time=1234;
- float final_weight=12; uint8_t pulse_attempts=2;
+ float final_weight=12; int pulse_attempts=2;
+ int session_pulse_total_=0; uint8_t refill_resume_count_=0;
  FlashOpRequest stored{};
  bool queue_flash_operation(const FlashOpRequest& request) { stored=request; return accept; }
  bool terminal() {
@@ -162,7 +164,7 @@ public:
 bool WeightSensor::sample_and_feed_filter()
 ''' + sampling + '\nuint32_t WeightSensor::get_adc_headroom_counts() const' + diagnostics + r'''
 enum class GrindMode {WEIGHT,TIME,MANUAL};
-enum class GrindPhase {PRIME,PREDICTIVE,PULSE_EXECUTE,FINAL_SETTLING,PURGE_CONFIRM,COMPLETED,TIMEOUT};
+enum class GrindPhase {PRIME,PREDICTIVE,PULSE_EXECUTE,FINAL_SETTLING,PURGE_CONFIRM,REFILL_CONFIRM,COMPLETED,TIMEOUT};
 #include "src/controllers/grind_session_result.h"
 struct Motor {bool running=true;void stop(){running=false;}};
 struct Controller {
@@ -221,7 +223,7 @@ int main(){
  sensor.raw=0x800000;clock_ms=UINT32_MAX-100;assert(sensor.sample_and_feed_filter());
  clock_ms=398;assert(sensor.has_recent_sample());clock_ms=399;assert(!sensor.has_recent_sample());
  for(auto phase:{GrindPhase::PRIME,GrindPhase::PREDICTIVE,GrindPhase::PULSE_EXECUTE,
-                 GrindPhase::FINAL_SETTLING,GrindPhase::PURGE_CONFIRM}){
+                 GrindPhase::FINAL_SETTLING,GrindPhase::PURGE_CONFIRM,GrindPhase::REFILL_CONFIRM}){
   Motor motor;Controller c;c.weight_sensor=&sensor;c.grinder=&motor;c.phase=phase;c.cycle();
   assert(!motor.running && !c.phase_work_ran && c.phase==GrindPhase::TIMEOUT);
   assert(c.last_session_result_==GrindSessionResult::SCALE_ERROR && c.error=="Scale disconnected");

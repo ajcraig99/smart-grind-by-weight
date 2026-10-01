@@ -26,6 +26,9 @@ bool firmware_constructed();
 FirmwareView firmware_view();
 const char* firmware_phase_name(int phase);
 const char* firmware_ui_state_name(int state);
+// Centre of the confirm dialog's left (confirm) or right (cancel) button on the panel, so the
+// scripted user can tap it. False if the dialog is not shown.
+bool firmware_confirm_button_center(bool confirm, int* x, int* y);
 
 // Arduino sketch entry points from src/main.cpp.
 void firmware_setup();

@@ -35,8 +35,11 @@ public:
     void init(Preferences* prefs);
 
     // Update methods - called by various system components
+    // include_in_averages false still counts the grind, its weight, pulses and
+    // motor time, but leaves the accuracy and pulse averages unchanged.
     void update_grind_session(float final_weight, float error_grams, uint8_t pulse_count,
-                              bool is_weight_mode, uint32_t motor_time_ms);
+                              bool is_weight_mode, uint32_t motor_time_ms,
+                              bool include_in_averages = true);
     void update_motor_test(uint32_t duration_ms);
     void update_manual_grind(uint32_t duration_ms);
     void update_time_pulse();

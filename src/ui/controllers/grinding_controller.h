@@ -3,6 +3,7 @@
 
 class UIManager;
 enum class UIState;
+enum class RefillContinueResult;
 struct GrindEventData;
 
 // Controls grind/pulse buttons, state transitions, chart updates, and auto-return timers
@@ -22,6 +23,8 @@ public:
     void handle_layout_toggle();
     void handle_purge_confirm_continue();
     void continue_after_purge(bool check_vessel);
+    // CONTINUE on the refill prompt; accept_current_reading after a cup dialog.
+    void continue_after_refill(bool accept_current_reading);
 
     void update_grind_button_icon();
     void update_button_layout();
@@ -49,6 +52,8 @@ private:
     void set_grind_icon(const char* symbol);
     void set_pulse_icon(const char* symbol);
     void show_start_failure();
+    void handle_refill_result(RefillContinueResult result);
+    bool refill_continue_enabled() const;
 
     void start_grind_complete_timer();
     void start_grind_timeout_timer();
@@ -79,4 +84,5 @@ private:
     const char* pulse_symbol_ = nullptr;
     uint32_t grind_button_changed_ms_ = 0;
     uint32_t pulse_button_changed_ms_ = 0;
+    bool refill_continue_was_enabled_ = true;  // CONTINUE was tappable at the last layout update
 };

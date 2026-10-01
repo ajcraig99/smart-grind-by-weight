@@ -136,7 +136,7 @@ int icon_sets = 0;
 void lv_img_set_src(void*, const void*) { ++icon_sets; }
 uint32_t now = 10000;
 uint32_t millis() { return now; }
-enum class UIState { READY, GRINDING, PURGE_CONFIRM, GRIND_COMPLETE };
+enum class UIState { READY, GRINDING, PURGE_CONFIRM, GRIND_COMPLETE, REFILL_CONFIRM };
 struct State { UIState current = UIState::READY; bool is_state(UIState s) const { return current == s; } };
 struct UIManager { State* state_machine; };
 #define LV_SYMBOL_SETTINGS "SETTINGS"
@@ -190,8 +190,10 @@ int main() {
     // PAUSE stops the motor, so it is exempt like STOP; RESUME is not.
     c.pulse_symbol_ = LV_SYMBOL_PAUSE; assert(c.pulse_button_stops());
     c.pulse_symbol_ = "PLAY"; assert(!c.pulse_button_stops());
-    // STOP never waits: the button stops while grinding or at the purge prompt.
-    for (UIState s : {UIState::GRINDING, UIState::PURGE_CONFIRM}) { state.current = s; assert(c.grind_button_stops()); }
+    // STOP never waits: the button stops while grinding or at the purge or refill prompt.
+    for (UIState s : {UIState::GRINDING, UIState::PURGE_CONFIRM, UIState::REFILL_CONFIRM}) {
+        state.current = s; assert(c.grind_button_stops());
+    }
     for (UIState s : {UIState::READY, UIState::GRIND_COMPLETE}) { state.current = s; assert(!c.grind_button_stops()); }
 }
 '''

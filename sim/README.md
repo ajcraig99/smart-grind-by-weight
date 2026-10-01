@@ -77,6 +77,14 @@ number of grinds, and timed events (faults, cup actions, resets) anchored to boo
 the first entry of a controller phase. Examples: `sim/scenarios/normal.json`,
 `sim/scenarios/findings/*.json`, `sim/mc/scenarios/*.json`.
 
+The out-of-beans prompt (`REFILL_CONFIRM`) is answered per `refill_action`: `stop` (default; taps STOP,
+so older scenarios keep the old "No beans?" outcome), `continue` (adds `refill_g` of beans, then taps
+CONTINUE) or `ignore` (the prompt times out after 5 minutes). Options: `refill_max`, `refill_lift_cup`,
+`refill_empty_cup`, `refill_moved_action` (`continue` | `stop` for the "Cup moved?" dialog) and
+`refill_jiggle_s` / `refill_jiggle_g` (knock the platform while pouring, so CONTINUE waits for the scale
+to settle). Examples: `sim/scenarios/refill/*.json`. Summaries add `refill_prompts` and
+`motor_refill_pause_s` (relay contact closed while at the prompt).
+
 ## Windows desktop UI simulator (pre-existing)
 
 Its original README is kept verbatim in `sim/DESKTOP_SIMULATOR.md` (this file was the desktop

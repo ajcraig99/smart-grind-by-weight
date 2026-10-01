@@ -156,6 +156,7 @@ void GrindingUIController::on_state_changed(UIState new_state) {
             enter_grind_timeout_state();
             break;
         case UIState::PURGE_CONFIRM:
+        case UIState::REFILL_CONFIRM:
             enter_purge_confirm_state();
             break;
         case UIState::MENU:
@@ -199,6 +200,13 @@ void GrindingUIController::update(UIState current_state) {
             ui_manager_->grinding_screen.update_target_weight_text(error_display);
             break;
         }
+        case UIState::REFILL_CONFIRM:
+            // A CONTINUE that had to wait for the scale is finished by the
+            // control loop; show its outcome.
+            if (ui_manager_->grind_controller) {
+                handle_refill_result(ui_manager_->grind_controller->take_refill_outcome());
+            }
+            break;
         default:
             break;
     }
@@ -220,6 +228,11 @@ void GrindingUIController::handle_grind_button() {
         // Cancel grind during purge confirmation
         if (ui_manager_->grind_controller) {
             ui_manager_->grind_controller->stop_grind();
+        }
+    } else if (ui_manager_->state_machine->is_state(UIState::REFILL_CONFIRM)) {
+        // End the grind as "No beans?", keeping what is in the cup on record.
+        if (ui_manager_->grind_controller) {
+            ui_manager_->grind_controller->decline_refill();
         }
     } else if (ui_manager_->state_machine->is_state(UIState::READY)) {
         if (ui_manager_->current_tab == ReadyScreen::MENU_TAB_INDEX) {
@@ -293,6 +306,12 @@ void GrindingUIController::handle_pulse_button() {
     // PURGE_CONFIRM: pulse button acts as CONTINUE
     if (ui_manager_->purge_confirm_screen.is_visible()) {
         handle_purge_confirm_continue();
+        return;
+    }
+
+    // REFILL_CONFIRM: pulse button acts as CONTINUE
+    if (ui_manager_->refill_confirm_screen.is_visible()) {
+        continue_after_refill(false);
         return;
     }
 
@@ -384,13 +403,82 @@ void GrindingUIController::continue_after_purge(bool check_vessel) {
     ui_manager_->switch_to_state(UIState::GRINDING);
 }
 
+void GrindingUIController::continue_after_refill(bool accept_current_reading) {
+    if (!ui_manager_ || !ui_manager_->grind_controller) {
+        return;
+    }
+    handle_refill_result(ui_manager_->grind_controller->continue_from_refill(accept_current_reading));
+}
+
+// Shows what happened to CONTINUE on the refill prompt, whether it was
+// decided at once or after the scale settled.
+void GrindingUIController::handle_refill_result(RefillContinueResult result) {
+    if (!ui_manager_) {
+        return;
+    }
+    RefillConfirmScreen& prompt = ui_manager_->refill_confirm_screen;
+    switch (result) {
+        case RefillContinueResult::NONE:
+        case RefillContinueResult::SCALE_NOT_READY:
+            // Nothing new; the control loop ends the grind if the scale stays silent.
+            return;
+        case RefillContinueResult::CONTINUED:
+            prompt.hide();
+            ui_manager_->switch_to_state(UIState::GRINDING);
+            return;
+        case RefillContinueResult::NOT_WAITING:
+            // The grind already moved on; its own event sets the screen.
+            prompt.hide();
+            return;
+        case RefillContinueResult::WAITING_FOR_SETTLE:
+            prompt.set_status("Hold still while the scale settles...");
+            break;
+        case RefillContinueResult::SETTLE_TIMEOUT:
+            prompt.set_status("Scale not steady. Keep still, then press " LV_SYMBOL_OK " again.");
+            break;
+        case RefillContinueResult::CUP_LIFTED:
+            prompt.set_status("Cup lifted. Press " LV_SYMBOL_OK " when it is back.");
+            break;
+        case RefillContinueResult::VESSEL_MISSING:
+            // The grind keeps its zero, which includes the cup, so it can only
+            // go on once that cup is back: there is nothing to continue with.
+            ui_manager_->show_confirmation(
+                "Cup missing?", "The scale is lighter than at\nthe start. Put the cup back,\nthen press " LV_SYMBOL_OK " again.",
+                "OK", lv_color_hex(THEME_COLOR_WARNING), nullptr, "BACK");
+            return;
+        case RefillContinueResult::READING_MOVED: {
+            WeightSensor* sensor = ui_manager_->hardware_manager->get_weight_sensor();
+            const float now_g = sensor ? sensor->get_display_weight() : 0.0f;
+            const float paused_g = ui_manager_->grind_controller
+                                       ? ui_manager_->grind_controller->get_refill_prompt_info().pause_weight_g
+                                       : 0.0f;
+            char message[160];
+            std::snprintf(message, sizeof(message),
+                          "The scale reads " SYS_WEIGHT_DISPLAY_FORMAT ";\nit read " SYS_WEIGHT_DISPLAY_FORMAT
+                          " when grinding\nstopped. Put the cup back,\nor continue from " SYS_WEIGHT_DISPLAY_FORMAT ".",
+                          static_cast<double>(now_g), static_cast<double>(paused_g), static_cast<double>(now_g));
+            ui_manager_->show_confirmation("Cup moved?", message, "CONTINUE", lv_color_hex(THEME_COLOR_WARNING),
+                                           [this]() { continue_after_refill(true); }, "BACK");
+            return;
+        }
+    }
+    update_button_layout();
+}
+
+// CONTINUE is greyed out while an earlier press waits for the scale to settle.
+bool GrindingUIController::refill_continue_enabled() const {
+    return !(ui_manager_ && ui_manager_->grind_controller &&
+             ui_manager_->grind_controller->get_refill_prompt_info().waiting_for_settle);
+}
+
 void GrindingUIController::update_grind_button_icon() {
     if (!ui_manager_ || !grind_button_ || !grind_icon_) {
         return;
     }
 
-    if (ui_manager_->state_machine->is_state(UIState::PURGE_CONFIRM)) {
-        // During purge confirm, show STOP icon (user can cancel the grind)
+    if (ui_manager_->state_machine->is_state(UIState::PURGE_CONFIRM) ||
+        ui_manager_->state_machine->is_state(UIState::REFILL_CONFIRM)) {
+        // At a prompt, show STOP icon (user can end the grind)
         set_grind_icon(LV_SYMBOL_STOP);
         lv_obj_set_style_bg_color(grind_button_, lv_color_hex(THEME_COLOR_ERROR), 0);
     } else if (ui_manager_->state_machine->is_state(UIState::GRINDING)) {
@@ -428,6 +516,7 @@ void GrindingUIController::update_button_layout() {
     }
 
     bool in_purge_confirm = ui_manager_->purge_confirm_screen.is_visible();
+    bool in_refill_confirm = ui_manager_->refill_confirm_screen.is_visible();
 
     bool in_time_grinding = (ui_manager_->current_mode == GrindMode::TIME &&
                              ui_manager_->grind_controller &&
@@ -438,7 +527,7 @@ void GrindingUIController::update_button_layout() {
     bool should_show_pulse = (ui_manager_->state_machine->is_state(UIState::GRIND_COMPLETE) &&
                               ui_manager_->current_mode == GrindMode::TIME);
 
-    if (in_purge_confirm || in_time_grinding || should_show_pulse) {
+    if (in_purge_confirm || in_refill_confirm || in_time_grinding || should_show_pulse) {
         // Dual button layout: left=STOP/CANCEL, right=context-specific action
         lv_obj_align(grind_button_, LV_ALIGN_BOTTOM_MID, -60, -10);
         if (pulse_button_) {
@@ -454,6 +543,20 @@ void GrindingUIController::update_button_layout() {
                 lv_obj_set_style_bg_color(pulse_button_, lv_color_hex(THEME_COLOR_SUCCESS), 0);
                 lv_obj_clear_state(pulse_button_, LV_STATE_DISABLED);
                 lv_obj_set_style_bg_opa(pulse_button_, LV_OPA_COVER, 0);
+            } else if (in_refill_confirm) {
+                set_pulse_icon(LV_SYMBOL_OK);
+                lv_obj_set_style_bg_color(pulse_button_, lv_color_hex(THEME_COLOR_SUCCESS), 0);
+                const bool enabled = refill_continue_enabled();
+                if (enabled) {
+                    // Re-enabled under a finger counts as a change of meaning.
+                    if (!refill_continue_was_enabled_) pulse_button_changed_ms_ = millis();
+                    lv_obj_clear_state(pulse_button_, LV_STATE_DISABLED);
+                    lv_obj_set_style_bg_opa(pulse_button_, LV_OPA_COVER, 0);
+                } else {
+                    lv_obj_add_state(pulse_button_, LV_STATE_DISABLED);
+                    lv_obj_set_style_bg_opa(pulse_button_, LV_OPA_50, LV_STATE_DISABLED);
+                }
+                refill_continue_was_enabled_ = enabled;
             } else if (in_time_grinding) {
                 // Pause / Resume toggle
                 if (is_time_grind_paused) {
@@ -530,6 +633,10 @@ void GrindingUIController::handle_grind_event(const GrindEventData& event_data) 
                 LOG_UI_DEBUG("[%lums UI_TRANSITION] Switching to PURGE_CONFIRM state\n", millis());
                 ui_manager_->switch_to_state(UIState::PURGE_CONFIRM);
                 update_grind_button_icon();  // Update button icon to STOP and reposition for dual-button layout
+            } else if (event_data.phase == GrindPhase::REFILL_CONFIRM) {
+                LOG_UI_DEBUG("[%lums UI_TRANSITION] Switching to REFILL_CONFIRM state\n", millis());
+                ui_manager_->switch_to_state(UIState::REFILL_CONFIRM);
+                update_grind_button_icon();
             } else if (event_data.phase != GrindPhase::IDLE &&
                        event_data.phase != GrindPhase::TIME_ADDITIONAL_PULSE &&
                        (event_data.phase == GrindPhase::INITIALIZING ||
@@ -583,7 +690,8 @@ void GrindingUIController::handle_grind_event(const GrindEventData& event_data) 
                     event_data.phase != GrindPhase::TARE_CONFIRM && event_data.phase != GrindPhase::INITIALIZING &&
                     event_data.phase != GrindPhase::SETUP && event_data.phase != GrindPhase::COMPLETED &&
                     event_data.phase != GrindPhase::TIMEOUT && event_data.phase != GrindPhase::TIME_ADDITIONAL_PULSE &&
-                    event_data.phase != GrindPhase::PURGE_CONFIRM) {
+                    event_data.phase != GrindPhase::PURGE_CONFIRM &&
+                    event_data.phase != GrindPhase::REFILL_CONFIRM) {
                     ui_manager_->grinding_screen.add_chart_data_point(event_data.current_weight, event_data.flow_rate, millis());
                 }
             }
@@ -603,13 +711,17 @@ void GrindingUIController::handle_grind_event(const GrindEventData& event_data) 
                                   static_cast<double>(event_data.elapsed_ms) / 1000.0);
                     ui_manager_->grinding_screen.update_target_weight_text(elapsed_text);
                 }
+                if (event_data.phase == GrindPhase::REFILL_CONFIRM) {
+                    ui_manager_->refill_confirm_screen.update_weight(event_data.current_weight);
+                }
 
                 if (chart_updates_enabled_ &&
                     event_data.phase != GrindPhase::IDLE && event_data.phase != GrindPhase::TARING &&
                     event_data.phase != GrindPhase::TARE_CONFIRM && event_data.phase != GrindPhase::INITIALIZING &&
                     event_data.phase != GrindPhase::SETUP && event_data.phase != GrindPhase::COMPLETED &&
                     event_data.phase != GrindPhase::TIMEOUT && event_data.phase != GrindPhase::TIME_ADDITIONAL_PULSE &&
-                    event_data.phase != GrindPhase::PURGE_CONFIRM) {
+                    event_data.phase != GrindPhase::PURGE_CONFIRM &&
+                    event_data.phase != GrindPhase::REFILL_CONFIRM) {
                     ui_manager_->grinding_screen.add_chart_data_point(event_data.current_weight, event_data.flow_rate, millis());
                 }
             }
@@ -822,7 +934,8 @@ bool GrindingUIController::is_deliberate_tap(lv_event_t* e, uint32_t changed_ms,
 bool GrindingUIController::grind_button_stops() const {
     return ui_manager_ && ui_manager_->state_machine &&
            (ui_manager_->state_machine->is_state(UIState::GRINDING) ||
-            ui_manager_->state_machine->is_state(UIState::PURGE_CONFIRM));
+            ui_manager_->state_machine->is_state(UIState::PURGE_CONFIRM) ||
+            ui_manager_->state_machine->is_state(UIState::REFILL_CONFIRM));
 }
 
 // Opening the menu or the Wi-Fi page needs no re-arm delay.

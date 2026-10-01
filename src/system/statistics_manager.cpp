@@ -75,7 +75,8 @@ void StatisticsManager::init(Preferences* prefs) {
 }
 
 void StatisticsManager::update_grind_session(float final_weight, float error_grams, uint8_t pulse_count,
-                                             bool is_weight_mode, uint32_t motor_time_ms) {
+                                             bool is_weight_mode, uint32_t motor_time_ms,
+                                             bool include_in_averages) {
     if (!initialized_) return;
 
     StatsLockGuard lock(g_stats_mutex);
@@ -92,9 +93,11 @@ void StatisticsManager::update_grind_session(float final_weight, float error_gra
 
     if (is_weight_mode) {
         snapshot_.weight_mode_grinds++;
-        float abs_error = std::fabs(error_grams);
-        snapshot_.accuracy_sample_count++;
-        snapshot_.accuracy_sum += abs_error;
+        if (include_in_averages) {
+            float abs_error = std::fabs(error_grams);
+            snapshot_.accuracy_sample_count++;
+            snapshot_.accuracy_sum += abs_error;
+        }
     } else {
         snapshot_.time_mode_grinds++;
     }
@@ -103,8 +106,10 @@ void StatisticsManager::update_grind_session(float final_weight, float error_gra
 
     snapshot_.total_weight_kg += (final_weight / 1000.0f);
     snapshot_.total_pulses += pulse_count;
-    snapshot_.pulse_sample_count++;
-    snapshot_.pulse_sum += pulse_count;
+    if (include_in_averages) {
+        snapshot_.pulse_sample_count++;
+        snapshot_.pulse_sum += pulse_count;
+    }
 
     mark_dirty_locked();
     persist_locked(true); // Session-level updates should persist immediately

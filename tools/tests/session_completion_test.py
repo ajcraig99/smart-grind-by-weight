@@ -23,6 +23,7 @@ class SessionCompletionTest(unittest.TestCase):
         methods += "\n" + function((ROOT / "src/tasks/file_io_task.cpp").read_text(),
                                     "void FileIOTask::process_flash_operation(")
         harness = r'''
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <cstring>
@@ -48,6 +49,7 @@ struct FlashOpRequest {
     char result_string[32]{};
     float start_weight = 0, final_weight = 0;
     uint8_t pulse_count = 0;
+    uint8_t refill_count = 0;
     uint32_t motor_runtime_ms = 0;
     uint32_t completed_at_ms = 0;
 };
@@ -69,10 +71,11 @@ struct Logger {
     std::string result;
     float weight = 0;
     uint32_t completed_at_ms = 0;
+    unsigned pulses = 0, refills = 0;
     bool is_logging_active() const { return active; }
     void start_grind_session(const GrindSessionDescriptor&, float) { active = true; ++generation; }
-    void end_grind_session(const char* r, float w, uint8_t, uint32_t ended) {
-        completed_at_ms = ended;
+    void end_grind_session(const char* r, float w, uint8_t p, uint32_t ended, uint8_t refill_count = 0) {
+        completed_at_ms = ended; pulses = p; refills = refill_count;
         assert(active); ++saves; active = false; result = r; weight = w;
         saved_generations.push_back(generation);
     }
@@ -100,6 +103,8 @@ public:
     bool session_end_flash_queued = false;
     float final_weight = 18.5f;
     int pulse_attempts = 3;
+    int session_pulse_total_ = 0;      // pulses of stretches before a refill
+    uint8_t refill_resume_count_ = 0;
     uint32_t phase_start_time = 80;
     Queue* flash_op_queue;
     Grinder* grinder;
@@ -187,6 +192,21 @@ int main() {
     clock_ms = 60000;
     io.process_flash_operation(completed);
     assert(grind_logger.completed_at_ms == 42 && !grind_logger.active);
+
+    // A grind resumed after running out of beans records every stretch's
+    // pulses and its refill count, through either dispatcher.
+    for (bool via_file_io : {false, true}) {
+        grind_logger.start_grind_session({}, 0);
+        c.flash_op_queue = &queue; queue.requests.clear();
+        c.phase = GrindPhase::COMPLETED; c.session_end_flash_queued = false;
+        c.last_session_result_ = GrindSessionResult::SUCCESS;
+        c.session_pulse_total_ = 6; c.pulse_attempts = 2; c.refill_resume_count_ = 1;
+        assert(c.queue_terminal_session() && queue.requests.size() == 1);
+        assert(queue.requests.front().pulse_count == 8 && queue.requests.front().refill_count == 1);
+        if (via_file_io) { io.process_flash_operation(queue.requests.front()); queue.requests.clear(); }
+        else c.process_queued_flash_operations();
+        assert(grind_logger.pulses == 8 && grind_logger.refills == 1 && !grind_logger.active);
+    }
 }
 '''
         with tempfile.TemporaryDirectory() as tmp:

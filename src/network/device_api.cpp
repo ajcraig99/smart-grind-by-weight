@@ -92,6 +92,10 @@ const char* api_phase_name(const GrindController& controller) {
             return "GRINDING";
         case GrindPhase::TIME_GRINDING:
             return controller.is_grind_paused() ? "PAUSED" : "GRINDING";
+        case GrindPhase::REFILL_CONFIRM:
+            // Out of beans: motor off, waiting for a refill. Continuing is
+            // on-device only; the API can still stop the grind.
+            return "PAUSED";
         case GrindPhase::MANUAL_GRINDING:
             return "GRINDING";
         case GrindPhase::PULSE_DECISION:
