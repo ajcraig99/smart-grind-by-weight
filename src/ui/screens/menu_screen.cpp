@@ -375,7 +375,7 @@ void MenuScreen::create_bluetooth_page(lv_obj_t* parent) {
     ble_timer_label = lv_label_create(parent);
     lv_label_set_text(ble_timer_label, "");
     lv_obj_set_style_text_font(ble_timer_label, &lv_font_montserrat_24, 0);
-    lv_obj_set_width(ble_timer_label, 260);
+    lv_obj_set_width(ble_timer_label, THEME_ROW_WIDTH_PX);
     lv_label_set_long_mode(ble_timer_label, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_color(ble_timer_label, lv_color_hex(THEME_COLOR_WARNING), 0);
     lv_obj_clear_flag(ble_timer_label, LV_OBJ_FLAG_SCROLLABLE);
@@ -433,7 +433,7 @@ void MenuScreen::create_network_page(lv_obj_t* parent) {
     create_toggle_row(parent, "Remote", &remote_start_toggle);
 
     network_forget_button = create_button(parent, "FORGET WI-FI", lv_color_hex(THEME_COLOR_WARNING),
-                                          260, 72, &lv_font_montserrat_24);
+                                          THEME_ROW_WIDTH_PX, 72, &lv_font_montserrat_24);
     lv_obj_set_style_margin_top(network_forget_button, 10, 0);
     lv_obj_add_flag(network_forget_button, LV_OBJ_FLAG_HIDDEN);
 
@@ -446,7 +446,7 @@ void MenuScreen::create_network_page(lv_obj_t* parent) {
     lv_obj_set_style_text_color(network_update_label, lv_color_hex(THEME_COLOR_TEXT_SECONDARY), 0);
     lv_obj_add_flag(network_update_label, LV_OBJ_FLAG_HIDDEN);
 
-    network_update_button = create_button(parent, LV_SYMBOL_REFRESH "  INSTALL UPDATE",
+    network_update_button = create_button(parent, "INSTALL UPDATE",
                                           lv_color_hex(THEME_COLOR_SUCCESS), 260, 72,
                                           &lv_font_montserrat_24);
     lv_obj_add_event_cb(
