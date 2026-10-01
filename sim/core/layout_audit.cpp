@@ -11,11 +11,6 @@
 
 #include "config/constants.h"
 
-// Temporary 8 px fallback: Task 3 adds THEME_SCREEN_MARGIN_PX to theme.h and deletes this block.
-#ifndef THEME_SCREEN_MARGIN_PX
-#define THEME_SCREEN_MARGIN_PX 8
-#endif
-
 namespace sim {
 namespace {
 

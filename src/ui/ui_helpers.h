@@ -14,6 +14,11 @@ void set_label_text_int(lv_obj_t* label, int32_t value, const char* unit = nullp
 
 void set_label_text_float(lv_obj_t* label, float value, const char* unit = nullptr);
 
+// Largest font in `fonts` (ordered largest first) in which `text` fits on one
+// line of `max_width` px; the last (smallest) font when none does.
+const lv_font_t* pick_font_that_fits(const char* text, int32_t max_width,
+                                     const lv_font_t* const* fonts, size_t count);
+
 lv_obj_t* create_profile_label(lv_obj_t* parent, lv_obj_t** profile_label, lv_obj_t** weight_label);
 
 lv_obj_t* create_dual_button_row(lv_obj_t* parent, lv_obj_t** left_button, lv_obj_t** right_button, 

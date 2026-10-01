@@ -48,6 +48,17 @@
 #define THEME_PAGE_DOT_GAP_PX 8                                               // Space between neighbouring dots
 #define THEME_PAGE_INDICATOR_BOTTOM_OFFSET_PX 30                              // Lift above the ready area's bottom edge, clear of the grind button
 
+// Spacing that keeps text inside its control and controls off the panel edge
+#define THEME_SCREEN_MARGIN_PX 8                                              // Gap between controls and the panel edge; clears an active-area corner radius up to 27 px
+#define THEME_ROW_PAD_HOR_PX 16                                               // Side padding inside buttons and menu rows
+#define THEME_ROW_GAP_PX 6                                                    // Gap between a row's label and its chevron or switch
+#define THEME_SWITCH_WIDTH_PX 64                                              // Toggle switch in a menu row
+#define THEME_SWITCH_HEIGHT_PX 34
+#define THEME_DIALOG_BUTTON_GAP_PX 24                                         // Between the two buttons of a dialog; a tap aimed at one must not land on the other
+#define THEME_DIALOG_BUTTON_PAD_PX 6                                          // Side padding inside dialog buttons
+#define THEME_PAGE_BOTTOM_PAD_PX 16                                           // Below the last control of a scrolling page
+#define THEME_SEPARATOR_LABEL_MAX_PCT 60                                      // Widest a section heading may be, so its lines stay visible
+
 //------------------------------------------------------------------------------
 // OPACITY VALUES
 //------------------------------------------------------------------------------
