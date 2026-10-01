@@ -98,7 +98,51 @@ void ReadyScreen::create() {
 
     update_profile_values(default_weights, GrindMode::WEIGHT);
 
+    // Created after the tabview so it draws on top of the pages.
+    create_page_indicator();
+    update_page_indicator(static_cast<int>(lv_tabview_get_tab_act(tabview)));
+
     visible = false;
+}
+
+void ReadyScreen::create_page_indicator() {
+    page_indicator = lv_obj_create(screen);
+    lv_obj_remove_style_all(page_indicator);
+    lv_obj_set_size(page_indicator, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_layout(page_indicator, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(page_indicator, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(page_indicator, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(page_indicator, THEME_PAGE_DOT_GAP_PX, 0);
+    lv_obj_align(page_indicator, LV_ALIGN_BOTTOM_MID, 0, -THEME_PAGE_INDICATOR_BOTTOM_OFFSET_PX);
+    // Display only: touches fall through to the pages so swipes still work.
+    lv_obj_clear_flag(page_indicator, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_clear_flag(page_indicator, LV_OBJ_FLAG_SCROLLABLE);
+
+    for (int i = 0; i < TAB_COUNT; i++) {
+        lv_obj_t* dot = lv_obj_create(page_indicator);
+        lv_obj_remove_style_all(dot);
+        lv_obj_set_size(dot, THEME_PAGE_DOT_SIZE_PX, THEME_PAGE_DOT_SIZE_PX);
+        lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
+        lv_obj_clear_flag(dot, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_clear_flag(dot, LV_OBJ_FLAG_SCROLLABLE);
+        page_dots[i] = dot;
+    }
+}
+
+void ReadyScreen::update_page_indicator(int tab) {
+    if (tab < 0 || tab >= TAB_COUNT) return;
+
+    for (int i = 0; i < TAB_COUNT; i++) {
+        if (!page_dots[i]) continue;
+        const bool active = i == tab;
+        lv_obj_set_width(page_dots[i], active ? THEME_PAGE_DOT_ACTIVE_WIDTH_PX : THEME_PAGE_DOT_SIZE_PX);
+        // Neutral grey rather than the light secondary text colour, so the
+        // shown page stands out by brightness as well as by shape.
+        lv_obj_set_style_bg_color(page_dots[i],
+                                  lv_color_hex(active ? THEME_COLOR_TEXT_PRIMARY : THEME_COLOR_NEUTRAL),
+                                  0);
+    }
 }
 
 void ReadyScreen::create_manual_page(lv_obj_t* parent) {
@@ -314,6 +358,7 @@ void ReadyScreen::update_profile_values(const float values[3], GrindMode mode) {
 void ReadyScreen::set_active_tab(int tab) {
     if (tab >= 0 && tab < TAB_COUNT) {
         lv_tabview_set_act(tabview, tab, LV_ANIM_OFF);
+        update_page_indicator(tab);
     }
 }
 

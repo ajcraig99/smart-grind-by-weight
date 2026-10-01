@@ -40,7 +40,9 @@ Weight targets range from 5 g to 40 g and time targets from 0.5 s to
 > 💡 **Tip** – the target label always shows the active unit (`g` or `s`). Long-press to edit in whichever mode you are currently using.
 
 ### Navigation
-- **Swipe left/right** to navigate between menu tabs
+- **Swipe left/right** to move between the main screen's pages: Manual,
+  Single, Double, Custom, Wi-Fi and Menu. The row of dots above the round
+  button shows where you are; the wide white dot is the page in view
 - **Swipe up/down** on the ready screen to toggle between grind-by-weight and grind-by-time modes (when enabled in Menu → Grind Settings)
 - **Tap** to select profiles or buttons
 - **Long press** on profile targets to edit/customize them
@@ -119,7 +121,8 @@ Need a simple live readout? Open **Menu → Scale** to jump into a full-screen w
 ## User interface navigation
 
 ```
-Main Screen (swipe left/right between tabs, up/down to toggle weight/time mode if enabled)
+Main Screen (swipe left/right between pages, shown by the dots above the round button;
+             up/down to toggle weight/time mode if enabled)
 |
 +-- Manual
 |   |-- Live elapsed motor time

@@ -42,6 +42,12 @@
 // General layout
 #define THEME_CORNER_RADIUS_PX 20                                             // Standard UI element corner radius
 
+// Ready screen page indicator (one dot per swipeable page)
+#define THEME_PAGE_DOT_SIZE_PX 8                                              // Diameter of an inactive page dot
+#define THEME_PAGE_DOT_ACTIVE_WIDTH_PX 22                                     // Width of the pill marking the shown page
+#define THEME_PAGE_DOT_GAP_PX 8                                               // Space between neighbouring dots
+#define THEME_PAGE_INDICATOR_BOTTOM_OFFSET_PX 30                              // Lift above the ready area's bottom edge, clear of the grind button
+
 //------------------------------------------------------------------------------
 // OPACITY VALUES
 //------------------------------------------------------------------------------

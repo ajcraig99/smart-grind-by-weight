@@ -52,6 +52,7 @@ public:
     void update_manual_scale(float weight, bool available, bool taring);
     void update_network_status();
     void set_active_tab(int tab);
+    void update_page_indicator(int tab);
     void set_profile_long_press_handler(lv_event_cb_t handler);
     void set_manual_tare_handler(lv_event_cb_t handler);
     
@@ -65,4 +66,10 @@ private:
     void create_manual_page(lv_obj_t* parent);
     void create_wifi_page(lv_obj_t* parent);
     void create_menu_page(lv_obj_t* parent);
+    void create_page_indicator();
+
+    // Row of dots showing which of the swipeable pages is in view. A child of
+    // `screen`, so it is shown and hidden with the ready screen.
+    lv_obj_t* page_indicator = nullptr;
+    lv_obj_t* page_dots[TAB_COUNT] = {};
 };

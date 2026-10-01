@@ -72,6 +72,9 @@ void ReadyUIController::handle_tab_change(int tab) {
     }
 
     ui_manager_->current_tab = tab;
+    // Swipe gestures and dragged-and-released pages both end here; a page
+    // restored on entering READY updates the dots in set_active_tab().
+    ui_manager_->ready_screen.update_page_indicator(tab);
     if (tab == ReadyScreen::MANUAL_TAB_INDEX) {
         ui_manager_->current_mode = GrindMode::MANUAL;
         ui_manager_->grinding_screen.set_mode(ui_manager_->current_mode);

@@ -72,6 +72,10 @@ line. Earlier release history remains available in the original project's
   before the change never counts. STOP and PAUSE still act at once.
 - Swiping across the bottom of the main screen now also selects the profile it
   shows; before, the grind button kept the previous tab's profile.
+- A row of six dots above the grind button shows that the main screen is a
+  swipeable row of pages (Manual, Single, Double, Custom, Wi-Fi, Menu) and
+  which one is in view. The dots only show on the main screen and do not take
+  touches, so swipes that start on them still change page.
 - Dialog buttons ignore swipes, and sliding off a dialog button cancels it.
 - The first touch on a dimmed screen only wakes it, even when held.
 - The touch driver holds a press through up to two failed reads instead of
