@@ -16,6 +16,13 @@ fs.rmSync(outDir, { recursive: true, force: true });  // no stale PNGs from an e
 fs.mkdirSync(outDir, { recursive: true });
 const chrome = process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 
+// The grind screen ignores a tap that starts sooner than USER_BUTTON_REARM_MS (virtual time) after
+// a button changes meaning, such as the check button appearing on a prompt. Read it from the
+// firmware so the waits follow the constant; a renamed define fails here, before any browser work.
+const REARM_MS = Number(/#define\s+USER_BUTTON_REARM_MS\s+\(?\s*(\d+)\s*U?L{0,2}\s*\)?/.exec(
+  fs.readFileSync(path.join(here, '..', '..', 'src', 'config', 'user.h'), 'utf8'))?.[1]);
+if (!(REARM_MS > 0)) throw new Error('USER_BUTTON_REARM_MS not found in src/config/user.h');
+
 const OK = '\uF00C';
 // Icons must be bigger than this many matching pixels to count as drawn; a real warning
 // icon is ~300 px, so a few stray anti-aliased pixels from other text do not count.
@@ -327,7 +334,7 @@ async function reachRefillPrompt(maxGrinds = 8) {
       if (started >= maxGrinds) throw new Error(`no out-of-beans prompt after ${started} grinds`);
       started++;
       await act('Remove cup'); await act('Empty cup'); await act('Place cup');
-      await page.waitForTimeout(1500);
+      await waitVirtual(1500);
       await tapPanel(140, 396);
     }
     await page.waitForTimeout(300);
@@ -338,19 +345,19 @@ async function reachRefillPrompt(maxGrinds = 8) {
 const releasePressShown = () => page.evaluate(
   () => [...document.querySelectorAll('#actions button')].some((b) => b.textContent === 'Release press'));
 
-// The grind screen ignores a tap that starts sooner than USER_BUTTON_REARM_MS (virtual time) after
-// a button changes meaning, such as the check button appearing on a prompt. Read it from the
-// firmware so the wait follows the constant.
-const REARM_MS = Number(/#define USER_BUTTON_REARM_MS\s+(\d+)/.exec(
-  fs.readFileSync(path.join(here, '..', '..', 'src', 'config', 'user.h'), 'utf8'))?.[1]);
-if (!(REARM_MS > 0)) throw new Error('USER_BUTTON_REARM_MS not found in src/config/user.h');
+const twinTime = () => page.evaluate(() => window.twinApp.state().t_s);
 
-// Taps CONTINUE (the check button) once the re-arm time has passed since the prompt appeared
-// (call this right after waiting for the prompt), and fails if that tap is not accepted.
-async function continuePrompt(promptState, promptSeenVirtualS) {
-  await waitVirtual(Math.max(0, REARM_MS + 100 - (await page.evaluate(() => window.twinApp.state().t_s) - promptSeenVirtualS) * 1000));
+// Taps the check button (panel 200,396) once the re-arm time has passed since it last changed
+// meaning; `changedAtS` is the twin time (seconds) at which that happened or was first seen.
+async function tapCheckAfterRearm(changedAtS) {
+  await waitVirtual(Math.max(0, REARM_MS + 100 - ((await twinTime()) - changedAtS) * 1000));
   await tapPanel(200, 396);
-  await page.waitForTimeout(1200);
+}
+
+// Taps CONTINUE on a prompt first seen at `seenAtS`, and fails if that tap is not accepted.
+async function continuePrompt(promptState, seenAtS) {
+  await tapCheckAfterRearm(seenAtS);
+  await waitVirtual(1200);
   if ((await uiStateName()) === promptState) throw new Error(`${promptState} did not continue after a tap made ${REARM_MS} ms after it appeared`);
 }
 
@@ -361,15 +368,15 @@ async function grindFlow() {
     await resetToReady();
     await act('Place cup');
     await act('Load beans');
-    await page.waitForTimeout(1500);
+    await waitVirtual(1500);
     await tapPanel(140, 396);  // start the first grind since boot
 
     // Purge prompt. No prompt here means an earlier flow ground: a script ordering bug.
     // The prompt follows the tare and the purge grind, so the state passes through GRINDING first.
     const first = await waitForUiState(['PURGE_CONFIRM', 'GRIND_COMPLETE', 'GRIND_TIMEOUT']);
     if (first === 'PURGE_CONFIRM') {
-      const seenAt = await page.evaluate(() => window.twinApp.state().t_s);
-      await page.waitForTimeout(400);
+      const seenAt = await twinTime();
+      await waitVirtual(400);
       await audit('flow-purge');
       await continuePrompt('PURGE_CONFIRM', seenAt);  // waits out the re-arm time first
     } else {
@@ -379,16 +386,16 @@ async function grindFlow() {
 
     // The ring view mid-grind, then the chart view and back (a long press on the grind area).
     await waitForUiState(['GRINDING', 'GRIND_COMPLETE']);
-    await page.waitForTimeout(1500);
+    await waitVirtual(1500);
     await audit('flow-grinding');
     await tapPanel(140, 200, 1500);
-    await page.waitForTimeout(600);
+    await waitVirtual(600);
     await audit('flow-chart');
     await tapPanel(140, 200, 1500);  // back to the ring view (saved when the screen returns to ready)
-    await page.waitForTimeout(600);
+    await waitVirtual(600);
 
     await waitForUiState(['GRIND_COMPLETE'], 120000);
-    await page.waitForTimeout(400);
+    await waitVirtual(400);
     await audit('flow-complete');
     await tapPanel(140, 396);
     await waitForUiState(['READY']);
@@ -397,7 +404,8 @@ async function grindFlow() {
     await setSpeed(10);  // the extra grinds are long; run them fast
     await reachRefillPrompt();
     await setSpeed(1);
-    await page.waitForTimeout(600);
+    const refillSeenAt = await twinTime();
+    await waitVirtual(600);
     await audit('flow-refill');
 
     // The status lines: the check button while the scale is not settled. Bumps every 120 ms
@@ -408,31 +416,32 @@ async function grindFlow() {
         .find((b) => b.textContent === 'Bump scale').click(), 120);
     });
     bumper = true;
-    await tapPanel(200, 396, 100);
+    await tapCheckAfterRearm(refillSeenAt);
     await waitForLabel(['Hold still while the scale settles...'], 10000);
     await audit('flow-refill-status');
     await waitForLabel(['Scale not steady. Keep still, then press ' + OK + ' again.'], 15000);
+    const steadyAt = await twinTime();  // the check button is enabled again from here
     await page.evaluate(() => clearInterval(window.__flowBumper));
     bumper = false;
-    await page.waitForTimeout(600);
+    await waitVirtual(600);
     await audit('flow-refill-timeout');
 
     // "Cup moved?": a press on the scale moves the settled reading by more than 0.5 g.
     await act('Press on scale');
-    await page.waitForTimeout(3000);
-    await tapPanel(200, 396);
+    await waitVirtual(3000);
+    await tapCheckAfterRearm(steadyAt);
     await waitForLabel(['Cup moved?'], 10000);
-    await page.waitForTimeout(400);
+    await waitVirtual(400);
     await audit('flow-cup-moved');
     await uiStep(flow, 'tap', 'BACK');
     await act('Release press');
-    await page.waitForTimeout(600);
+    await waitVirtual(600);
 
     // Error screen: STOP at the out-of-beans prompt ends the grind as "No beans?".
     if ((await uiStateName()) !== 'REFILL_CONFIRM') throw new Error('not back at the out-of-beans prompt after BACK');
     await tapPanel(80, 396);
     await waitForUiState(['GRIND_TIMEOUT']);
-    await page.waitForTimeout(600);
+    await waitVirtual(600);
     await audit('flow-error');
     await tapPanel(140, 396);
     await waitForUiState(['READY']);
