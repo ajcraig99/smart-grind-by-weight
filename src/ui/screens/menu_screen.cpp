@@ -38,6 +38,11 @@ static void keep_to_one_line(lv_obj_t* label) {
     lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
 }
 
+// Height of the menu header and of its title label: the largest title font's line, 50% taller.
+static lv_coord_t header_title_height() {
+    return (lv_font_get_line_height(&lv_font_montserrat_36) * 3) / 2;
+}
+
 void MenuScreen::create(BluetoothManager* bluetooth, GrindController* grind_ctrl, GrindingScreen* grind_screen, class HardwareManager* hw_mgr, DiagnosticsController* diag_ctrl) {
     bluetooth_manager = bluetooth;
     grind_controller = grind_ctrl;
@@ -120,7 +125,7 @@ void MenuScreen::create_menu_ui() {
     lv_obj_set_flex_flow(header, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(header, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_coord_t title_base_height = lv_font_get_line_height(&lv_font_montserrat_36);
-    lv_coord_t title_target_height = (title_base_height * 3) / 2; // ~50% taller
+    lv_coord_t title_target_height = header_title_height();
     lv_coord_t title_padding = (title_target_height - title_base_height) / 2;
     lv_obj_set_style_min_height(header, title_target_height, 0);
     lv_obj_set_style_pad_top(header, title_padding, 0);
@@ -291,6 +296,9 @@ void MenuScreen::create_menu_ui() {
 void MenuScreen::fit_header_title() {
     if (!header_title || !header_back) return;
     lv_obj_t* header = lv_menu_get_main_header(menu);
+    // A long title was already cut to dots when LVGL set its text, and the label
+    // returns the cut text. Free the width and lay out again to restore the full name.
+    lv_obj_set_width(header_title, LV_SIZE_CONTENT);
     lv_obj_update_layout(header);
     const int32_t space = lv_obj_get_content_width(header) - 2 * lv_obj_get_width(header_back) -
                           2 * lv_obj_get_style_pad_column(header, LV_PART_MAIN);
@@ -300,8 +308,10 @@ void MenuScreen::fit_header_title() {
     lv_obj_set_style_text_font(header_title, font, 0);
     lv_obj_set_width(header_title, space);
     // Keep the label as tall as at the largest font and centre the text in it,
-    // so the header does not change height or jump between pages.
-    const int32_t target_height = (lv_font_get_line_height(&lv_font_montserrat_36) * 3) / 2;
+    // so the header does not change height or jump between pages. The fixed
+    // height leaves room for one line, so a too-long title ends in dots.
+    const int32_t target_height = header_title_height();
+    lv_obj_set_height(header_title, target_height);
     const int32_t pad = (target_height - lv_font_get_line_height(font)) / 2;
     lv_obj_set_style_pad_top(header_title, pad, 0);
     lv_obj_set_style_pad_bottom(header_title, pad, 0);
