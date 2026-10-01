@@ -322,9 +322,6 @@ void MenuScreen::fit_header_title() {
     const int32_t pad = (target_height - lv_font_get_line_height(font)) / 2;
     lv_obj_set_style_pad_top(header_title, pad, 0);
     lv_obj_set_style_pad_bottom(header_title, pad, 0);
-    // Show the full name again; LVGL may have cut it to dots against the previous page's size.
-    lv_label_set_text(header_title, title);
-    lv_obj_update_layout(header);
 }
 
 void MenuScreen::setup_menu_page(lv_obj_t* page) {
