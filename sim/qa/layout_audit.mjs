@@ -10,6 +10,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(path.join(here, '..', 'web', 'package.json'));
 const { chromium } = require('playwright-core');
 const outDir = path.join(here, 'out', 'layout');
+fs.rmSync(outDir, { recursive: true, force: true });  // no stale PNGs from an earlier run
 fs.mkdirSync(outDir, { recursive: true });
 const chrome = process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 
@@ -46,6 +47,9 @@ const SCREENS = [
 
 const browser = await chromium.launch({ executablePath: chrome, headless: true, args: ['--disable-gpu'] });
 const page = await (await browser.newContext({ viewport: { width: 1400, height: 1000 } })).newPage();
+// Surface page failures, so a boot that never finishes shows its cause.
+page.on('pageerror', (err) => console.log(`page error: ${err.message}`));
+page.on('console', (msg) => { if (msg.type() === 'error') console.log(`console error: ${msg.text()}`); });
 await page.goto(pathToFileURL(path.join(here, '..', 'dist', 'index.html')).href);
 await page.waitForFunction(() => window.twinApp && !window.twinApp.busy && window.twinApp.state()?.booted,
   null, { timeout: 90000 });
@@ -62,37 +66,56 @@ async function savePng(file) {
 }
 
 // The audit sees only what is in view, so a scrolling menu page is audited at
-// every scroll position. A defect seen at several positions is reported once.
+// every scroll position. A defect already seen at an earlier position is reported
+// once. `reachedBottom` is false when the page is too long to audit to its end.
+const MAX_SCROLL_POSITIONS = 40;
+const coordinateFree = (issue) => JSON.stringify(issue).replace(/ \[-?\d+,-?\d+\.\.-?\d+,-?\d+\]/g, '');
+
 async function auditAllScrollPositions(name) {
   const issues = [];
-  const seen = new Set();
+  const seenEarlier = new Set();
   if (await page.evaluate(() => window.twinApp.ui('scroll', 'top'))) await page.waitForTimeout(400);
-  for (let position = 1; position <= 12; position++) {
+  for (let position = 1; position <= MAX_SCROLL_POSITIONS; position++) {
+    const keysHere = [];
     for (const i of await page.evaluate(() => window.twinApp.layoutAudit())) {
-      const key = JSON.stringify(i).replace(/ \[-?\d+,-?\d+\.\.-?\d+,-?\d+\]/g, '');
-      if (!seen.has(key)) { seen.add(key); issues.push(i); }
+      const key = coordinateFree(i);
+      if (!seenEarlier.has(key)) issues.push(i);
+      keysHere.push(key);
     }
+    for (const key of keysHere) seenEarlier.add(key);
     await savePng(position === 1 ? `${name}.png` : `${name}-${position}.png`);
-    if (!(await page.evaluate(() => window.twinApp.ui('scroll', '')))) break;
+    if (!(await page.evaluate(() => window.twinApp.ui('scroll', '')))) return { issues, reachedBottom: true };
     await page.waitForTimeout(400);  // let the firmware loop draw the new position
   }
-  return issues;
+  return { issues, reachedBottom: false };
 }
 
-let failures = 0;
+const failing = new Set();
 for (const [name, steps] of SCREENS) {
+  let stepsOk = true;
   for (const [cmd, arg = ''] of steps) {
     if (cmd === 'wait') { await waitVirtual(Number(arg)); continue; }
     const ok = await page.evaluate(([c, a]) => window.twinApp.ui(c, a), [cmd, String(arg)]);
-    if (!ok) { console.log(`FAIL  ${name}: step ${cmd} "${arg}" found nothing`); failures++; }
     await page.waitForTimeout(400);  // let the firmware loop lay out and draw
+    if (!ok) {
+      console.log(`FAIL  ${name}: step ${cmd} "${arg}" found nothing`);
+      failing.add(name);
+      stepsOk = false;
+      break;
+    }
   }
-  const issues = await auditAllScrollPositions(name);
-  if (issues.length) failures++;
-  console.log(`${issues.length ? 'FAIL' : 'PASS'}  ${name}`);
-  for (const i of issues) console.log(`      ${i.rule}: ${i.a}${i.b ? '  vs  ' + i.b : ''}`);
+  if (stepsOk) {
+    const { issues, reachedBottom } = await auditAllScrollPositions(name);
+    if (issues.length) failing.add(name);
+    console.log(`${issues.length ? 'FAIL' : 'PASS'}  ${name}`);
+    for (const i of issues) console.log(`      ${i.rule}: ${i.a}${i.b ? '  vs  ' + i.b : ''}`);
+    if (!reachedBottom) {
+      console.log(`FAIL  ${name}: scroll limit reached; bottom not audited`);
+      failing.add(name);
+    }
+  }
   await page.evaluate(() => window.twinApp.ui('ready', 2));
 }
 await browser.close();
-console.log(failures ? `${failures} screen(s) with layout defects` : 'all screens clean');
-process.exit(failures ? 1 : 0);
+console.log(failing.size ? `${failing.size} screen(s) with layout defects` : 'all screens clean');
+process.exit(failing.size ? 1 : 0);

@@ -2,11 +2,12 @@
 
 #include <algorithm>
 #include <cstdio>
-#include <cstring>
 #include <vector>
 
 #include <lvgl.h>
-#include <misc/lv_area_private.h>  // lv_area_intersect is private API in LVGL 9.5
+#include <core/lv_obj_private.h>             // lv_obj_t::w_layout and h_layout
+#include <misc/lv_area_private.h>            // lv_area_intersect is private API in LVGL 9.5
+#include <widgets/label/lv_label_private.h>  // lv_label_t::dot_begin
 
 #include "config/constants.h"
 
@@ -20,8 +21,7 @@ namespace {
 
 struct Item {
     lv_obj_t* obj;
-    lv_area_t area;     // where LVGL placed it
-    lv_area_t visible;  // the part not scrolled out of view
+    lv_area_t area;           // where LVGL placed it
     bool leaf;
     lv_area_t drawn;          // a label's drawn text, otherwise the same as area
     lv_area_t drawn_visible;  // the part of `drawn` not scrolled out of view
@@ -29,13 +29,6 @@ struct Item {
 };
 
 std::string g_json;
-
-bool hidden(lv_obj_t* obj) {
-    for (lv_obj_t* o = obj; o; o = lv_obj_get_parent(o)) {
-        if (lv_obj_has_flag(o, LV_OBJ_FLAG_HIDDEN)) return true;
-    }
-    return false;
-}
 
 int32_t overlap_len(int32_t a1, int32_t a2, int32_t b1, int32_t b2) {
     return std::min(a2, b2) - std::max(a1, b1) + 1;
@@ -91,7 +84,11 @@ std::string describe(lv_obj_t* obj) {
     char buf[64];
     std::snprintf(buf, sizeof(buf), " [%d,%d..%d,%d]", (int)a.x1, (int)a.y1, (int)a.x2, (int)a.y2);
     std::string text = text_of(obj);
-    if (text.size() > 40) text = text.substr(0, 40) + "...";
+    if (text.size() > 40) {
+        size_t cut = 40;
+        while (cut > 0 && (static_cast<unsigned char>(text[cut]) & 0xC0) == 0x80) --cut;  // UTF-8 boundary
+        text = text.substr(0, cut) + "...";
+    }
     return std::string(kind) + " \"" + text + "\"" + buf;
 }
 
@@ -99,8 +96,14 @@ void add_issue(const char* rule, const std::string& a, const std::string& b = ""
     auto esc = [](const std::string& s) {
         std::string out;
         for (char c : s) {
+            const unsigned char byte = static_cast<unsigned char>(c);
+            if (byte < 0x20) {  // control characters, newline included
+                char hex[8];
+                std::snprintf(hex, sizeof(hex), "\\u%04x", byte);
+                out += hex;
+                continue;
+            }
             if (c == '"' || c == '\\') out += '\\';
-            if (c == '\n') { out += "\\n"; continue; }
             out += c;
         }
         return out;
@@ -117,18 +120,36 @@ int32_t text_width(lv_obj_t* label, const char* text) {
     return size.x;
 }
 
-// Where a label's text is drawn: the text block placed in the label's content area
-// by its text alignment. A label's box is often far wider than its text.
-lv_area_t text_extent(lv_obj_t* label) {
-    lv_area_t content;
-    lv_obj_get_content_coords(label, &content);
-    const int32_t max_width = lv_obj_get_style_width(label, LV_PART_MAIN) == LV_SIZE_CONTENT
-                                  ? LV_COORD_MAX
-                                  : lv_area_get_width(&content);
+// Whether a label wraps its text at its content width, as lv_label.c decides when it
+// sizes the label: it is unwrapped only when its width follows the content and no
+// layout sets that width.
+bool wraps_at_box(lv_obj_t* label) {
+    return lv_obj_get_style_width(label, LV_PART_MAIN) != LV_SIZE_CONTENT || label->w_layout;
+}
+
+// The width lv_label.c wraps at, clamped to the label's max width as LVGL clamps it.
+int32_t wrap_width(lv_obj_t* label) {
+    const int32_t width = wraps_at_box(label) ? lv_obj_get_content_width(label) : LV_COORD_MAX;
+    return std::min(width, lv_obj_get_style_max_width(label, LV_PART_MAIN));
+}
+
+// The size of a label's text block, wrapped as LVGL wraps it.
+lv_point_t text_block(lv_obj_t* label) {
     lv_point_t size;
     lv_text_get_size(&size, lv_label_get_text(label), lv_obj_get_style_text_font(label, LV_PART_MAIN),
                      lv_obj_get_style_text_letter_space(label, LV_PART_MAIN),
-                     lv_obj_get_style_text_line_space(label, LV_PART_MAIN), max_width, LV_TEXT_FLAG_NONE);
+                     lv_obj_get_style_text_line_space(label, LV_PART_MAIN), wrap_width(label), LV_TEXT_FLAG_NONE);
+    return size;
+}
+
+// Where a label's text is drawn: the text block placed in the label's content area
+// by its text alignment, clipped to that area (LVGL never draws a label's text
+// outside it). A label's box is often far wider than its text. Empty text gives an
+// area with x2 < x1.
+lv_area_t text_extent(lv_obj_t* label) {
+    lv_area_t content;
+    lv_obj_get_content_coords(label, &content);
+    const lv_point_t size = text_block(label);
     lv_area_t text = content;
     switch (lv_obj_get_style_text_align(label, LV_PART_MAIN)) {
         case LV_TEXT_ALIGN_CENTER:
@@ -142,7 +163,12 @@ lv_area_t text_extent(lv_obj_t* label) {
     }
     text.x2 = text.x1 + size.x - 1;
     text.y2 = text.y1 + size.y - 1;
-    return text;
+    lv_area_t clipped;
+    if (!lv_area_intersect(&clipped, &text, &content)) {
+        clipped = content;
+        clipped.x2 = clipped.x1 - 1;
+    }
+    return clipped;
 }
 
 void collect(lv_obj_t* obj, lv_area_t view, std::vector<Item>& out) {
@@ -153,7 +179,7 @@ void collect(lv_obj_t* obj, lv_area_t view, std::vector<Item>& out) {
     if (!lv_area_intersect(&seen, &area, &view)) return;  // scrolled out of view
     const uint32_t children = lv_obj_get_child_count(obj);
     if (obj != lv_screen_active() && (children == 0 || filled(obj)) && !backdrop(area)) {
-        Item it{obj, area, seen, children == 0, area, seen, true};
+        Item it{obj, area, children == 0, area, seen, true};
         if (lv_obj_check_type(obj, &lv_label_class)) {
             it.drawn = text_extent(obj);
             it.drawn_seen = lv_area_intersect(&it.drawn_visible, &it.drawn, &view);
@@ -165,20 +191,28 @@ void collect(lv_obj_t* obj, lv_area_t view, std::vector<Item>& out) {
     for (uint32_t i = 0; i < children; ++i) collect(lv_obj_get_child(obj, i), child_view, out);
 }
 
-// Text: a label cut off with dots, or a single word broken across lines.
+// Text: a label cut off with dots, a single word broken across lines, or wrapped
+// text taller than a label whose height does not follow its content.
 void check_text(const Item& it) {
     if (!lv_obj_check_type(it.obj, &lv_label_class)) return;
+    constexpr uint32_t kNoDots = 0xFFFFFFFF;  // LV_LABEL_DOT_BEGIN_INV, private to lv_label.c
     const char* text = lv_label_get_text(it.obj);
     const int32_t width = lv_obj_get_content_width(it.obj);
     const lv_label_long_mode_t mode = lv_label_get_long_mode(it.obj);
-    if (mode == LV_LABEL_LONG_DOT && text_width(it.obj, text) > width) {
+    if (mode == LV_LABEL_LONG_DOT &&
+        (reinterpret_cast<lv_label_t*>(it.obj)->dot_begin != kNoDots || text_width(it.obj, text) > width)) {
         add_issue("truncated", describe(it.obj));
     }
-    if (mode == LV_LABEL_LONG_WRAP && lv_obj_get_style_width(it.obj, LV_PART_MAIN) != LV_SIZE_CONTENT) {
+    if (mode == LV_LABEL_LONG_WRAP && wraps_at_box(it.obj)) {
+        const bool fixed_height = lv_obj_get_style_height(it.obj, LV_PART_MAIN) != LV_SIZE_CONTENT || it.obj->h_layout;
+        if (fixed_height && text_block(it.obj).y > lv_obj_get_content_height(it.obj)) {
+            add_issue("clipped-bottom", describe(it.obj));
+        }
+        const int32_t wrap = wrap_width(it.obj);
         std::string word;
         for (const char* p = text;; ++p) {
             if (*p == ' ' || *p == '\n' || *p == '\0') {
-                if (!word.empty() && text_width(it.obj, word.c_str()) > width) {
+                if (!word.empty() && text_width(it.obj, word.c_str()) > wrap) {
                     add_issue("word-split", describe(it.obj), word);
                 }
                 word.clear();
@@ -221,6 +255,7 @@ void check_padding(const Item& it) {
 
 void check_edge(const Item& it) {
     if (it.leaf && !filled(it.obj) && !lv_obj_check_type(it.obj, &lv_label_class)) return;
+    if (it.drawn.x2 < it.drawn.x1) return;  // empty label: nothing drawn
     const int32_t panel_w = lv_display_get_horizontal_resolution(lv_display_get_default());
     if (it.drawn.x1 < THEME_SCREEN_MARGIN_PX || it.drawn.x2 > panel_w - 1 - THEME_SCREEN_MARGIN_PX) {
         add_issue("screen-edge", describe(it.obj));
