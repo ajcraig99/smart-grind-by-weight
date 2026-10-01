@@ -1110,6 +1110,11 @@ and the purge logs message:
         "This cannot be undone.",
         "PURGE",
 ```
+and the Pulse Tune setup message in `handle_autotune` (its bullet list used single line breaks):
+```cpp
+            "Load beans and put a cup on the scale.\n\n"
+            "Takes about 1 minute.",
+```
 
 `ui_manager.cpp`:
 ```cpp
