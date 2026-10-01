@@ -10,8 +10,7 @@
 
 #include "config/constants.h"
 
-// The firmware gains this constant with the screen-margin change; until then the
-// audit uses the same 8 px so the screen-edge rule is in force from the start.
+// Temporary 8 px fallback: Task 3 adds THEME_SCREEN_MARGIN_PX to theme.h and deletes this block.
 #ifndef THEME_SCREEN_MARGIN_PX
 #define THEME_SCREEN_MARGIN_PX 8
 #endif
@@ -24,6 +23,9 @@ struct Item {
     lv_area_t area;     // where LVGL placed it
     lv_area_t visible;  // the part not scrolled out of view
     bool leaf;
+    lv_area_t drawn;          // a label's drawn text, otherwise the same as area
+    lv_area_t drawn_visible;  // the part of `drawn` not scrolled out of view
+    bool drawn_seen;          // false when `drawn` is wholly out of view
 };
 
 std::string g_json;
@@ -115,6 +117,34 @@ int32_t text_width(lv_obj_t* label, const char* text) {
     return size.x;
 }
 
+// Where a label's text is drawn: the text block placed in the label's content area
+// by its text alignment. A label's box is often far wider than its text.
+lv_area_t text_extent(lv_obj_t* label) {
+    lv_area_t content;
+    lv_obj_get_content_coords(label, &content);
+    const int32_t max_width = lv_obj_get_style_width(label, LV_PART_MAIN) == LV_SIZE_CONTENT
+                                  ? LV_COORD_MAX
+                                  : lv_area_get_width(&content);
+    lv_point_t size;
+    lv_text_get_size(&size, lv_label_get_text(label), lv_obj_get_style_text_font(label, LV_PART_MAIN),
+                     lv_obj_get_style_text_letter_space(label, LV_PART_MAIN),
+                     lv_obj_get_style_text_line_space(label, LV_PART_MAIN), max_width, LV_TEXT_FLAG_NONE);
+    lv_area_t text = content;
+    switch (lv_obj_get_style_text_align(label, LV_PART_MAIN)) {
+        case LV_TEXT_ALIGN_CENTER:
+            text.x1 = content.x1 + (lv_area_get_width(&content) - size.x) / 2;
+            break;
+        case LV_TEXT_ALIGN_RIGHT:
+            text.x1 = content.x2 + 1 - size.x;
+            break;
+        default:  // LEFT, AUTO
+            break;
+    }
+    text.x2 = text.x1 + size.x - 1;
+    text.y2 = text.y1 + size.y - 1;
+    return text;
+}
+
 void collect(lv_obj_t* obj, lv_area_t view, std::vector<Item>& out) {
     if (lv_obj_has_flag(obj, LV_OBJ_FLAG_HIDDEN)) return;
     lv_area_t area;
@@ -123,7 +153,12 @@ void collect(lv_obj_t* obj, lv_area_t view, std::vector<Item>& out) {
     if (!lv_area_intersect(&seen, &area, &view)) return;  // scrolled out of view
     const uint32_t children = lv_obj_get_child_count(obj);
     if (obj != lv_screen_active() && (children == 0 || filled(obj)) && !backdrop(area)) {
-        out.push_back({obj, area, seen, children == 0});
+        Item it{obj, area, seen, children == 0, area, seen, true};
+        if (lv_obj_check_type(obj, &lv_label_class)) {
+            it.drawn = text_extent(obj);
+            it.drawn_seen = lv_area_intersect(&it.drawn_visible, &it.drawn, &view);
+        }
+        out.push_back(it);
     }
     lv_area_t child_view = view;
     if (scrolls(obj)) lv_area_intersect(&child_view, &view, &area);
@@ -187,7 +222,7 @@ void check_padding(const Item& it) {
 void check_edge(const Item& it) {
     if (it.leaf && !filled(it.obj) && !lv_obj_check_type(it.obj, &lv_label_class)) return;
     const int32_t panel_w = lv_display_get_horizontal_resolution(lv_display_get_default());
-    if (it.area.x1 < THEME_SCREEN_MARGIN_PX || it.area.x2 > panel_w - 1 - THEME_SCREEN_MARGIN_PX) {
+    if (it.drawn.x1 < THEME_SCREEN_MARGIN_PX || it.drawn.x2 > panel_w - 1 - THEME_SCREEN_MARGIN_PX) {
         add_issue("screen-edge", describe(it.obj));
     }
 }
@@ -226,7 +261,8 @@ std::string layout_audit_json() {
             const Item& a = items[i];
             const Item& b = items[j];
             if (is_ancestor(a.obj, b.obj) || is_ancestor(b.obj, a.obj)) continue;
-            if (overlaps(a.visible, b.visible)) add_issue("overlap", describe(a.obj), describe(b.obj));
+            if (!a.drawn_seen || !b.drawn_seen) continue;
+            if (overlaps(a.drawn_visible, b.drawn_visible)) add_issue("overlap", describe(a.obj), describe(b.obj));
         }
     }
     check_scroll_needed(scr);
