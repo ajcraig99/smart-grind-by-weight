@@ -40,12 +40,12 @@ Widths measured at the stated font; "fits" is against the space after this plan'
 | Slider (Grind) | Motor latency: 250ms | Latency: 250ms | 221 @28 | 228 |
 | Slider (Grind) | Coast Ratio: 150% | Coast: 150% | 163 @28 | 228 |
 | Button (Diagnostics) | Reset Diagnostics | Clear Warnings | 220 @28 | 228 |
-| Section heading | Load Cell Status | Load Cell | 112 @24 | ~150 |
-| Section heading | Motor Response (x2) | Motor | 73 @24 | ~150 |
-| Section heading | Remote Control | Remote | ~80 @24 | ~150 |
-| Section heading | Mode Selection | Mode | 69 @24 | ~150 |
-| Section heading | Coast Compensation | Coast | 69 @24 | ~150 |
-| Section heading | Custom Image | Screensaver | 148 @24 | ~150 |
+| Section heading | Load Cell Status | Load Cell | 112 @24 | ~165 |
+| Section heading | Motor Response (x2) | Motor | 73 @24 | ~165 |
+| Section heading | Remote Control | Remote | ~80 @24 | ~165 |
+| Section heading | Mode Selection | Mode | 69 @24 | ~165 |
+| Section heading | Coast Compensation | Coast | 69 @24 | ~165 |
+| Section heading | Custom Image | Screensaver | 148 @24 | ~165 |
 | Section heading | Lifetime Statistics | (removed; the page title says it) | — | — |
 | Dialog button | CONTINUE | RESUME | 106 @24 | 108 |
 | Dialog button | PURGE LOGS | PURGE | 88 @24 | 108 |
@@ -805,7 +805,7 @@ git commit -m "Test that on-screen text is left to LVGL to wrap and fit"
 #define THEME_DIALOG_BUTTON_GAP_PX 24                                         // Between the two buttons of a dialog; a tap aimed at one must not land on the other
 #define THEME_DIALOG_BUTTON_PAD_PX 6                                          // Side padding inside dialog buttons
 #define THEME_PAGE_BOTTOM_PAD_PX 16                                           // Below the last control of a scrolling page
-#define THEME_SEPARATOR_LABEL_MAX_PCT 60                                      // Widest a section heading may be, so its lines stay visible
+#define THEME_SEPARATOR_LABEL_MAX_PCT 75                                      // Widest a section heading may be (its own side padding included), so a line stays visible each side
 ```
 
 - [ ] **Step 2: Declare the font picker in `src/ui/ui_helpers.h`** after `set_label_text_float`:
