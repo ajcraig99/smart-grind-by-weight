@@ -38,7 +38,7 @@ public:
 
     void show_console_screen();
     void show_success_screen(float new_latency_ms, float previous_latency_ms);
-    void show_failure_screen(const char* error_message);
+    void show_failure_screen(float kept_latency_ms);
 
     void append_console_message(const char* message);
     void update_progress(const AutoTuneProgress& progress);

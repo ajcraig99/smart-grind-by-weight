@@ -148,7 +148,7 @@ void AutoTuneScreen::show_success_screen(float new_latency_ms, float previous_la
     lv_obj_move_to_index(previous_latency_label, 2);
 }
 
-void AutoTuneScreen::show_failure_screen(const char* error_message) {
+void AutoTuneScreen::show_failure_screen(float kept_latency_ms) {
     current_state = AutoTuneScreenState::RESULT;
 
     // Hide console screen
@@ -162,18 +162,17 @@ void AutoTuneScreen::show_failure_screen(const char* error_message) {
 
     lv_label_set_text(title_label, "Tune Failed");
 
-    lv_label_set_text(message_label, (error_message && error_message[0])
-                                         ? error_message
-                                         : "No reliable pulse found. Check power, beans and the cup.");
+    // The controller's own error text is logged; the screen always gives the same plain advice.
+    lv_label_set_text(message_label, "No reliable pulse found. Check power, beans and the cup.");
 
-    char default_text[32];
-    snprintf(default_text, sizeof(default_text), "%.0f ms", (float)GRIND_MOTOR_RESPONSE_LATENCY_DEFAULT_MS);
-    lv_label_set_text(final_latency_label, default_text);
+    char kept_text[32];
+    snprintf(kept_text, sizeof(kept_text), "%.0f ms", kept_latency_ms);
+    lv_label_set_text(final_latency_label, kept_text);
     lv_obj_set_style_text_color(final_latency_label, lv_color_hex(THEME_COLOR_WARNING), 0);
 
-    lv_label_set_text(previous_latency_label, "Using default:");
+    lv_label_set_text(previous_latency_label, "Kept:");
 
-    // Message, "Using default:", then the value.
+    // Message, "Kept:", then the value.
     lv_obj_move_to_index(previous_latency_label, 1);
     lv_obj_move_to_index(final_latency_label, 2);
 }

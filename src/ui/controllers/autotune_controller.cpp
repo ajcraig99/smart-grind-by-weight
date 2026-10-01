@@ -65,7 +65,7 @@ void AutoTuneUIController::update() {
 
     if (progress.phase == AutoTunePhase::COMPLETE_FAILURE) {
         const AutoTuneResult& result = autotune_controller->get_result();
-        ui_manager_->autotune_screen.show_failure_screen(result.error_message);
+        ui_manager_->autotune_screen.show_failure_screen(result.latency_ms);
         autotune_started_ = false;
         return;
     }

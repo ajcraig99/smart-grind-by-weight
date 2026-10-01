@@ -237,7 +237,7 @@ async function visitScreens(list, namePrefix = '', after = null) {
 await visitScreens(SCREENS);
 
 // ---- Flows: screens that only exist after the firmware has done real work. ----
-const RESULT_LABELS = ['New Motor Latency:', 'Using default:'];  // success, failure
+const RESULT_LABELS = ['New Motor Latency:', 'Kept:'];  // success, failure
 async function tuneFlow(name, faultLabel, resultLabel) {
   let faultOn = false;
   try {
@@ -270,7 +270,7 @@ async function tuneFlow(name, faultLabel, resultLabel) {
   }
 }
 await tuneFlow('tune-success', null, 'New Motor Latency:');
-await tuneFlow('tune-failure', 'Relay stuck off', 'Using default:');
+await tuneFlow('tune-failure', 'Relay stuck off', 'Kept:');
 
 // The noise-check step follows a real calibration, which needs a weight on the scale.
 // Must run after the tune flows, at 1x speed (it waits in virtual time for the tare).
