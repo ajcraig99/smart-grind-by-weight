@@ -1,6 +1,8 @@
 // Visits every on-device screen in the twin, runs the firmware-side layout audit
 // on each and fails if any screen has a defect. PNGs go to sim/qa/out/layout/.
 //   node sim/qa/layout_audit.mjs            (needs sim/dist/index.html built)
+// A full run takes about 5+ minutes (the flows below run real firmware time, including
+// a whole grind at 1x), so it is an on-demand check, not a per-commit gate.
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -15,6 +17,9 @@ fs.mkdirSync(outDir, { recursive: true });
 const chrome = process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 
 const OK = '\uF00C';
+// Icons must be bigger than this many matching pixels to count as drawn; a real warning
+// icon is ~300 px, so a few stray anti-aliased pixels from other text do not count.
+const WARNING_ICON_MIN_PIXELS = 20;
 // [name, steps]; each step is [command, argument]. "wait" runs virtual time (ms).
 const SCREENS = [
   ['ready-manual', [['ready', 0]]],
@@ -104,6 +109,9 @@ async function audit(name) {
   }
 }
 
+// Return to the ready screen on a tab (errors ignored: this is cleanup).
+const resetToReady = (tab = 2) => page.evaluate((t) => window.twinApp.ui('ready', t), tab).catch(() => {});
+
 // Helpers for the flows below: click a twin-page button by its text.
 async function clickButton(group, label) {
   await page.click(`${group} button:text-is("${label}")`);
@@ -165,7 +173,8 @@ const tabPillLeft = () => readCanvas(`
   }
   return -1;`);
 
-// Mouse input on the device screen, in panel coordinates.
+// Mouse input on the device screen, in panel coordinates. tapPanel/panelPoint intentionally
+// duplicate the helpers in sim/qa/lib.mjs, because that module defaults to a Linux Chrome path.
 async function panelPoint(x, y) {
   await page.locator('#screen').scrollIntoViewIfNeeded();
   const b = await page.locator('#screen').boundingBox();
@@ -186,6 +195,12 @@ async function swipePanel(x0, x1, y) {
   for (let i = 1; i <= 14; i++) { await page.mouse.move(a.x + ((b.x - a.x) * i) / 14, a.y); await page.waitForTimeout(100); }
   await page.mouse.up();
   await page.waitForTimeout(800);
+}
+
+// Taps the grind button (the same one that stops a grind) only while the motor runs.
+async function stopGrindIfRunning() {
+  const s = await page.evaluate(() => window.twinApp.state());
+  if (s.motor_speed > 0.05) await tapPanel(140, 396);
 }
 
 const failing = new Set();
@@ -244,7 +259,7 @@ async function tuneFlow(name, faultLabel, resultLabel) {
     // Cleanup must always finish, so browser.close() is reached.
     if (faultOn) await fault(faultLabel).catch(() => {});  // toggles the fault off again
     await setSpeed(1).catch(() => {});
-    await page.evaluate(() => window.twinApp.ui('ready', 2)).catch(() => {});
+    await resetToReady();
   }
 }
 await tuneFlow('tune-success', null, 'New Motor Latency:');
@@ -270,12 +285,169 @@ async function calibrationNoiseFlow(name) {
     console.log(`FAIL  ${name}: ${err.message}`);
     failing.add(name);
   } finally {
-    await page.evaluate(() => window.twinApp.ui('ready', 2)).catch(() => {});
+    await resetToReady();
     await act('Remove cup').catch(() => {});
     await page.fill('#actions input[aria-label="Place cup value"]', '').catch(() => {});  // later flows place the default cup
   }
 }
 await calibrationNoiseFlow('calibration-noise');
+
+// ---- Grind flow: the prompts and result screens of one real grind, in a fixed order. ----
+// Runs after the calibration flow and before the warning-icon flow. Nothing before it grinds
+// (the tune flows run motor tests, the calibration flow only calibrates), so its first grind
+// is the first one since boot and the grinder is still stale: the purge prompt is shown. The
+// warning-icon flow grinds after it. The sequence:
+//   purge prompt, grind (ring view), grind (chart view), complete, more grinds until the
+//   hopper runs dry, out-of-beans prompt, status lines, "Cup moved?", error screen.
+const uiStateName = async () => (await page.evaluate(() => window.twinApp.state())).ui_state_name;
+
+// Waits (wall clock) until the firmware UI is in one of the named states; returns it.
+async function waitForUiState(names, timeoutMs = 60000) {
+  const deadline = Date.now() + timeoutMs;
+  let last = '';
+  while (Date.now() < deadline) {
+    last = await uiStateName();
+    if (names.includes(last)) return last;
+    await page.waitForTimeout(200);
+  }
+  throw new Error(`none of ${JSON.stringify(names)} reached within ${timeoutMs / 1000} s (last state ${last})`);
+}
+
+// Starts grinds from an emptied cup until the hopper runs dry and the out-of-beans prompt
+// shows. Earlier flows leave an unknown amount of beans in the hopper, so this loops.
+async function reachRefillPrompt(maxGrinds = 8) {
+  let started = 0;
+  const deadline = Date.now() + 360000;
+  while (Date.now() < deadline) {
+    const state = await uiStateName();
+    if (state === 'REFILL_CONFIRM') return;
+    if (state === 'PURGE_CONFIRM') await tapPanel(200, 396);                                     // CONTINUE
+    else if (state === 'GRIND_COMPLETE' || state === 'GRIND_TIMEOUT') await tapPanel(140, 396);  // OK / close
+    else if (state === 'READY') {
+      if (started >= maxGrinds) throw new Error(`no out-of-beans prompt after ${started} grinds`);
+      started++;
+      await act('Remove cup'); await act('Empty cup'); await act('Place cup');
+      await page.waitForTimeout(1500);
+      await tapPanel(140, 396);
+    }
+    await page.waitForTimeout(300);
+  }
+  throw new Error('out-of-beans prompt not reached within 6 minutes');
+}
+
+const releasePressShown = () => page.evaluate(
+  () => [...document.querySelectorAll('#actions button')].some((b) => b.textContent === 'Release press'));
+
+// Taps CONTINUE (the check button) until the prompt has gone, and says how many taps it took.
+async function continuePrompt(promptState) {
+  for (let tap = 1; tap <= 5; tap++) {
+    await tapPanel(200, 396);
+    await page.waitForTimeout(1200);
+    if ((await uiStateName()) !== promptState) { if (tap > 1) console.log(`note: ${promptState} needed ${tap} taps`); return; }
+  }
+  throw new Error(`${promptState} did not continue after 5 taps`);
+}
+
+async function grindFlow() {
+  const flow = 'grind-flow';
+  let bumper = false;
+  try {
+    await resetToReady();
+    await act('Place cup');
+    await act('Load beans');
+    await page.waitForTimeout(1500);
+    await tapPanel(140, 396);  // start the first grind since boot
+
+    // Purge prompt. No prompt here means an earlier flow ground: a script ordering bug.
+    // The prompt follows the tare and the purge grind, so the state passes through GRINDING first.
+    const first = await waitForUiState(['PURGE_CONFIRM', 'GRIND_COMPLETE', 'GRIND_TIMEOUT']);
+    if (first === 'PURGE_CONFIRM') {
+      await page.waitForTimeout(400);
+      await audit('flow-purge');
+      await continuePrompt('PURGE_CONFIRM');
+    } else {
+      console.log(`FAIL  flow-purge: no purge prompt (went to ${first} instead); the grinder was already purged since boot`);
+      failing.add('flow-purge');
+    }
+
+    // The ring view mid-grind, then the chart view and back (a long press on the grind area).
+    await waitForUiState(['GRINDING', 'GRIND_COMPLETE']);
+    await page.waitForTimeout(1500);
+    await audit('flow-grinding');
+    await tapPanel(140, 200, 1500);
+    await page.waitForTimeout(600);
+    await audit('flow-chart');
+    await tapPanel(140, 200, 1500);  // back to the ring view (saved when the screen returns to ready)
+    await page.waitForTimeout(600);
+
+    await waitForUiState(['GRIND_COMPLETE'], 120000);
+    await page.waitForTimeout(400);
+    await audit('flow-complete');
+    await tapPanel(140, 396);
+    await waitForUiState(['READY']);
+
+    // Out of beans.
+    await setSpeed(10);  // the extra grinds are long; run them fast
+    await reachRefillPrompt();
+    await setSpeed(1);
+    await page.waitForTimeout(600);
+    await audit('flow-refill');
+
+    // The status lines: the check button while the scale is not settled. Bumps every 120 ms
+    // keep it unsettled, so "Hold still..." shows, then (after the 5 s settle timeout)
+    // "Scale not steady...".
+    await page.evaluate(() => {
+      window.__flowBumper = setInterval(() => [...document.querySelectorAll('#actions button')]
+        .find((b) => b.textContent === 'Bump scale').click(), 120);
+    });
+    bumper = true;
+    await tapPanel(200, 396, 100);
+    await waitForLabel(['Hold still while the scale settles...'], 10000);
+    await audit('flow-refill-status');
+    await waitForLabel(['Scale not steady. Keep still, then press ' + OK + ' again.'], 15000);
+    await page.evaluate(() => clearInterval(window.__flowBumper));
+    bumper = false;
+    await page.waitForTimeout(600);
+    await audit('flow-refill-timeout');
+
+    // "Cup moved?": a press on the scale moves the settled reading by more than 0.5 g.
+    await act('Press on scale');
+    await page.waitForTimeout(3000);
+    await tapPanel(200, 396);
+    await waitForLabel(['Cup moved?'], 10000);
+    await page.waitForTimeout(400);
+    await audit('flow-cup-moved');
+    await uiStep(flow, 'tap', 'BACK');
+    await act('Release press');
+    await page.waitForTimeout(600);
+
+    // Error screen: STOP at the out-of-beans prompt ends the grind as "No beans?".
+    if ((await uiStateName()) !== 'REFILL_CONFIRM') throw new Error('not back at the out-of-beans prompt after BACK');
+    await tapPanel(80, 396);
+    await waitForUiState(['GRIND_TIMEOUT']);
+    await page.waitForTimeout(600);
+    await audit('flow-error');
+    await tapPanel(140, 396);
+    await waitForUiState(['READY']);
+  } catch (err) {
+    console.log(`FAIL  ${flow}: ${err.message}`);
+    await savePng(`${flow}-failed.png`).catch(() => {});
+    failing.add(flow);
+  } finally {
+    if (bumper) await page.evaluate(() => clearInterval(window.__flowBumper)).catch(() => {});
+    await setSpeed(1).catch(() => {});
+    if (await releasePressShown().catch(() => false)) await act('Release press').catch(() => {});
+    await page.evaluate(() => window.twinApp.ui('tap', 'BACK')).catch(() => {});  // a dialog left open
+    for (let i = 0; i < 3 && (await uiStateName().catch(() => 'READY')) !== 'READY'; i++) {
+      const state = await uiStateName().catch(() => 'READY');
+      await tapPanel(state === 'PURGE_CONFIRM' || state === 'REFILL_CONFIRM' ? 80 : 140, 396).catch(() => {});  // STOP / close
+      await page.waitForTimeout(800);
+    }
+    await resetToReady();
+    await act('Remove cup').catch(() => {});
+  }
+}
+await grindFlow();
 
 // The warning icon is drawn only on the ready screen. The mechanical-instability
 // warning needs three weight drops of 0.4 g or more (200 ms apart) while the motor
@@ -285,27 +457,33 @@ await calibrationNoiseFlow('calibration-noise');
 const WARNING_SCREENS = ['ready-double', 'edit', 'menu', 'calibration-empty', 'dialog-motor-test'];
 async function raiseMechanicalWarning(name) {
   await page.fill('#actions input[aria-label="Bump scale value"]', '50');
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    await page.evaluate(() => window.twinApp.ui('ready', 0));
-    await page.waitForTimeout(600);
-    await tapPanel(140, 396);  // the grind button
-    let bumps = 0;
-    const deadline = Date.now() + 90000;
-    while (Date.now() < deadline && bumps < 12) {
-      await page.waitForTimeout(200);
-      const s = await page.evaluate(() => window.twinApp.state());
-      if (s.phase_name === 'PURGE_CONFIRM') { await tapPanel(200, 396); continue; }  // CONTINUE
-      if (s.ui_state_name === 'GRIND_COMPLETE' || s.phase_name === 'IDLE') break;
-      if (s.motor_speed > 0.05) { await page.click(`#actions button:text-is("Bump scale")`); bumps++; }
+  try {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      await page.evaluate(() => window.twinApp.ui('ready', 0));
+      await page.waitForTimeout(600);
+      await tapPanel(140, 396);  // the grind button
+      let bumps = 0;
+      const deadline = Date.now() + 90000;
+      while (Date.now() < deadline && bumps < 12) {
+        await page.waitForTimeout(200);
+        const s = await page.evaluate(() => window.twinApp.state());
+        if (s.phase_name === 'PURGE_CONFIRM') { await tapPanel(200, 396); continue; }  // CONTINUE
+        if (s.ui_state_name === 'GRIND_COMPLETE' || s.phase_name === 'IDLE') break;
+        if (s.motor_speed > 0.05) { await page.click(`#actions button:text-is("Bump scale")`); bumps++; }
+      }
+      await stopGrindIfRunning();
+      await page.waitForTimeout(800);
+      await page.evaluate(() => window.twinApp.ui('ready', 0));
+      await page.waitForTimeout(800);
+      if ((await warningPixels()) > WARNING_ICON_MIN_PIXELS) return;
+      console.log(`${name}: attempt ${attempt} (${bumps} bumps) did not raise the warning`);
     }
-    await tapPanel(140, 396);  // the same button stops a grind that is still running
-    await page.waitForTimeout(800);
-    await page.evaluate(() => window.twinApp.ui('ready', 0));
-    await page.waitForTimeout(800);
-    if ((await warningPixels()) > 0) return;
-    console.log(`${name}: attempt ${attempt} (${bumps} bumps) did not raise the warning`);
+    throw new Error('the warning icon never appeared on the ready screen');
+  } finally {
+    // A click or state() that threw mid-grind must not leave the motor running.
+    await stopGrindIfRunning().catch(() => {});
+    await page.fill('#actions input[aria-label="Bump scale value"]', '5').catch(() => {});  // the panel default
   }
-  throw new Error('the warning icon never appeared on the ready screen');
 }
 
 async function warningIconFlow(name) {
@@ -330,7 +508,8 @@ async function warningIconFlow(name) {
       const px = await warningPixels();
       shown.set(raw, px);
       const onReady = raw.startsWith('ready');
-      if (onReady ? px === 0 : px !== 0) {
+      const drawn = px > WARNING_ICON_MIN_PIXELS;
+      if (onReady ? !drawn : drawn) {
         console.log(`FAIL  ${full}: warning icon ${onReady ? 'missing on' : 'drawn over'} this screen (${px} px)`);
         failing.add(full);
       }
@@ -342,7 +521,7 @@ async function warningIconFlow(name) {
     failing.add(name);
   } finally {
     // Leave no warning, cup or open screen behind for the flows after this one.
-    await page.evaluate(() => window.twinApp.ui('ready', 2)).catch(() => {});
+    await resetToReady();
     await act('Remove cup').catch(() => {});
     await page.evaluate(() => window.twinApp.ui('menu', '')).catch(() => {});
     await page.waitForTimeout(400);
@@ -350,9 +529,9 @@ async function warningIconFlow(name) {
       await page.evaluate((t) => window.twinApp.ui('tap', t), label).catch(() => {});
       await page.waitForTimeout(400);
     }
-    await page.evaluate(() => window.twinApp.ui('ready', 2)).catch(() => {});
+    await resetToReady();
     await page.waitForTimeout(600);
-    if ((await warningPixels().catch(() => 0)) !== 0) {
+    if ((await warningPixels().catch(() => 0)) > WARNING_ICON_MIN_PIXELS) {
       console.log(`FAIL  ${name}: warning icon still shown after Clear Warnings`);
       failing.add(name);
     }
