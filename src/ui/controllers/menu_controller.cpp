@@ -311,7 +311,7 @@ void MenuUIController::handle_diagnostics_reset() {
     ui_manager_->show_confirmation(
         "Clear Warnings",
         "This will clear all active diagnostic warnings.\n\nContinue?",
-        "RESET",
+        "CLEAR",
         lv_color_hex(THEME_COLOR_WARNING),
         [this]() { perform_diagnostics_reset(); },
         "CANCEL",
