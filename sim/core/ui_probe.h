@@ -9,6 +9,8 @@ namespace sim {
 //   "menu"   arg = ""               main menu page, scrolled to the top
 //   "state"  arg = UIState name     switch_to_state (e.g. "CALIBRATION")
 //   "tap"    arg = label text       click the nearest clickable ancestor of that label
+//   "find"   arg = label text       1 if a visible label with exactly that text is on screen
+//                                   (a pure query: nothing is clicked or changed)
 //   "toggle" arg = row label text   flip the switch in that row and send VALUE_CHANGED
 //   "scroll" arg = "" or "top"      scroll the shown menu page down half a view (0 once at
 //                                   the bottom), or back to its top (0 if no menu page shows)

@@ -1,7 +1,6 @@
 #include "autotune_screen.h"
 #include "../ui_helpers.h"
 #include <Arduino.h>
-#include <algorithm>
 #include <cstring>
 
 void AutoTuneScreen::create() {
@@ -11,9 +10,17 @@ void AutoTuneScreen::create() {
     lv_obj_set_style_bg_opa(screen, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(screen, 0, 0);
     lv_obj_set_style_pad_all(screen, 0, 0);
-    lv_obj_set_style_pad_ver(screen, 6, 0);
+    lv_obj_set_style_pad_top(screen, 20, 0);
+    lv_obj_set_style_pad_bottom(screen, 10, 0);
+    lv_obj_set_style_pad_row(screen, 12, 0);
     lv_obj_clear_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scrollbar_mode(screen, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_set_layout(screen, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(screen, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(screen, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    const int32_t content_width = lv_display_get_horizontal_resolution(lv_display_get_default()) -
+                                  2 * THEME_SCREEN_MARGIN_PX;
 
     // Title label (shared across all screens)
     title_label = lv_label_create(screen);
@@ -21,20 +28,16 @@ void AutoTuneScreen::create() {
     lv_obj_set_style_text_font(title_label, &lv_font_montserrat_36, 0);
     lv_obj_set_style_text_color(title_label, lv_color_hex(THEME_COLOR_ACCENT), 0);
     lv_obj_set_style_text_align(title_label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(title_label, LV_ALIGN_TOP_MID, 0, 20);
 
-    // === Console Screen ===
+    // === Console Screen === fills the space between the title and the buttons.
     console_container = lv_obj_create(screen);
-    lv_obj_set_size(console_container, 280, 340);
-    lv_obj_set_style_bg_opa(console_container, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(console_container, 0, 0);
-    lv_obj_set_style_pad_all(console_container, 0, 0);
+    lv_obj_remove_style_all(console_container);
+    lv_obj_set_width(console_container, content_width);
+    lv_obj_set_flex_grow(console_container, 1);
     lv_obj_clear_flag(console_container, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_scrollbar_mode(console_container, LV_SCROLLBAR_MODE_OFF);
-    lv_obj_align_to(console_container, title_label, LV_ALIGN_OUT_BOTTOM_MID, 0, 15);
 
     console_textarea = lv_textarea_create(console_container);
-    lv_obj_set_size(console_textarea, 280, 340);
+    lv_obj_set_size(console_textarea, LV_PCT(100), LV_PCT(100));
     lv_textarea_set_text(console_textarea, "");
     lv_obj_set_style_text_font(console_textarea, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(console_textarea, lv_color_hex(THEME_COLOR_TEXT_PRIMARY), 0);
@@ -45,49 +48,45 @@ void AutoTuneScreen::create() {
     lv_textarea_set_cursor_click_pos(console_textarea, false);
     lv_obj_add_flag(console_textarea, LV_OBJ_FLAG_EVENT_BUBBLE);
 
-    // === Result Screen ===
+    // === Result Screen === message, then two lines whose order depends on success or failure.
     result_container = lv_obj_create(screen);
-    lv_obj_set_size(result_container, 280, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_opa(result_container, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(result_container, 0, 0);
-    lv_obj_set_style_pad_all(result_container, 0, 0);
+    lv_obj_remove_style_all(result_container);
+    lv_obj_set_width(result_container, content_width);
+    lv_obj_set_flex_grow(result_container, 1);
     lv_obj_clear_flag(result_container, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_scrollbar_mode(result_container, LV_SCROLLBAR_MODE_OFF);
-    lv_obj_align(result_container, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_set_layout(result_container, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(result_container, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(result_container, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_row(result_container, 10, 0);
 
     message_label = lv_label_create(result_container);
     lv_label_set_text(message_label, "New Motor Latency:");
+    lv_obj_set_width(message_label, LV_PCT(100));
+    lv_label_set_long_mode(message_label, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_font(message_label, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(message_label, lv_color_hex(THEME_COLOR_TEXT_PRIMARY), 0);
     lv_obj_set_style_text_align(message_label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_width(message_label, 280);
-    lv_label_set_long_mode(message_label, LV_LABEL_LONG_WRAP);
-    lv_obj_align(message_label, LV_ALIGN_TOP_MID, 0, -60);
 
     final_latency_label = lv_label_create(result_container);
     lv_label_set_text(final_latency_label, "110 ms");
     lv_obj_set_style_text_font(final_latency_label, &lv_font_montserrat_56, 0);
     lv_obj_set_style_text_color(final_latency_label, lv_color_hex(THEME_COLOR_SUCCESS), 0);
-    lv_obj_align(final_latency_label, LV_ALIGN_CENTER, 0, 0);
 
     previous_latency_label = lv_label_create(result_container);
     lv_label_set_text(previous_latency_label, "Previous Value: 150 ms");
     lv_obj_set_style_text_font(previous_latency_label, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(previous_latency_label, lv_color_hex(0x888888), 0);
     lv_obj_set_style_text_align(previous_latency_label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(previous_latency_label, LV_ALIGN_TOP_MID, 0, 80);
 
-    // Buttons
+    // Buttons: the row keeps fixed left and right slots (cancel left, OK right).
     button_row = create_dual_button_row(screen, &cancel_button, &ok_button,
                                         LV_SYMBOL_CLOSE, LV_SYMBOL_OK,
                                         lv_color_hex(0x888888), lv_color_hex(THEME_COLOR_SUCCESS),
                                         80, &lv_font_montserrat_32);
-    lv_obj_set_width(button_row, 280);
-    lv_obj_align(button_row, LV_ALIGN_BOTTOM_MID, 0, -10);
-    lv_obj_clear_flag(button_row, LV_OBJ_FLAG_SCROLLABLE);
 
     visible = false;
     current_state = AutoTuneScreenState::CONSOLE;
+    lv_obj_add_flag(result_container, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(screen, LV_OBJ_FLAG_HIDDEN);
 }
 
@@ -131,7 +130,7 @@ void AutoTuneScreen::show_success_screen(float new_latency_ms, float previous_la
     lv_obj_add_flag(cancel_button, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(ok_button, LV_OBJ_FLAG_HIDDEN);
 
-    lv_label_set_text(title_label, "Tune\nComplete!");
+    lv_label_set_text(title_label, "Tune\nComplete");
     lv_label_set_text(message_label, "New Motor Latency:");
 
     char latency_text[32];
@@ -143,6 +142,10 @@ void AutoTuneScreen::show_success_screen(float new_latency_ms, float previous_la
     lv_label_set_text(previous_latency_label, previous_text);
 
     lv_obj_set_style_text_color(final_latency_label, lv_color_hex(THEME_COLOR_SUCCESS), 0);
+
+    // Message, the new value, then the previous one.
+    lv_obj_move_to_index(final_latency_label, 1);
+    lv_obj_move_to_index(previous_latency_label, 2);
 }
 
 void AutoTuneScreen::show_failure_screen(const char* error_message) {
@@ -157,47 +160,22 @@ void AutoTuneScreen::show_failure_screen(const char* error_message) {
     lv_obj_add_flag(cancel_button, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(ok_button, LV_OBJ_FLAG_HIDDEN);
 
-    lv_label_set_text(title_label, "Tune\nFailed");
+    lv_label_set_text(title_label, "Tune Failed");
 
-    // Build error message
-    char full_message[256];
-    const char* failure_detail = (error_message && error_message[0] != '\0') ? error_message : nullptr;
-    char detail_buffer[128] = {0};
-
-    if (failure_detail) {
-        size_t len = strlen(failure_detail);
-        bool needs_period = failure_detail[len - 1] != '.' && failure_detail[len - 1] != '!';
-        snprintf(detail_buffer, sizeof(detail_buffer), "%s%s", failure_detail, needs_period ? "." : "");
-    }
-
-    snprintf(full_message, sizeof(full_message),
-             "Could not find reliable minimum pulse duration.");
-
-    size_t used = strlen(full_message);
-    if (detail_buffer[0] != '\0' && used < sizeof(full_message) - 1) {
-        int written = snprintf(full_message + used, sizeof(full_message) - used,
-                               " %s", detail_buffer);
-        if (written > 0) {
-            used = std::min(sizeof(full_message) - 1, used + static_cast<size_t>(written));
-        }
-    }
-
-    if (used < sizeof(full_message) - 1) {
-        snprintf(full_message + used, sizeof(full_message) - used,
-                 " Check grinder power, confirm beans are in the hopper, and ensure a cup is on the scale.");
-    }
-
-    lv_label_set_text(message_label, full_message);
-    lv_obj_align(message_label, LV_ALIGN_CENTER, 0, -20);
+    lv_label_set_text(message_label, (error_message && error_message[0])
+                                         ? error_message
+                                         : "No reliable pulse found. Check power, beans and the cup.");
 
     char default_text[32];
     snprintf(default_text, sizeof(default_text), "%.0f ms", (float)GRIND_MOTOR_RESPONSE_LATENCY_DEFAULT_MS);
     lv_label_set_text(final_latency_label, default_text);
     lv_obj_set_style_text_color(final_latency_label, lv_color_hex(THEME_COLOR_WARNING), 0);
-    lv_obj_align(final_latency_label, LV_ALIGN_CENTER, 0, 80);
 
     lv_label_set_text(previous_latency_label, "Using default:");
-    lv_obj_align(previous_latency_label, LV_ALIGN_CENTER, 0, 50);
+
+    // Message, "Using default:", then the value.
+    lv_obj_move_to_index(previous_latency_label, 1);
+    lv_obj_move_to_index(final_latency_label, 2);
 }
 
 void AutoTuneScreen::append_console_message(const char* message) {

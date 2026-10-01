@@ -90,6 +90,47 @@ async function auditAllScrollPositions(name) {
   return { issues, reachedBottom: false };
 }
 
+// One audited view: runs the layout audit at every scroll position, saves the
+// PNG(s), prints PASS/FAIL and records a failure under `name`.
+async function audit(name) {
+  const { issues, reachedBottom } = await auditAllScrollPositions(name);
+  if (issues.length) failing.add(name);
+  console.log(`${issues.length ? 'FAIL' : 'PASS'}  ${name}`);
+  for (const i of issues) console.log(`      ${i.rule}: ${i.a}${i.b ? '  vs  ' + i.b : ''}`);
+  if (!reachedBottom) {
+    console.log(`FAIL  ${name}: scroll limit reached; bottom not audited`);
+    failing.add(name);
+  }
+}
+
+// Helpers for the flows below: click a twin-page button by its text.
+async function clickButton(group, label) {
+  await page.click(`${group} button:text-is("${label}")`);
+  await page.waitForTimeout(400);
+}
+const act = (label) => clickButton('#actions', label);
+const fault = (label) => clickButton('#faults', label);
+const setSpeed = (x) => page.click(`#speed-seg button[data-speed="${x}"]`);
+
+// Tap a label on the device screen; a missing one fails the flow.
+async function uiStep(flow, cmd, arg = '') {
+  const ok = await page.evaluate(([c, a]) => window.twinApp.ui(c, a), [cmd, String(arg)]);
+  await page.waitForTimeout(400);
+  if (!ok) throw new Error(`${flow}: step ${cmd} "${arg}" found nothing`);
+}
+
+// Waits (wall clock) until one of the labels is on the device screen.
+async function waitForLabel(labels, timeoutMs = 120000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    for (const l of labels) {
+      if (await page.evaluate((t) => window.twinApp.ui('find', t), l)) return l;
+    }
+    await page.waitForTimeout(500);
+  }
+  throw new Error(`none of ${JSON.stringify(labels)} appeared within ${timeoutMs / 1000} s`);
+}
+
 const failing = new Set();
 for (const [name, steps] of SCREENS) {
   let stepsOk = true;
@@ -104,18 +145,41 @@ for (const [name, steps] of SCREENS) {
       break;
     }
   }
-  if (stepsOk) {
-    const { issues, reachedBottom } = await auditAllScrollPositions(name);
-    if (issues.length) failing.add(name);
-    console.log(`${issues.length ? 'FAIL' : 'PASS'}  ${name}`);
-    for (const i of issues) console.log(`      ${i.rule}: ${i.a}${i.b ? '  vs  ' + i.b : ''}`);
-    if (!reachedBottom) {
-      console.log(`FAIL  ${name}: scroll limit reached; bottom not audited`);
-      failing.add(name);
-    }
-  }
+  if (stepsOk) await audit(name);
   await page.evaluate(() => window.twinApp.ui('ready', 2));
 }
+// Flows: screens that only exist after the firmware has done real work.
+async function tuneFlow(name, faultLabel, resultLabel) {
+  try {
+    await page.evaluate(() => window.twinApp.ui('ready', 2));
+    await act('Place cup');
+    await act('Load beans');
+    await act('Load beans');
+    if (faultLabel) await fault(faultLabel);
+    await uiStep(name, 'menu');
+    await uiStep(name, 'tap', 'Pulse Tune');
+    await uiStep(name, 'tap', 'START');
+    if (!faultLabel) {
+      await page.waitForTimeout(3000);  // real time at 1x: the console has a few lines, the tune is far from done
+      await audit('tune-console');
+    }
+    await setSpeed(10);  // the rest of the tune is long; run it fast
+    await waitForLabel([resultLabel]);
+    await page.waitForTimeout(400);
+    await audit(name);
+    await uiStep(name, 'tap', OK);
+  } catch (err) {
+    console.log(`FAIL  ${name}: ${err.message}`);
+    failing.add(name);
+  } finally {
+    if (faultLabel) await fault(faultLabel);  // toggles the fault off again
+    await setSpeed(1);
+    await page.evaluate(() => window.twinApp.ui('ready', 2));
+  }
+}
+await tuneFlow('tune-success', null, 'New Motor Latency:');
+await tuneFlow('tune-failure', 'Relay stuck off', 'Using default:');
+
 await browser.close();
 console.log(failing.size ? `${failing.size} screen(s) with layout defects` : 'all screens clean');
 process.exit(failing.size ? 1 : 0);

@@ -100,6 +100,9 @@ int ui_command(const char* cmd, const char* arg) {
         lv_obj_send_event(target, LV_EVENT_CLICKED, nullptr);
         return 1;
     }
+    if (std::strcmp(cmd, "find") == 0) {
+        return find_label(lv_screen_active(), arg) ? 1 : 0;
+    }
     if (std::strcmp(cmd, "toggle") == 0) {
         lv_obj_t* sw = find_row_switch(lv_screen_active(), arg);
         if (!sw) return 0;
