@@ -61,7 +61,7 @@ Access **Menu → Grind Settings** to configure:
 - **Time Mode**: Directly toggle between Weight and Time modes regardless of swipe setting
 - **Start on Cup**: Start the active profile automatically when the scale gains the configured cup threshold (50 g by default) after a short post-boot warmup
 - **Return on Removal**: Leave the completion screen as soon as that cup weight drops back off the scale
-- **Motor Latency** *(Advanced)*: View or manually adjust the minimum reliable
+- **Latency** *(Advanced)*: View or manually adjust the minimum reliable
   motor pulse from 30–300 ms in 5 ms steps. Use **Menu → Pulse Tune** first;
   this manual control is a fallback when automatic tuning cannot complete.
 - **Purging** *(Advanced)*: Control how the grinder saturates itself before weight-mode grinding
@@ -195,7 +195,7 @@ Main Screen (swipe left/right between pages, shown by the dots above the round b
         +-- Logs & Data
         |   |-- Logging toggle (enable/disable session file writing)
         |   |-- Sessions / Events / Measurements counters
-        |   |-- PURGE button (purges the logs)
+        |   |-- Purge Logs button (purges the logs)
         |   \-- Factory Reset button
         |
         \-- Lifetime Stats

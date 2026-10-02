@@ -114,10 +114,11 @@ end of this page are needed before first use.
 history as described, "12.34g g", "Last grind >0h ago", "-0.0g", the menu
 typo, weights of 100 g and more in the progress ring, and the gap between
 paired buttons. The warning-icon and error-screen descriptions in the docs
-were corrected instead of changing behaviour. Still open, all layout work that
-needs checking on the screen: over-wide titles, the auto-tune console under
-Cancel, the calibration noise text over its title, status icons over the close
-button, and the purge checkbox size.
+were corrected instead of changing behaviour. Fixed on branch `ui-text-fit`,
+pending a live check on the grinder: over-wide titles, the Pulse Tune console
+under the cancel button, the calibration noise text over its title, and status
+icons over the close button. Still open (layout work that needs checking on the
+screen): the purge checkbox size.
 
 ## Follow-up review of this branch
 
